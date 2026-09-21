@@ -2,10 +2,14 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { dispose, init, type Chart, type DeepPartial, type Styles } from "klinecharts";
 import { themeStyles } from "./theme";
 import { PATTERN_INDICATOR, SESSION_INDICATOR, registerSonrIndicators } from "./indicators";
+import { CANDLE_TYPE, HaTransformer, isHeikinAshi, toHeikinAshi } from "./candles";
+import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
 import { asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
 import { USER_DRAWING_GROUP } from "./drawings";
 import type {
+  CandleStyle,
   ChartState,
+  CompareSpec,
   DataSource,
   DrawingTool,
   IndicatorSpec,
@@ -20,6 +24,7 @@ import type {
 } from "./types";
 
 registerSonrIndicators();
+registerCompareIndicator();
 
 const CANDLE_PANE = "candle_pane";
 
@@ -51,6 +56,10 @@ export interface SonrChartProps {
   priceScale?: PriceScale;
   /** Magnet mode for drawing tools — snap points to nearby OHLC. (#13) */
   magnet?: Magnet;
+  /** Candle rendering style — solid/hollow/ohlc/area/heikin_ashi. (#1) */
+  candleStyle?: CandleStyle;
+  /** Comparison symbols overlaid on the main pane, ratio-scaled. (#9) */
+  compareSeries?: CompareSpec[];
   /** How many bars to request on load. Default 500. */
   barCount?: number;
   onReady?: (chart: Chart) => void;
@@ -77,6 +86,16 @@ export interface SonrChartHandle {
   exportState(): ChartState;
   /** Restore state produced by exportState (#15). */
   importState(state: ChartState): void;
+  /** Current indicator set as specs — a study template to name/persist (#6). */
+  getIndicatorSet(): IndicatorSpec[];
+  /** Replace the user indicators with a saved set (#6). */
+  applyIndicatorSet(specs: (string | IndicatorSpec)[]): void;
+  /** Undo the last drawing change (#16). */
+  undo(): void;
+  /** Redo an undone drawing change (#16). */
+  redo(): void;
+  canUndo(): boolean;
+  canRedo(): boolean;
 }
 
 let _seq = 0;
@@ -115,6 +134,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     orderLines,
     priceScale,
     magnet,
+    candleStyle,
+    compareSeries,
     barCount = 500,
     onReady,
     onSymbolError,
@@ -136,6 +157,107 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   // Latest onMove per order-line id, so a changed callback takes effect without
   // recreating the overlay.
   const orderMoveRef = useRef(new Map<string, OrderLine["onMove"]>());
+  // Live-updated prop mirrors read from inside the (stable) data loader.
+  const candleStyleRef = useRef(candleStyle);
+  candleStyleRef.current = candleStyle;
+  const compareRef = useRef(compareSeries);
+  compareRef.current = compareSeries;
+  // Heikin Ashi live transformer (rebuilt per data load in the create effect).
+  const haRef = useRef(new HaTransformer());
+  // Drawing undo/redo history (#16). stack[ptr] is the current drawing set;
+  // `restoring` suppresses history capture while we recreate overlays.
+  type Snap = Array<{ name: string; points: unknown[]; styles?: unknown; mode?: string }>;
+  const historyRef = useRef<{ stack: Snap[]; ptr: number }>({ stack: [[]], ptr: 0 });
+  const restoringRef = useRef(false);
+
+  const snapshotDrawings = (): Snap =>
+    (chartRef.current?.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? []).map((o) => ({
+      name: o.name,
+      points: o.points as unknown[],
+      styles: o.styles,
+      mode: o.mode,
+    }));
+
+  const pushHistory = () => {
+    if (restoringRef.current) return;
+    const h = historyRef.current;
+    h.stack = h.stack.slice(0, h.ptr + 1);
+    h.stack.push(snapshotDrawings());
+    h.ptr = h.stack.length - 1;
+  };
+
+  const beginDrawing = (name: string) => {
+    chartRef.current?.createOverlay({
+      name,
+      groupId: USER_DRAWING_GROUP,
+      mode: magnetMode(magnetRef.current),
+      onDrawEnd: () => {
+        pushHistory();
+        return false;
+      },
+      onRemoved: () => {
+        pushHistory();
+        return false;
+      },
+    });
+  };
+
+  const restoreDrawings = (snap: Snap) => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    restoringRef.current = true;
+    chart.removeOverlay({ groupId: USER_DRAWING_GROUP });
+    for (const d of snap) {
+      chart.createOverlay({
+        name: d.name,
+        points: d.points as never,
+        styles: d.styles as never,
+        mode: d.mode as never,
+        groupId: USER_DRAWING_GROUP,
+        onDrawEnd: () => {
+          pushHistory();
+          return false;
+        },
+        onRemoved: () => {
+          pushHistory();
+          return false;
+        },
+      });
+    }
+    restoringRef.current = false;
+  };
+
+  // Fetch each comparison symbol, align to the main bars, and (re)build the
+  // compare overlay indicator (#9). Removes it when there are none.
+  const refreshCompare = async () => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const specs = compareRef.current ?? [];
+    const present = chart.getIndicators({ name: COMPARE_INDICATOR }).length > 0;
+    if (specs.length === 0) {
+      if (present) chart.removeIndicator({ name: COMPARE_INDICATOR });
+      return;
+    }
+    const mainBars = chart.getDataList().map((d) => ({ time: d.timestamp, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume }));
+    if (mainBars.length === 0) return;
+    const palette = ["#7d93e8", "#e0a33c", "#c678dd", "#56b6c2", "#98c379"];
+    const lines: CompareLine[] = [];
+    for (let i = 0; i < specs.length; i++) {
+      const s = specs[i];
+      try {
+        const bars = await dataSource.getBars(s.symbol, interval, barCount);
+        if (compareRef.current !== specs) return; // superseded mid-fetch
+        lines.push({ color: s.color ?? palette[i % palette.length], points: alignCompare(mainBars, bars) });
+      } catch {
+        /* skip a symbol that fails to load */
+      }
+    }
+    if (chart.getIndicators({ name: COMPARE_INDICATOR }).length > 0) {
+      chart.overrideIndicator({ name: COMPARE_INDICATOR, extendData: lines });
+    } else {
+      chart.createIndicator({ name: COMPARE_INDICATOR, paneId: CANDLE_PANE, extendData: lines }, false);
+    }
+  };
 
   const createIndicator = (spec: IndicatorSpec) => {
     const chart = chartRef.current;
@@ -170,16 +292,11 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       listIndicators: () =>
         (chartRef.current?.getIndicators() ?? [])
           .map((ind) => ind.name)
-          .filter((n) => n !== SESSION_INDICATOR && n !== PATTERN_INDICATOR),
-      startDrawing: (tool: DrawingTool) => {
-        chartRef.current?.createOverlay({
-          name: tool,
-          groupId: USER_DRAWING_GROUP,
-          mode: magnetMode(magnetRef.current),
-        });
-      },
+          .filter((n) => n !== SESSION_INDICATOR && n !== PATTERN_INDICATOR && n !== COMPARE_INDICATOR),
+      startDrawing: (tool: DrawingTool) => beginDrawing(tool),
       clearDrawings: () => {
         chartRef.current?.removeOverlay({ groupId: USER_DRAWING_GROUP });
+        pushHistory();
       },
       snapshot: (opts) => {
         const chart = chartRef.current;
@@ -195,25 +312,53 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
           mode: o.mode,
         }));
         const inds = (chart?.getIndicators() ?? [])
-          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR)
+          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR)
           .map((i) => ({ name: i.name, paneId: i.paneId }));
         return { version: 1, drawings, indicators: inds, priceScale };
       },
       importState: (state: ChartState) => {
         const chart = chartRef.current;
         if (!chart || state?.version !== 1) return;
-        chart.removeOverlay({ groupId: USER_DRAWING_GROUP });
-        for (const d of state.drawings ?? []) {
-          chart.createOverlay({ name: d.name, points: d.points as never, styles: d.styles as never, mode: d.mode as never, groupId: USER_DRAWING_GROUP });
-        }
+        restoreDrawings((state.drawings ?? []) as Snap);
         for (const ind of state.indicators ?? []) {
           if (!chart.getIndicators({ name: ind.name }).length) {
             chart.createIndicator({ name: ind.name, ...(ind.paneId === CANDLE_PANE ? { paneId: CANDLE_PANE } : {}) }, false);
           }
         }
+        // Reset the undo history to the imported drawing set.
+        historyRef.current = { stack: [snapshotDrawings()], ptr: 0 };
         // priceScale in the state is informational; the host re-applies it via
         // the `priceScale` prop (scale type is fixed at chart init).
       },
+      getIndicatorSet: (): IndicatorSpec[] =>
+        (chartRef.current?.getIndicators() ?? [])
+          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR)
+          .map((i) => ({ name: i.name, pane: i.paneId === CANDLE_PANE ? "main" : "new" })),
+      applyIndicatorSet: (specs) => {
+        const chart = chartRef.current;
+        if (!chart) return;
+        for (const i of chart.getIndicators()) {
+          if (i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR) {
+            chart.removeIndicator({ name: i.name });
+          }
+        }
+        for (const s of specs) createIndicator(asSpec(s));
+        applyPaneHeights();
+      },
+      undo: () => {
+        const h = historyRef.current;
+        if (h.ptr <= 0) return;
+        h.ptr -= 1;
+        restoreDrawings(h.stack[h.ptr]);
+      },
+      redo: () => {
+        const h = historyRef.current;
+        if (h.ptr >= h.stack.length - 1) return;
+        h.ptr += 1;
+        restoreDrawings(h.stack[h.ptr]);
+      },
+      canUndo: () => historyRef.current.ptr > 0,
+      canRedo: () => historyRef.current.ptr < historyRef.current.stack.length - 1,
     }),
     // paneHeights/priceScale captured by closure; recreated per render is fine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -232,6 +377,11 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     } as never) as Chart;
     chartRef.current = chart;
     chart.setStyles(mergeStyles(themeStyles(theme), styles));
+    // Candle rendering style (#1).
+    chart.setStyles({ candle: { type: CANDLE_TYPE[candleStyleRef.current ?? "candle"] } });
+    // Fresh Heikin Ashi transformer + fresh undo history for this chart.
+    haRef.current = new HaTransformer();
+    historyRef.current = { stack: [[]], ptr: 0 };
 
     let unsub = () => {};
     chart.setDataLoader({
@@ -242,14 +392,22 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         }
         try {
           const bars = await dataSource.getBars(symbol, interval, barCount);
-          callback(bars.map(toKLine), false);
+          const ha = isHeikinAshi(candleStyleRef.current);
+          if (ha) haRef.current.seed(bars);
+          const shaped = ha ? toHeikinAshi(bars) : bars;
+          callback(shaped.map(toKLine), false);
+          // Compare overlays need the loaded main bars to align to.
+          void refreshCompare();
         } catch {
           callback([], false);
         }
       },
       subscribeBar: ({ callback }) => {
         if (dataSource.subscribe) {
-          unsub = dataSource.subscribe(symbol, interval, (b) => callback(toKLine(b)));
+          unsub = dataSource.subscribe(symbol, interval, (b) => {
+            const shaped = isHeikinAshi(candleStyleRef.current) ? haRef.current.next(b) : b;
+            callback(toKLine(shaped));
+          });
         }
       },
       unsubscribeBar: () => unsub(),
@@ -288,14 +446,27 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       chartRef.current = null;
       overlayIds.current = [];
     };
-    // priceScale is in the deps (via scaleKey) because the scale type/inversion
-    // is fixed at init — changing it re-inits the chart.
+    // priceScale (scaleKey) re-inits because the scale type/inversion is fixed
+    // at init. Toggling Heikin Ashi (haKey) re-inits because it transforms the
+    // data feed; plain candle-style swaps do NOT rebuild (handled below).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, interval, scaleKey(priceScale)]);
+  }, [symbol, interval, scaleKey(priceScale), isHeikinAshi(candleStyle) ? "ha" : "std"]);
 
   useEffect(() => {
     chartRef.current?.setStyles(mergeStyles(themeStyles(theme), styles));
   }, [theme, styles]);
+
+  // Candle style (#1): a pure setStyles for non-HA swaps (no rebuild). HA
+  // transitions are handled by the create effect's haKey dependency.
+  useEffect(() => {
+    chartRef.current?.setStyles({ candle: { type: CANDLE_TYPE[candleStyle ?? "candle"] } });
+  }, [candleStyle]);
+
+  // Compare / multi-symbol overlays (#9).
+  useEffect(() => {
+    void refreshCompare();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify((compareSeries ?? []).map((c) => [c.symbol, c.color]))]);
 
   // Pane heights reconcile (#7).
   useEffect(() => {

@@ -79,6 +79,8 @@ The component fills its parent, so give the parent a height.
 | `orderLines` | `OrderLine[]` | Draggable order/position lines; `onMove(price, phase)` fires as the user drags. |
 | `priceScale` | `{ type?, invert?, inside? }` | Scale mode — `"normal" \| "percentage" \| "logarithm"`, plus invert / labels-inside. |
 | `magnet` | `boolean \| "weak" \| "strong"` | Snap drawing points to nearby OHLC. |
+| `candleStyle` | `"candle" \| "hollow" \| "hollow_up" \| "ohlc" \| "area" \| "heikin_ashi"` | Candle rendering style (Heikin Ashi transforms the data). |
+| `compareSeries` | `{ symbol, color? }[]` | Overlay other symbols on the main pane, ratio-scaled to share a start price. |
 | `barCount` | `number` | Bars requested on load. Default 500. |
 | `onReady` | `(chart) => void` | The raw KLineChart instance, for advanced use. |
 | `onSymbolError` | `(symbol) => void` | Fired when `dataSource.resolveSymbol` returns `null`. |
@@ -87,11 +89,17 @@ A `ref` exposes the full control surface:
 
 ```ts
 handle.addIndicator(spec); handle.removeIndicator(name); handle.listIndicators();
+handle.getIndicatorSet(); handle.applyIndicatorSet(specs); // study templates
 handle.startDrawing(tool); handle.clearDrawings();      // drawing tools
+handle.undo(); handle.redo(); handle.canUndo(); handle.canRedo(); // drawing history
 handle.snapshot({ type: "png" });                        // -> data URL
 handle.exportState(); handle.importState(state);         // save / load
 handle.chart();                                          // raw KLineChart
 ```
+
+Custom header controls: drop `ToolbarButton`s (or any element) into
+`<ChartToolbar>`'s children slot; they inherit the `sonr-*-btn` classes so the
+host styles all chrome through its own CSS.
 
 ### Chrome components
 

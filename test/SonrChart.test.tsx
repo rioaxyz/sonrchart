@@ -18,6 +18,10 @@ const h = vi.hoisted(() => {
       setPeriod: vi.fn(),
       setPaneOptions: vi.fn(),
       getConvertPictureUrl: vi.fn(() => "data:image/png;base64,FAKE"),
+      getDataList: vi.fn(() => [
+        { timestamp: 1000, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 },
+        { timestamp: 2000, open: 1.5, high: 2.2, low: 1.4, close: 2.0, volume: 20 },
+      ]),
       createIndicator: vi.fn((v: any) => {
         const name = typeof v === "string" ? v : v.name;
         const paneId = v?.paneId ?? "pane_" + name;
@@ -350,5 +354,92 @@ describe("SonrChart — overlay reconcile guard (perf)", () => {
     ov.onPressedMoveEnd({ overlay: { points: [{ value: 51 }] } });
     expect(onMove2).toHaveBeenCalledWith(51, "end");
     expect(onMove1).not.toHaveBeenCalled();
+  });
+});
+
+describe("SonrChart — candle style (#1)", () => {
+  it("sets the candle type from candleStyle", () => {
+    render(<SonrChart symbol="A" dataSource={source()} candleStyle="hollow" />);
+    const c = lastChart();
+    const call = c.setStyles.mock.calls.find((x: any[]) => x[0]?.candle?.type);
+    expect(call[0].candle.type).toBe("candle_stroke");
+  });
+
+  it("transforms bars to Heikin Ashi in the loader", async () => {
+    const rawBars = [
+      { time: 1, open: 10, high: 12, low: 9, close: 11 },
+      { time: 2, open: 11, high: 13, low: 10, close: 12 },
+    ];
+    const ds: DataSource = { getBars: vi.fn(async () => rawBars) };
+    render(<SonrChart symbol="A" dataSource={ds} candleStyle="heikin_ashi" />);
+    const loader = lastChart().setDataLoader.mock.calls[0][0];
+    const cb = vi.fn();
+    await act(async () => await loader.getBars({ type: "init", callback: cb }));
+    const passed = cb.mock.calls[0][0];
+    // HA bar 0 close = (10+12+9+11)/4 = 10.5, not the raw close 11.
+    expect(passed[0].close).toBeCloseTo(10.5);
+  });
+});
+
+describe("SonrChart — compare overlay (#9)", () => {
+  it("creates the compare indicator with ratio-scaled aligned lines", async () => {
+    const cmp = [
+      { time: 1000, open: 10, high: 10, low: 10, close: 10 },
+      { time: 2000, open: 12, high: 12, low: 12, close: 12 },
+    ];
+    const ds: DataSource = { getBars: vi.fn(async () => cmp) };
+    render(<SonrChart symbol="A" dataSource={ds} compareSeries={[{ symbol: "SPY", color: "#f00" }]} />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    const c = lastChart();
+    const call = c.createIndicator.mock.calls.find((x: any[]) => x[0]?.name === "SONR_COMPARE");
+    expect(call).toBeTruthy();
+    const lines = call[0].extendData;
+    expect(lines[0].color).toBe("#f00");
+    // main closes [1.5, 2.0], cmp closes [10,12] → scale 1.5/10=0.15 → [1.5, 1.8]
+    expect(lines[0].points.map((p: any) => p.value)).toEqual([1.5, 1.7999999999999998]);
+  });
+});
+
+describe("SonrChart — study templates (#6)", () => {
+  it("getIndicatorSet returns current specs; applyIndicatorSet replaces them", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} indicators={["VOL"]} />);
+    expect(ref.current!.getIndicatorSet().map((s) => s.name)).toEqual(["VOL"]);
+    act(() => ref.current!.applyIndicatorSet(["MACD", "RSI"]));
+    expect(ref.current!.listIndicators().sort()).toEqual(["MACD", "RSI"]);
+    expect(ref.current!.listIndicators()).not.toContain("VOL");
+  });
+});
+
+describe("SonrChart — undo/redo (#16)", () => {
+  it("tracks drawing history and restores on undo/redo", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    expect(ref.current!.canUndo()).toBe(false);
+
+    // Draw two shapes; each onDrawEnd pushes history.
+    act(() => ref.current!.startDrawing("segment"));
+    c._overlays.at(-1).onDrawEnd({});
+    act(() => ref.current!.startDrawing("rayLine"));
+    c._overlays.at(-1).onDrawEnd({});
+    expect(c._overlays.filter((o: any) => o.groupId === "sonr-user-drawing").length).toBe(2);
+    expect(ref.current!.canUndo()).toBe(true);
+
+    // Undo → back to one drawing.
+    act(() => ref.current!.undo());
+    expect(c._overlays.filter((o: any) => o.groupId === "sonr-user-drawing").length).toBe(1);
+    expect(ref.current!.canRedo()).toBe(true);
+
+    // Redo → two again.
+    act(() => ref.current!.redo());
+    expect(c._overlays.filter((o: any) => o.groupId === "sonr-user-drawing").length).toBe(2);
+  });
+
+  it("undo is a no-op at the start of history", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    act(() => ref.current!.undo());
+    expect(ref.current!.canUndo()).toBe(false);
   });
 });
