@@ -9,7 +9,28 @@ import {
   type Styles,
 } from "klinecharts";
 import { themeStyles } from "./theme";
-import type { Bar, DataSource, Interval, PriceLine, Theme } from "./types";
+import {
+  DEFAULT_SESSION_COLORS,
+  PATTERN_INDICATOR,
+  SESSION_INDICATOR,
+  registerSonrIndicators,
+  type SessionColors,
+} from "./indicators";
+import type {
+  Bar,
+  DataSource,
+  IndicatorSpec,
+  Interval,
+  OrderLine,
+  PatternMarker,
+  PriceLine,
+  SessionTint,
+  Theme,
+} from "./types";
+
+registerSonrIndicators();
+
+const CANDLE_PANE = "candle_pane";
 
 export interface SonrChartProps {
   /** Ticker to chart, e.g. "AAPL". */
@@ -22,11 +43,17 @@ export interface SonrChartProps {
   theme?: Theme;
   /** Extra KLineChart style overrides merged over the Sonr theme. */
   styles?: DeepPartial<Styles>;
-  /** Built-in KLine indicators to add in sub-panes, e.g. ["VOL","MACD"].
-   *  Defaults to ["VOL"]. Pass [] for a bare price pane. */
-  indicators?: string[];
-  /** Horizontal reference lines (entry / stop / target …). */
+  /** Indicators to show. Strings ("VOL") or specs ({ name, pane, calcParams }).
+   *  Defaults to ["VOL"]. Pass [] for a bare price pane. (issue #4) */
+  indicators?: (string | IndicatorSpec)[];
+  /** Session background tinting for pre/after-hours. (issue #10) */
+  sessions?: SessionTint;
+  /** Pattern-context markers drawn on the price pane. (issue #5) */
+  patterns?: PatternMarker[];
+  /** Static horizontal reference lines (entry / stop / target). */
   priceLines?: PriceLine[];
+  /** Draggable on-chart order/position lines. (issue #19) */
+  orderLines?: OrderLine[];
   /** How many bars to request on load. Default 500. */
   barCount?: number;
   /** Fired once the chart instance exists. */
@@ -35,9 +62,13 @@ export interface SonrChartProps {
   style?: React.CSSProperties;
 }
 
-/** Imperative handle: the raw KLineChart instance for advanced use. */
+/** Imperative handle: the raw chart plus an indicator-control surface (the API
+ *  half of issue #4 — host UIs drive these; see IndicatorMenu for a ready UI). */
 export interface SonrChartHandle {
   chart(): Chart | null;
+  addIndicator(spec: string | IndicatorSpec): void;
+  removeIndicator(name: string): void;
+  listIndicators(): string[];
 }
 
 let _seq = 0;
@@ -54,7 +85,19 @@ function toPeriod(interval: Interval): { type: PeriodType; span: number } {
   return { type: "minute", span: parseInt(String(interval), 10) || 1 };
 }
 
-const PRICELINE_COLORS: Record<string, string> = {};
+function asSpec(i: string | IndicatorSpec): IndicatorSpec {
+  return typeof i === "string" ? { name: i } : i;
+}
+
+function sessionColors(s: SessionTint): SessionColors {
+  if (s && typeof s === "object") {
+    return {
+      premarket: s.premarket ?? DEFAULT_SESSION_COLORS.premarket,
+      afterhours: s.afterhours ?? DEFAULT_SESSION_COLORS.afterhours,
+    };
+  }
+  return DEFAULT_SESSION_COLORS;
+}
 
 export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function SonrChart(
   {
@@ -64,7 +107,10 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     theme = "dark",
     styles,
     indicators = ["VOL"],
+    sessions,
+    patterns,
     priceLines,
+    orderLines,
     barCount = 500,
     onReady,
     className,
@@ -77,7 +123,34 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   const idRef = useRef(`sonrchart-${++_seq}`);
   const overlayIds = useRef<string[]>([]);
 
-  useImperativeHandle(ref, () => ({ chart: () => chartRef.current }), []);
+  const createIndicator = (spec: IndicatorSpec) => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    chart.createIndicator(
+      {
+        name: spec.name,
+        ...(spec.calcParams ? { calcParams: spec.calcParams } : {}),
+        ...(spec.pane === "main" ? { paneId: CANDLE_PANE } : {}),
+      },
+      false,
+    );
+  };
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      chart: () => chartRef.current,
+      addIndicator: (i) => createIndicator(asSpec(i)),
+      removeIndicator: (name) => {
+        chartRef.current?.removeIndicator({ name });
+      },
+      listIndicators: () =>
+        (chartRef.current?.getIndicators() ?? [])
+          .map((ind) => ind.name)
+          .filter((n) => n !== SESSION_INDICATOR && n !== PATTERN_INDICATOR),
+    }),
+    [],
+  );
 
   // Create the chart, wire the data loader, load the symbol. Rebuilt on a
   // symbol/interval change (a clean history swap).
@@ -93,8 +166,6 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     let unsub = () => {};
     chart.setDataLoader({
       getBars: async ({ type, callback }) => {
-        // This spike loads one recent window; deeper backward pagination can be
-        // added by honoring type === "backward" with an older request.
         if (type === "backward") {
           callback([], false);
           return;
@@ -116,7 +187,14 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
 
     chart.setSymbol({ ticker: symbol });
     chart.setPeriod(toPeriod(interval));
-    for (const ind of indicators) chart.createIndicator(ind);
+    // Session tint sits underneath everything else on the candle pane.
+    if (sessions) {
+      chart.createIndicator({ name: SESSION_INDICATOR, paneId: CANDLE_PANE, extendData: sessionColors(sessions) }, false);
+    }
+    for (const i of indicators) createIndicator(asSpec(i));
+    if (patterns && patterns.length) {
+      chart.createIndicator({ name: PATTERN_INDICATOR, paneId: CANDLE_PANE, extendData: patterns }, false);
+    }
 
     onReady?.(chart);
 
@@ -134,28 +212,80 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     chartRef.current?.setStyles(mergeStyles(themeStyles(theme), styles));
   }, [theme, styles]);
 
-  // Reconcile price-line overlays whenever they change.
+  // Session tint reconcile (issue #10).
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const present = chart.getIndicators({ name: SESSION_INDICATOR }).length > 0;
+    if (sessions && !present) {
+      chart.createIndicator({ name: SESSION_INDICATOR, paneId: CANDLE_PANE, extendData: sessionColors(sessions) }, false);
+    } else if (sessions && present) {
+      chart.overrideIndicator({ name: SESSION_INDICATOR, extendData: sessionColors(sessions) });
+    } else if (!sessions && present) {
+      chart.removeIndicator({ name: SESSION_INDICATOR });
+    }
+  }, [sessions]);
+
+  // Pattern markers reconcile (issue #5).
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const present = chart.getIndicators({ name: PATTERN_INDICATOR }).length > 0;
+    const has = !!(patterns && patterns.length);
+    if (has && !present) {
+      chart.createIndicator({ name: PATTERN_INDICATOR, paneId: CANDLE_PANE, extendData: patterns }, false);
+    } else if (has && present) {
+      chart.overrideIndicator({ name: PATTERN_INDICATOR, extendData: patterns });
+    } else if (!has && present) {
+      chart.removeIndicator({ name: PATTERN_INDICATOR });
+    }
+  }, [patterns]);
+
+  // Reconcile price-line + order-line overlays whenever either changes.
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
     for (const id of overlayIds.current) chart.removeOverlay({ id });
     overlayIds.current = [];
+
     for (const pl of priceLines ?? []) {
       const created = chart.createOverlay({
         name: "priceLine",
         points: [{ value: pl.price }],
         lock: true,
-        styles: {
-          line: {
-            color: pl.color ?? "#7d93e8",
-            style: pl.style === "dashed" ? "dashed" : "solid",
-          },
-        },
+        styles: { line: { color: pl.color ?? "#7d93e8", style: pl.style === "dashed" ? "dashed" : "solid" } },
         extendData: pl.label,
       });
       if (typeof created === "string") overlayIds.current.push(created);
     }
-  }, [priceLines]);
+
+    for (const ol of orderLines ?? []) {
+      const draggable = ol.draggable !== false;
+      const priceOf = (o: any): number | null => {
+        const v = o?.overlay?.points?.[0]?.value;
+        return typeof v === "number" ? v : null;
+      };
+      const created = chart.createOverlay({
+        name: "priceLine",
+        points: [{ value: ol.price }],
+        lock: !draggable,
+        styles: { line: { color: ol.color ?? "#e0a33c", style: ol.style === "dashed" ? "dashed" : "solid" } },
+        extendData: ol.label,
+        onPressedMoving: (e) => {
+          const p = priceOf(e);
+          if (p != null) ol.onMove?.(p, "moving");
+          return false;
+        },
+        onPressedMoveEnd: (e) => {
+          const p = priceOf(e);
+          if (p != null) ol.onMove?.(p, "end");
+          return false;
+        },
+      });
+      if (typeof created === "string") overlayIds.current.push(created);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priceLines, orderLines]);
 
   return <div ref={elRef} className={className} style={{ width: "100%", height: "100%", ...style }} />;
 });
@@ -169,5 +299,3 @@ function mergeStyles(base: DeepPartial<Styles>, over?: DeepPartial<Styles>): Dee
   }
   return out;
 }
-
-void PRICELINE_COLORS;

@@ -31,7 +31,7 @@ export interface DataSource {
 }
 
 /** A horizontal reference line drawn across the chart (e.g. a trade plan's
- *  entry / stop / target). */
+ *  entry / stop / target). Static — see OrderLine for draggable lines. */
 export interface PriceLine {
   price: number;
   color?: string;
@@ -40,5 +40,59 @@ export interface PriceLine {
   /** "solid" (default) | "dashed". */
   style?: "solid" | "dashed";
 }
+
+/**
+ * A draggable on-chart order/position line (issue #19). Like PriceLine but the
+ * user can drag it to a new price; `onMove` fires with the new price when the
+ * drag ends (and continuously if `live`).
+ */
+export interface OrderLine {
+  /** Stable id so React reconciliation and callbacks can identify the line. */
+  id: string;
+  price: number;
+  color?: string;
+  label?: string;
+  style?: "solid" | "dashed";
+  /** Allow dragging. Default true (that's the point of an OrderLine). */
+  draggable?: boolean;
+  /** Fires with the new price. `phase` is "moving" during the drag and "end"
+   *  when released. */
+  onMove?: (price: number, phase: "moving" | "end") => void;
+}
+
+/**
+ * How to add one technical indicator (issue #4). A bare string is shorthand
+ * for `{ name }`.
+ */
+export interface IndicatorSpec {
+  /** KLineChart indicator name, e.g. "VOL", "MACD", "RSI", "BOLL", "MA". */
+  name: string;
+  /** "main" overlays it on the price pane; "new" (default) gives it a sub-pane. */
+  pane?: "main" | "new";
+  /** Indicator calc params, e.g. [5, 10, 20] for MA. */
+  calcParams?: number[];
+}
+
+/** A pattern-context marker drawn on the price pane (issue #5) — Sonr's own
+ *  custom indicator. Marks where a setup triggered. */
+export interface PatternMarker {
+  /** Bar time (epoch ms) to anchor the marker to. */
+  time: number;
+  /** "long" draws below the bar pointing up; "short" above pointing down. */
+  kind?: "long" | "short";
+  /** Optional short label (e.g. the pattern name). */
+  label?: string;
+  color?: string;
+}
+
+/** Session background tinting (issue #10). `true` uses the default palette;
+ *  pass an object to override the pre/after-hours tints (regular hours are
+ *  untinted). Colors should be low-alpha so candles read through. */
+export type SessionTint =
+  | boolean
+  | {
+      premarket?: string;
+      afterhours?: string;
+    };
 
 export type Theme = "dark" | "light";

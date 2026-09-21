@@ -17,7 +17,10 @@ export function syntheticSource(seedPrice = 100): DataSource {
     let t = endTime - count * stepMs;
     for (let i = 0; i < count; i++) {
       const open = price;
-      const drift = (Math.random() - 0.5) * seedPrice * 0.01;
+      // Gentle mean reversion toward the seed keeps the walk in a readable band
+      // (~±5%) instead of wandering off, so reference lines stay on-screen.
+      const revert = (seedPrice - open) * 0.03;
+      const drift = (Math.random() - 0.5) * seedPrice * 0.008 + revert;
       const close = Math.max(0.01, open + drift);
       const high = Math.max(open, close) + Math.random() * seedPrice * 0.004;
       const low = Math.min(open, close) - Math.random() * seedPrice * 0.004;
