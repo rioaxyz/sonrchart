@@ -60,6 +60,15 @@ export interface PriceScale {
 /** Crosshair/drawing magnet mode (issue #13). `true` = weak. */
 export type Magnet = boolean | "weak" | "strong";
 
+/** Candle rendering style (issue #1). "heikin_ashi" transforms the data. */
+export type CandleStyle = "candle" | "hollow" | "hollow_up" | "ohlc" | "area" | "heikin_ashi";
+
+/** A comparison symbol overlaid on the main pane (issue #9). */
+export interface CompareSpec {
+  symbol: string;
+  color?: string;
+}
+
 /** A KLineChart drawing-tool name (issue #3). */
 export type DrawingTool =
   | "segment"
