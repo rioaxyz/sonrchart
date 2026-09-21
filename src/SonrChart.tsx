@@ -178,11 +178,14 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       mode: o.mode,
     }));
 
+  const HISTORY_CAP = 100;
   const pushHistory = () => {
     if (restoringRef.current) return;
     const h = historyRef.current;
     h.stack = h.stack.slice(0, h.ptr + 1);
     h.stack.push(snapshotDrawings());
+    // Bound memory: drop the oldest entries past the cap.
+    if (h.stack.length > HISTORY_CAP) h.stack = h.stack.slice(h.stack.length - HISTORY_CAP);
     h.ptr = h.stack.length - 1;
   };
 
@@ -241,17 +244,19 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     const mainBars = chart.getDataList().map((d) => ({ time: d.timestamp, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume }));
     if (mainBars.length === 0) return;
     const palette = ["#7d93e8", "#e0a33c", "#c678dd", "#56b6c2", "#98c379"];
-    const lines: CompareLine[] = [];
-    for (let i = 0; i < specs.length; i++) {
-      const s = specs[i];
-      try {
-        const bars = await dataSource.getBars(s.symbol, interval, barCount);
-        if (compareRef.current !== specs) return; // superseded mid-fetch
-        lines.push({ color: s.color ?? palette[i % palette.length], points: alignCompare(mainBars, bars) });
-      } catch {
-        /* skip a symbol that fails to load */
-      }
-    }
+    // Fetch all comparison symbols in parallel.
+    const fetched = await Promise.all(
+      specs.map(async (s, i): Promise<CompareLine | null> => {
+        try {
+          const bars = await dataSource.getBars(s.symbol, interval, barCount);
+          return { color: s.color ?? palette[i % palette.length], points: alignCompare(mainBars, bars) };
+        } catch {
+          return null; // skip a symbol that fails to load
+        }
+      }),
+    );
+    if (compareRef.current !== specs) return; // superseded mid-fetch
+    const lines = fetched.filter((l): l is CompareLine => l !== null);
     if (chart.getIndicators({ name: COMPARE_INDICATOR }).length > 0) {
       chart.overrideIndicator({ name: COMPARE_INDICATOR, extendData: lines });
     } else {

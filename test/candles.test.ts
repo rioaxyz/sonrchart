@@ -70,3 +70,13 @@ describe("HaTransformer live (#1)", () => {
     expect(forming2.close).not.toBeCloseTo(forming1.close); // close moved
   });
 });
+
+describe("HaTransformer without seeding (#1)", () => {
+  it("treats the first live bar as the initial HA bar", () => {
+    const t = new HaTransformer();
+    const first = t.next({ time: 1, open: 10, high: 12, low: 9, close: 11 });
+    // haOpen for the first bar = (open+close)/2 = 10.5; haClose = 10.5
+    expect(first.open).toBeCloseTo(10.5);
+    expect(first.close).toBeCloseTo(10.5);
+  });
+});

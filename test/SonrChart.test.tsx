@@ -443,3 +443,19 @@ describe("SonrChart — undo/redo (#16)", () => {
     expect(ref.current!.canUndo()).toBe(false);
   });
 });
+
+describe("SonrChart — undo/redo tail truncation (#16)", () => {
+  it("drops the redo tail when a new drawing is made after an undo", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    const draw = () => { act(() => ref.current!.startDrawing("segment")); c._overlays.at(-1).onDrawEnd({}); };
+    draw();
+    draw();
+    act(() => ref.current!.undo()); // back to 1 drawing, redo available
+    expect(ref.current!.canRedo()).toBe(true);
+    draw(); // new drawing after undo → redo tail discarded
+    expect(ref.current!.canRedo()).toBe(false);
+    expect(c._overlays.filter((o: any) => o.groupId === "sonr-user-drawing").length).toBe(2);
+  });
+});
