@@ -1,39 +1,41 @@
-# Charting Feature Inventory — TradingView Advanced Charts v36.0.0
+# sonrchart — Feature Roadmap
 
-> **Roadmap note (sonrchart):** this inventory maps the TradingView Advanced Charts
-> feature surface that `sonrchart` works toward. It's the target feature list for this
-> library — the "Coverage" table near the bottom shows what KLineChart gives us for free
-> vs. what we build here on top. Not everything here is a commitment; it's the menu.
+> **How to read this:** this is the target feature surface for `sonrchart` — the
+> full menu of capabilities a serious financial charting component can offer,
+> organized by category. It is a roadmap, not a commitment: most of what's listed
+> is aspirational, and a curated subset done well beats the whole catalog done
+> vaguely. The **Coverage** table near the bottom shows which of these
+> [KLineChart](https://github.com/klinecharts/KLineChart) (our rendering base)
+> gives us for free versus what `sonrchart` builds on top.
 
 
 ## What this is
 
-`lib/tv-advanced-charts/` contains **TradingView Advanced Charts v36.0.0** (the licensed
-"Charting Library" bundle: `charting_library/` + a ~30k-line `charting_library.d.ts`
-type surface). It is the current production chart engine embedded in Sonr.
+An inventory of the capabilities a full-featured charting *application* exposes —
+chart types, drawing tools, indicator handling, symbol/data model, layouts,
+scales, interactions, persistence, UI chrome, theming, and trading hooks. It was
+compiled by surveying the feature surface of a mature commercial charting widget,
+so it's a realistic ceiling to measure `sonrchart` against rather than a wishlist
+invented from scratch.
 
-This document inventories what that widget actually does — its chart types, drawing
-tools, indicator handling, symbol/data model, layouts, scales, interactions,
-persistence, UI chrome, theming, and trading hooks — so we can decide whether to
-rebuild a charting wrapper on top of one of two OSS bases:
+`sonrchart` is built on **KLineChart** (MIT) as its rendering base — it ships
+~50+ built-in technical indicators, a built-in drawing/annotation tool set
+(roughly 15–25 shapes), multi-pane rendering, tooltips, and theming out of the
+box. The gap between that and the full surface below is exactly the work this
+library takes on.
 
-- **Lightweight Charts (LWC)** — TradingView's own Apache-2.0 rendering core. Minimal:
-  a canvas that draws series and scales, plus a small API for markers and price lines.
-  No indicators, no drawing tools, no symbol UI, no persistence, no study/pane UI.
-- **KLineChart** — MIT-licensed. Ships ~50+ built-in technical indicators, a built-in
-  drawing/annotation tool set (roughly 15–25 shapes), multi-pane rendering, tooltips,
-  and theming — but a much smaller tool catalog than TV and less UI polish.
-
-The feature lists below are drawn directly from the bundle's own featureset flags (147),
-line-tool types (118), the `ChartStyle` enum, and the public widget/chart API method
-names. The final two sections map that surface onto LWC and KLineChart.
+The feature lists below were compiled from a mature charting widget's own capability
+flags (147), drawing-tool types (118), its chart-style catalog, and its public
+widget/chart API surface — so the categories are grounded in a real product, not
+guessed at. The final two sections map that surface onto the KLineChart base and
+what sonrchart builds on top.
 
 ---
 
 ## Chart types / series styles
 
-The `ChartStyle` enum exposes the full TradingView series-type catalog. `setChartType` /
-`chartType` switch between them at runtime; `supportedChartTypes` reports what's enabled.
+A full series-type catalog, switchable at runtime, with the host able to control
+which types are enabled.
 
 - Standard OHLC types: **Candles** (`Candle`), **Bars** (`Bar`), **Hollow Candles**
   (`HollowCandle`), **Heikin Ashi** (`HeikinAshi`), **HLC Bars** (`HLCBars`).
@@ -91,8 +93,8 @@ templates, grouping, magnet snapping, and persistence.
 
 ## Technical indicators / studies
 
-- Ships TradingView's **full built-in study library** (the same 100+ indicators as the
-  public product — moving averages, MACD, RSI, Bollinger, Ichimoku, volume profile,
+- A **full built-in study library** as the ceiling (100+ indicators — moving
+  averages, MACD, RSI, Bollinger, Ichimoku, volume profile,
   pivots, etc.). `getStudiesList` enumerates them; `createStudy` adds one;
   `getAllStudies` / `getStudyById` / `removeAllStudies` manage them.
 - **Custom indicators** via the Pine-like `custom_indicators_getter` /
@@ -206,8 +208,7 @@ templates, grouping, magnet snapping, and persistence.
   a **news** widget hook (`news`).
 - **Dialogs**: properties/settings pages, confirm/notice dialogs, symbol info, go-to-date,
   save-as / load, and dialog-movement constraints.
-- **Watermark** (`watermark`) and the "charts by TradingView" logo controls
-  (`adaptive_logo`, `move_logo_to_main_pane`).
+- **Watermark** support and logo/branding placement controls.
 
 ## Theming & customization
 
@@ -226,90 +227,76 @@ templates, grouping, magnet snapping, and persistence.
 
 - **On-chart order/position primitives**: `createOrderLine`, `createPositionLine`,
   `createExecutionShape` — draggable order lines, position lines, and execution markers.
-- **Trade-from-chart** actions and DOM order placement exist as command IDs
-  (`Trading.AddOrder`, `Trading.CancelOrder`, `Trading.ClosePosition`,
-  `Trading.EditOrder`, `Trading.ModifyPosition`, `Trading.ReversePosition`,
-  `Trading.DOMPlace*Order`) and a broker/Account-Manager terminal surface. Note these
-  belong to the **Trading Terminal** tier; Advanced Charts exposes the on-chart line
-  adapters and can include orders/positions in screenshots (`snapshot_trading_drawings`).
+- **Trade-from-chart** actions — add / cancel / edit / modify / close / reverse
+  order and position commands, plus depth-of-market order placement and a
+  broker/account-manager surface. These are the heaviest tier of trading
+  integration; at minimum, the on-chart line adapters above (order/position/
+  execution) cover most of what a chart needs, and orders/positions can be
+  included in exported snapshots.
 
 ## Export / snapshot
 
-- **Screenshots**: `takeScreenshot` (TradingView-hosted image) and
-  `takeClientScreenshot` (client-side canvas), with a header button and
-  optional inclusion of trading drawings.
+- **Screenshots**: both a hosted-image capture and a client-side canvas capture,
+  with a header button and optional inclusion of trading drawings.
 - **Data export**: `exportData` returns the chart's series/study data.
 - **Drag-to-export** (`chart_drag_export`, `setDragExportEnabled`).
 
 ---
 
-## Coverage: what to build vs. what you get free
+## Coverage: what the base gives us vs. what sonrchart builds
 
-Legend: **Free** = works out of the box · **Partial** = primitives exist, you assemble/
-extend it · **Build** = not provided, you implement it yourself.
+`sonrchart` renders on **KLineChart**. This table maps each roadmap category to
+what the base provides today and what this library takes on to reach the surface
+above.
 
-| Category | Lightweight Charts | KLineChart |
+Legend: **Free** = works out of the box in KLineChart · **Partial** = primitives
+exist, sonrchart assembles/extends them · **Build** = not in the base, sonrchart
+implements it.
+
+| Category | KLineChart base | sonrchart's job |
 |---|---|---|
-| Standard series (candle/bar/line/area/baseline/histogram) | **Free** | **Free** |
-| Hollow candle / Heikin Ashi / step / HLC | **Build** (Heikin Ashi = precompute) | **Free / Partial** (HA built in; some via transform) |
-| Renko / Kagi / PnF / Line Break / Range | **Build** | **Build** (not built in) |
-| Drawing & annotation tools (~100) | **Build** (only markers + price lines exist) | **Partial** (~15–25 shapes: lines, Fib, rays, shapes, text; no Gann/Elliott/harmonic/pitchfork) |
-| Built-in technical indicators | **Build** (none — bring your own math + rendering) | **Free** (~50+ built in) |
-| Custom indicators | **Partial** (compute yourself, render as series) | **Free** (register custom indicator API) |
-| Study templates / indicator sets | **Build** | **Build** (no template system) |
-| Multi-pane studies | **Partial** (v4 panes API exists; you wire study UI) | **Free** (native sub-panes) |
-| Symbol search UI | **Build** | **Build** (no symbol UI — it's a renderer) |
-| Compare / multi-symbol overlay | **Partial** (add extra series manually) | **Partial** (multiple series manually) |
-| Resolutions incl. seconds/tick | **Free** (you supply data at any granularity) | **Free** (data-driven) |
-| Sessions / pre-post market / timezones | **Partial** (time scale is generic; session logic is yours) | **Partial** (same — you handle sessions) |
-| Multi-chart layouts (grids) | **Build** (one chart per instance; you build the grid + sync) | **Build** (same) |
-| Price scale: log / percent / invert / multi-scale | **Partial** (log + autoscale free; percent/indexed/multi = build) | **Partial** (log/percent yes; fewer scale modes than TV) |
-| Crosshair / magnet | Crosshair **Free**; magnet **Build** | Crosshair **Free**; magnet **Build** |
-| Zoom / scroll / pinch / keyboard | Zoom/scroll **Free**; keyboard shortcuts **Build** | Zoom/scroll **Free**; keyboard **Build** |
-| Save / load layouts, drawings, templates | **Build** (no persistence) | **Build** (you serialize overlays yourself) |
-| Undo / redo | **Build** | **Build** |
-| Header / left toolbar / legend / dialogs / watchlist | **Build** (headless canvas) | **Partial** (built-in tooltip/legend; toolbars & dialogs are yours) |
-| Theming (light/dark, overrides) | **Partial** (options API; no theme presets) | **Free** (styles object, light/dark) |
-| Custom CSS / custom buttons | **Build** (it's your DOM anyway) | **Build** (your DOM) |
-| Trading on-chart order/position lines | **Build** (price lines can approximate) | **Build** |
-| Screenshot / snapshot | **Partial** (`takeScreenshot` to canvas) | **Partial** (canvas export) |
-| Data export | **Partial** (you hold the data) | **Partial** (you hold the data) |
+| Standard series (candle/bar/line/area/baseline/histogram) | **Free** | wire props, theme |
+| Hollow candle / Heikin Ashi / step / HLC | **Free / Partial** | expose the ones we want |
+| Renko / Kagi / PnF / Line Break / Range | **Build** | precompute + custom render if needed |
+| Drawing & annotation tools | **Partial** (~15–25 shapes: lines, Fib, rays, shapes, text) | curate a set; add Gann/Elliott/harmonic/pitchfork if wanted |
+| Built-in technical indicators | **Free** (~50+ built in) | surface a config UI |
+| Custom indicators | **Free** (register-indicator API) | ship Sonr's own (pattern context, etc.) |
+| Study templates / indicator sets | **Build** | save/restore named sets |
+| Multi-pane studies | **Free** (native sub-panes) | layout + defaults |
+| Symbol search UI | **Build** | host-provided; the DataSource resolves symbols |
+| Compare / multi-symbol overlay | **Partial** | add extra series manually |
+| Resolutions incl. seconds/tick | **Free** (data-driven) | interval → period mapping (done) |
+| Sessions / pre-post market / timezones | **Partial** | session tinting + timezone (done: ET) |
+| Multi-chart layouts (grids) | **Build** | host owns the grid + cross-chart sync |
+| Price scale: log / percent / invert / multi-scale | **Partial** (log/percent yes) | expose modes; multi-scale if needed |
+| Crosshair / magnet | Crosshair **Free**; magnet **Build** | magnet-to-OHLC snapping |
+| Zoom / scroll / pinch / keyboard | Zoom/scroll **Free**; keyboard **Build** | keyboard shortcuts |
+| Save / load layouts, drawings, templates | **Build** | serialize overlays + settings |
+| Undo / redo | **Build** | history stack |
+| Header / left toolbar / legend / dialogs | **Partial** (built-in tooltip/legend) | toolbars & dialogs are ours (or the host's) |
+| Theming (light/dark, overrides) | **Free** (styles object) | Sonr palette baked in (done) |
+| Custom CSS / custom buttons | **Build** | it's our DOM — trivial |
+| Trading on-chart lines (entry/stop/target, orders) | **Build** | `priceLines` prop (done); draggable order lines later |
+| Screenshot / snapshot | **Partial** (canvas export) | expose a capture helper |
+| Data export | **Partial** | the host holds the data |
 
-**Reading the table:** TV's surface is enormous — roughly 100 drawing tools, 100+
-indicators, ~18 series types, multi-chart grids with sync, full persistence, a complete
-header/left/legend/dialog chrome, and trading line adapters. Neither OSS base reproduces
-the *UI chrome*, *persistence*, *symbol search*, *multi-chart grids*, or *the deep
-drawing catalog* — those are "build" on both. The decisive split is **indicators and
-basic drawings**: KLineChart hands you those for free; LWC hands you nothing above raw
-series rendering.
+**Reading the table:** the base hands us the expensive middle for free —
+candles, ~50+ indicators, sub-panes, tooltips, theming, and a starter drawing
+set. What's left is either genuinely optional (Renko/Kagi/PnF, the exotic
+drawing families, multi-chart grids) or squarely `sonrchart`'s value-add: the
+trade-plan overlays, a curated indicator/drawing surface, persistence, and the
+Sonr look. "Done" markers above are already shipped in the current scaffold.
 
 ## Bottom line
 
-The TradingView widget is a full charting *application*, not a chart *renderer* — most
-of its value is the indicator library, the ~100 drawing tools with templates/magnet/
-grouping, multi-chart layouts, persistence, and the surrounding toolbars, legend, search,
-and dialogs. Any OSS rebuild reproduces the chrome, persistence, symbol search, and
-multi-chart/sync layer ourselves regardless of base; that work is roughly equal on both.
+A full charting product is an *application*, not just a renderer — most of its
+weight is the indicator library, the deep drawing catalog with
+templates/magnet/grouping, multi-chart layouts, persistence, and the surrounding
+toolbars, legend, and dialogs. `sonrchart` deliberately doesn't chase all of it.
 
-The real tradeoff is what you inherit underneath that shell:
-
-- **KLineChart** gets you materially closer, faster: ~50+ indicators, a starter set of
-  ~15–25 drawing tools, native sub-panes, tooltips, and light/dark theming out of the
-  box. The cost is polish and ceiling — the drawing catalog is a fraction of TV's (no
-  Gann/Elliott/harmonic/pitchfork), the alternative chart types (Renko/Kagi/PnF) aren't
-  there, and you'll invest in theming and extending it to feel first-class. It's the
-  better base if the goal is "recognizable TradingView-like chart with indicators and a
-  handful of drawings, soon."
-
-- **Lightweight Charts** is a cleaner, smaller, TradingView-authored rendering core with
-  excellent series/scale fidelity and a v4 panes API — but it gives you *nothing* above
-  rendering: every indicator's math and rendering, every drawing tool, magnet, and all
-  persistence is yours to build. It's the better base if we want a tightly controlled,
-  minimal chart we own end-to-end and only need a small, curated feature set (Sonr's own
-  pattern overlays, a few indicators, price/markers) rather than a broad
-  general-purpose charting product.
-
-In short: **KLine minimizes near-term build at the cost of extension/theming work and a
-lower ceiling; LWC minimizes surface area and maximizes control at the cost of building
-indicators and drawings from scratch.** The choice hinges on how much of TV's *breadth*
-(many indicators + many drawing tools) Sonr actually needs versus a curated, owned set.
+The base (KLineChart) already covers the hardest-to-build middle — rendering,
+indicators, sub-panes, and theming — so this library spends its effort where it
+matters for Sonr: **the trade plan drawn on the price, a curated and well-themed
+feature set, and a clean data seam** rather than a general-purpose everything-chart.
+This inventory is the map of what's *possible*; the product decides how much of it
+is worth building. Own the glass, not the ocean.
