@@ -71,12 +71,36 @@ The component fills its parent, so give the parent a height.
 | `dataSource` | `DataSource` | `getBars(symbol, interval, count)` + optional `subscribe(...)`. The only integration seam. |
 | `theme` | `"dark" \| "light"` | Default `"dark"` (the Sonr console palette). |
 | `styles` | `DeepPartial<Styles>` | KLineChart style overrides merged over the theme. |
-| `indicators` | `string[]` | Built-in KLine indicators as sub-panes. Default `["VOL"]`. |
-| `priceLines` | `PriceLine[]` | Horizontal reference lines (entry / stop / target). |
+| `indicators` | `(string \| IndicatorSpec)[]` | Indicators to show — a name (`"VOL"`) or a spec (`{ name, pane: "main" \| "new", calcParams }`). Default `["VOL"]`. |
+| `sessions` | `boolean \| { premarket?, afterhours? }` | Tint pre/after-hours session backgrounds (ET). |
+| `patterns` | `PatternMarker[]` | Setup markers (`{ time, kind, label }`) drawn on the price pane. |
+| `priceLines` | `PriceLine[]` | Static horizontal reference lines (entry / stop / target). |
+| `orderLines` | `OrderLine[]` | Draggable order/position lines; `onMove(price, phase)` fires as the user drags. |
 | `barCount` | `number` | Bars requested on load. Default 500. |
 | `onReady` | `(chart) => void` | The raw KLineChart instance, for advanced use. |
 
-A `ref` exposes `{ chart() }` for direct KLineChart access.
+A `ref` exposes `{ chart(), addIndicator(spec), removeIndicator(name), listIndicators() }`
+for direct KLineChart access and indicator control.
+
+### Indicator config UI
+
+`IndicatorMenu` is a drop-in control that drives a chart's `ref` — toggling a
+button adds/removes that indicator live:
+
+```tsx
+import { SonrChart, IndicatorMenu, type SonrChartHandle } from "sonrchart";
+const ref = useRef<SonrChartHandle>(null);
+// ...
+<IndicatorMenu chartRef={ref} />
+<SonrChart ref={ref} symbol="AAPL" dataSource={source} />
+```
+
+### Sonr custom indicators
+
+`sessions` and `patterns` are Sonr's own custom KLineChart indicators
+(registered automatically). Session tinting shades pre-market (04:00–09:30 ET)
+and after-hours (16:00–20:00 ET); pattern markers draw a labeled triangle at
+each setup's bar (green up for longs, red down for shorts).
 
 ## Develop
 
