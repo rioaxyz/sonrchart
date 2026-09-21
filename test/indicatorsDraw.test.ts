@@ -48,72 +48,92 @@ const etMs = (h: number, m = 0) => Date.parse(`2026-07-15T${String(h).padStart(2
 
 const xAxis = { convertTimestampToPixel: (ts: number) => (ts / 60_000) % 1000 };
 const bounding = { top: 0, height: 100, width: 100000, left: 0, right: 0, bottom: 0 };
+const visibleAll = (n: number) => ({ from: 0, to: n - 1, realFrom: 0, realTo: n - 1 });
 
 beforeAll(() => {
   reg.templates.length = 0;
   registerSonrIndicators();
 });
 
-describe("SONR_SESSION draw (#10)", () => {
+describe("SONR_SESSION calc + draw (#10)", () => {
   it("registers as a price-series overlay with no figures", () => {
     const t = template(SESSION_INDICATOR);
     expect(t.series).toBe("price");
     expect(t.figures).toEqual([]);
   });
 
-  it("fills pre-market and after-hours bands but not regular hours", () => {
+  it("calc classifies each bar's session (out of the per-frame draw path)", () => {
+    const t = template(SESSION_INDICATOR);
+    const data = [{ timestamp: etMs(5) }, { timestamp: etMs(10) }, { timestamp: etMs(17) }];
+    const result = t.calc(data);
+    // pre=1, regular=0, post=2
+    expect(result.map((r: any) => r.s)).toEqual([1, 0, 2]);
+  });
+
+  it("draw reads the precomputed sessions and fills pre + post bands only", () => {
     const t = template(SESSION_INDICATOR);
     const data = [
-      { timestamp: etMs(5) }, // pre
-      { timestamp: etMs(6) }, // pre
-      { timestamp: etMs(10) }, // regular
-      { timestamp: etMs(11) }, // regular
-      { timestamp: etMs(17) }, // post
-      { timestamp: etMs(18) }, // post
+      { timestamp: etMs(5) }, { timestamp: etMs(6) }, // pre
+      { timestamp: etMs(10) }, { timestamp: etMs(11) }, // regular
+      { timestamp: etMs(17) }, { timestamp: etMs(18) }, // post
     ];
-    const chart = {
-      getIndicators: () => [{ extendData: DEFAULT_SESSION_COLORS }],
-      getDataList: () => data,
-    };
+    const result = t.calc(data);
+    const chart = { getDataList: () => data, getVisibleRange: () => visibleAll(data.length) };
     const ctx = fakeCtx();
-    const ret = t.draw({ ctx, chart, bounding, xAxis });
-    expect(ret).toBe(false); // lets default rendering proceed
-    // Two filled bands: pre + post (regular is untinted).
-    expect(ctx._rects.length).toBe(2);
+    const ret = t.draw({ ctx, chart, indicator: { extendData: DEFAULT_SESSION_COLORS, result }, bounding, xAxis });
+    expect(ret).toBe(false);
+    expect(ctx._rects.length).toBe(2); // pre + post
     expect(ctx._fillStyleLog).toContain(DEFAULT_SESSION_COLORS.premarket);
+    expect(ctx._fillStyleLog).toContain(DEFAULT_SESSION_COLORS.afterhours);
+  });
+
+  it("only paints the visible range (plus a 1-bar margin)", () => {
+    const t = template(SESSION_INDICATOR);
+    const data = [
+      { timestamp: etMs(5) }, // pre  (hidden, > 1 bar before the visible range)
+      { timestamp: etMs(6) }, // pre  (hidden)
+      { timestamp: etMs(10) }, // regular (the 1-bar margin bar)
+      { timestamp: etMs(17) }, // post (visible)
+      { timestamp: etMs(18) }, // post (visible)
+    ];
+    const result = t.calc(data);
+    // Visible = indices 3..4; the -1 margin reaches index 2 (regular), never the pre bars.
+    const chart = { getDataList: () => data, getVisibleRange: () => ({ from: 3, to: 4, realFrom: 3, realTo: 4 }) };
+    const ctx = fakeCtx();
+    t.draw({ ctx, chart, indicator: { extendData: DEFAULT_SESSION_COLORS, result }, bounding, xAxis });
+    expect(ctx._fillStyleLog).not.toContain(DEFAULT_SESSION_COLORS.premarket);
     expect(ctx._fillStyleLog).toContain(DEFAULT_SESSION_COLORS.afterhours);
   });
 
   it("no-ops on empty data", () => {
     const t = template(SESSION_INDICATOR);
     const ctx = fakeCtx();
-    t.draw({ ctx, chart: { getIndicators: () => [{ extendData: DEFAULT_SESSION_COLORS }], getDataList: () => [] }, bounding, xAxis });
+    t.draw({ ctx, chart: { getDataList: () => [], getVisibleRange: () => visibleAll(0) }, indicator: { extendData: DEFAULT_SESSION_COLORS, result: [] }, bounding, xAxis });
     expect(ctx._rects.length).toBe(0);
   });
 });
 
 describe("SONR_PATTERNS draw (#5)", () => {
-  it("draws a triangle + label per marker and colors by kind", () => {
+  it("draws a triangle + label per marker from extendData, colored by kind", () => {
     const t = template(PATTERN_INDICATOR);
     const markers = [
       { time: etMs(10), kind: "long", label: "AT" },
       { time: etMs(11), kind: "short", label: "RW" },
     ];
-    const chart = { getIndicators: () => [{ extendData: markers }] };
     const ctx = fakeCtx();
-    const ret = t.draw({ ctx, chart, bounding, xAxis });
+    const ret = t.draw({ ctx, indicator: { extendData: markers }, bounding, xAxis });
     expect(ret).toBe(false);
-    expect(ctx.fill).toHaveBeenCalledTimes(2); // two triangles
+    expect(ctx.fill).toHaveBeenCalledTimes(2);
     expect(ctx.fillText).toHaveBeenCalledWith("AT", expect.any(Number), expect.any(Number));
     expect(ctx.fillText).toHaveBeenCalledWith("RW", expect.any(Number), expect.any(Number));
-    expect(ctx._fillStyleLog).toContain("#35c98d"); // long = green
-    expect(ctx._fillStyleLog).toContain("#ff6a76"); // short = red
+    expect(ctx._fillStyleLog).toContain("#35c98d");
+    expect(ctx._fillStyleLog).toContain("#ff6a76");
   });
 
   it("no-ops with no markers", () => {
     const t = template(PATTERN_INDICATOR);
     const ctx = fakeCtx();
-    t.draw({ ctx, chart: { getIndicators: () => [{ extendData: [] }] }, bounding, xAxis });
+    t.draw({ ctx, indicator: { extendData: [] }, bounding, xAxis });
     expect(ctx.fill).not.toHaveBeenCalled();
   });
 });

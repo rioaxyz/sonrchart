@@ -31,3 +31,32 @@ describe("etSession — DST correctness (winter / EST, UTC-5)", () => {
   it("04:00 ET is pre-market in winter too", () => expect(at(4, 0)).toBe("pre"));
   it("16:00 ET is after-hours in winter too", () => expect(at(16, 0)).toBe("post"));
 });
+
+// The per-UTC-hour offset cache must stay correct across the DST switch itself.
+// 2026 transitions: spring-forward Sun Mar 8 (EST→EDT), fall-back Sun Nov 1.
+describe("etSession — across DST transitions (offset-cache correctness)", () => {
+  it("09:30 ET is regular on both sides of spring-forward", () => {
+    // Mar 6 (EST, UTC-5) and Mar 9 (EDT, UTC-4) — same ET wall time, different offset.
+    expect(etSession(etMs("2026-03-06", 9, 30, 5))).toBe("regular");
+    expect(etSession(etMs("2026-03-09", 9, 30, 4))).toBe("regular");
+  });
+  it("09:30 ET is regular on both sides of fall-back", () => {
+    expect(etSession(etMs("2026-10-30", 9, 30, 4))).toBe("regular"); // EDT
+    expect(etSession(etMs("2026-11-02", 9, 30, 5))).toBe("regular"); // EST
+  });
+  it("agrees with a pure-Intl classifier across a full year (sampled)", () => {
+    const fmt = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+    const ref = (ts: number) => {
+      const p = fmt.formatToParts(new Date(ts));
+      const h = Number(p.find((x) => x.type === "hour")!.value);
+      const m = Number(p.find((x) => x.type === "minute")!.value);
+      const mm = h * 60 + m;
+      return mm >= 240 && mm < 570 ? "pre" : mm >= 570 && mm < 960 ? "regular" : mm >= 960 && mm < 1200 ? "post" : "closed";
+    };
+    let mism = 0;
+    for (let ts = Date.UTC(2026, 0, 1); ts < Date.UTC(2027, 0, 1); ts += 13 * 60_000) {
+      if (etSession(ts) !== ref(ts)) mism++;
+    }
+    expect(mism).toBe(0);
+  });
+});
