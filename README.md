@@ -171,6 +171,14 @@ gate every push/PR via GitHub Actions (`.github/workflows/ci.yml`):
 Coverage sits near 98% of `src/`. The one path not unit-tested is real
 pixel rendering, which the demo harness (`npm run dev`) exercises end to end.
 
+## Performance
+
+The features that run in the render hot path (session/pattern tinting) are
+tuned so they cost near-zero per frame — no added dependencies. The ET session
+classifier alone is **~80× faster** than a naive `Intl`-per-bar approach and
+stays DST-correct. See [PERFORMANCE.md](PERFORMANCE.md); reproduce with
+`npm run bench`.
+
 ## License
 
 [MIT](LICENSE) © Rioa, LLC

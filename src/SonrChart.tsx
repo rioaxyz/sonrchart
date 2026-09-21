@@ -129,6 +129,13 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   const overlayIds = useRef<string[]>([]);
   const magnetRef = useRef<Magnet | undefined>(magnet);
   magnetRef.current = magnet;
+  // Signature of the current line overlays' *visual* fields; lets the reconcile
+  // skip a full remove+recreate when a parent re-render changes only array/
+  // callback identity, not content (avoids overlay thrash and drag fighting).
+  const linesSigRef = useRef<string>("");
+  // Latest onMove per order-line id, so a changed callback takes effect without
+  // recreating the overlay.
+  const orderMoveRef = useRef(new Map<string, OrderLine["onMove"]>());
 
   const createIndicator = (spec: IndicatorSpec) => {
     const chart = chartRef.current;
@@ -325,10 +332,24 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     }
   }, [patterns]);
 
-  // Price-line + order-line overlays.
+  // Price-line + order-line overlays. Runs every render (the arrays are usually
+  // fresh references), but a signature guard skips the costly rebuild unless the
+  // visual content actually changed.
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
+
+    // Refresh the latest onMove handlers regardless of whether we rebuild.
+    orderMoveRef.current.clear();
+    for (const ol of orderLines ?? []) orderMoveRef.current.set(ol.id, ol.onMove);
+
+    const sig = JSON.stringify([
+      (priceLines ?? []).map((p) => [p.price, p.color, p.label, p.style]),
+      (orderLines ?? []).map((o) => [o.id, o.price, o.color, o.label, o.style, o.draggable]),
+    ]);
+    if (sig === linesSigRef.current) return; // content unchanged — keep overlays
+    linesSigRef.current = sig;
+
     for (const id of overlayIds.current) chart.removeOverlay({ id });
     overlayIds.current = [];
 
@@ -343,12 +364,13 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       if (typeof created === "string") overlayIds.current.push(created);
     }
 
+    const priceOf = (o: { overlay?: { points?: Array<{ value?: number }> } }): number | null => {
+      const v = o?.overlay?.points?.[0]?.value;
+      return typeof v === "number" ? v : null;
+    };
     for (const ol of orderLines ?? []) {
       const draggable = ol.draggable !== false;
-      const priceOf = (o: { overlay?: { points?: Array<{ value?: number }> } }): number | null => {
-        const v = o?.overlay?.points?.[0]?.value;
-        return typeof v === "number" ? v : null;
-      };
+      const id = ol.id;
       const created = chart.createOverlay({
         name: "priceLine",
         points: [{ value: ol.price }],
@@ -357,12 +379,12 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         extendData: ol.label,
         onPressedMoving: (e) => {
           const p = priceOf(e);
-          if (p != null) ol.onMove?.(p, "moving");
+          if (p != null) orderMoveRef.current.get(id)?.(p, "moving");
           return false;
         },
         onPressedMoveEnd: (e) => {
           const p = priceOf(e);
-          if (p != null) ol.onMove?.(p, "end");
+          if (p != null) orderMoveRef.current.get(id)?.(p, "end");
           return false;
         },
       });

@@ -319,3 +319,36 @@ describe("SonrChart — persistence (#15)", () => {
     expect(c.removeOverlay).not.toHaveBeenCalledWith({ groupId: "sonr-user-drawing" });
   });
 });
+
+describe("SonrChart — overlay reconcile guard (perf)", () => {
+  it("does NOT rebuild overlays when order-line content is unchanged", () => {
+    const lines = [{ id: "e", price: 50, label: "Ord", onMove: vi.fn() }];
+    const { rerender } = render(<SonrChart symbol="A" dataSource={source()} orderLines={lines} />);
+    const c = lastChart();
+    const created = c.createOverlay.mock.calls.length;
+    const removed = c.removeOverlay.mock.calls.length;
+    // New array + new callback identity, same visual content.
+    rerender(<SonrChart symbol="A" dataSource={source()} orderLines={[{ id: "e", price: 50, label: "Ord", onMove: vi.fn() }]} />);
+    expect(c.createOverlay.mock.calls.length).toBe(created);
+    expect(c.removeOverlay.mock.calls.length).toBe(removed);
+  });
+
+  it("rebuilds when a line's price changes", () => {
+    const { rerender } = render(<SonrChart symbol="A" dataSource={source()} orderLines={[{ id: "e", price: 50 }]} />);
+    const c = lastChart();
+    const created = c.createOverlay.mock.calls.length;
+    rerender(<SonrChart symbol="A" dataSource={source()} orderLines={[{ id: "e", price: 60 }]} />);
+    expect(c.createOverlay.mock.calls.length).toBeGreaterThan(created);
+  });
+
+  it("routes drags to the latest onMove even without a rebuild", () => {
+    const onMove1 = vi.fn();
+    const onMove2 = vi.fn();
+    const { rerender } = render(<SonrChart symbol="A" dataSource={source()} orderLines={[{ id: "e", price: 50, onMove: onMove1 }]} />);
+    const ov = lastChart()._overlays.find((o: any) => o.name === "priceLine" && o.lock === false);
+    rerender(<SonrChart symbol="A" dataSource={source()} orderLines={[{ id: "e", price: 50, onMove: onMove2 }]} />);
+    ov.onPressedMoveEnd({ overlay: { points: [{ value: 51 }] } });
+    expect(onMove2).toHaveBeenCalledWith(51, "end");
+    expect(onMove1).not.toHaveBeenCalled();
+  });
+});
