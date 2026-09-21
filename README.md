@@ -12,9 +12,41 @@ its own.
 The design goal: KLineChart gives us candles, ~50+ indicators, drawing tools,
 and sub-panes for free; sonrchart wraps it with the Sonr look, a clean React
 API, and one integration seam — a `DataSource` — so the host app owns where
-bars come from. See [`docs/charting-feature-inventory.md`](docs/charting-feature-inventory.md)
-for the full feature target (a map of the TradingView Advanced Charts surface
-we're working toward) and what KLine gives us vs. what we build here.
+bars come from.
+
+## Features
+
+- **One React component, one data seam.** `<SonrChart>` renders from a single
+  `DataSource` you implement (REST, websocket, anything) — the library never
+  knows where bars come from.
+- **Themed out of the box.** Sonr dark/light palette baked in; override any
+  KLineChart style.
+- **Candle styles.** Solid, hollow, hollow-up, OHLC/HLC bars, area, and Heikin
+  Ashi (a built-in data transform).
+- **Indicators.** All of KLineChart's ~50+ built-ins, placed on the price pane
+  or their own sub-pane, with per-pane heights — plus a drop-in `IndicatorMenu`
+  to toggle them.
+- **Sonr custom indicators.** Session tinting (pre/after-hours, ET, DST-aware)
+  and pattern-context markers.
+- **Trade plan on the chart.** Static `priceLines` (entry/stop/target) and
+  **draggable** `orderLines` with an `onMove` callback.
+- **Compare / multi-symbol overlay.** Overlay other symbols, ratio-scaled to
+  share a starting price.
+- **Drawing tools.** Curated trend/ray/Fibonacci/channel/note tools with a
+  `DrawingToolbar`, magnet-to-OHLC snapping, and **undo/redo**.
+- **Price scale modes.** Normal / percentage / logarithmic, invert, labels
+  inside.
+- **Persistence & templates.** Export/import chart state (drawings + indicators)
+  and save/apply named indicator sets.
+- **Snapshots.** Capture the chart to a PNG data URL (or trigger a download).
+- **Composable chrome.** `ChartToolbar` bundles intervals + indicators +
+  drawing tools + snapshot; add your own buttons via its children slot.
+- **Fast & dependency-light.** The only runtime dependency is KLineChart;
+  React is a peer. The per-frame hot paths are tuned (see
+  [PERFORMANCE.md](PERFORMANCE.md)).
+
+See [`docs/charting-feature-inventory.md`](docs/charting-feature-inventory.md)
+for the full roadmap and what KLineChart provides vs. what this library adds.
 
 ## Install
 
@@ -61,6 +93,50 @@ export function Chart() {
 ```
 
 The component fills its parent, so give the parent a height.
+
+## Integrating into an app
+
+1. **Install** the package and its peers:
+   `npm install sonrchart klinecharts react react-dom`.
+2. **Implement a `DataSource`.** This is the whole integration — one object with
+   `getBars(symbol, interval, count)` returning `[{ time, open, high, low,
+   close, volume }]` (`time` in epoch ms), and an optional `subscribe(symbol,
+   interval, onBar)` for live updates that returns an unsubscribe function.
+   Point them at your own API/feed.
+3. **Render `<SonrChart>`** inside a sized container (it fills its parent),
+   passing `symbol`, `interval`, and your `dataSource`. That's a working chart.
+4. **Turn on features with props** as you need them — `indicators`, `sessions`,
+   `patterns`, `priceLines`, `orderLines`, `compareSeries`, `priceScale`,
+   `candleStyle`, `theme`. Each is independent and optional.
+5. **Add chrome (optional).** Grab a `ref<SonrChartHandle>` and drop in
+   `<ChartToolbar chartRef={ref} … />` (or the individual `IndicatorMenu` /
+   `DrawingToolbar`) for interval buttons, indicator toggles, drawing tools, and
+   a snapshot button. Add your own controls via the toolbar's children slot.
+6. **Drive it imperatively (optional)** through the same `ref` —
+   `startDrawing`, `undo`/`redo`, `snapshot`, `exportState`/`importState`,
+   `applyIndicatorSet`, etc. (full list under [Props](#props)).
+7. **Style it.** The chart uses your `theme`; all toolbar/button classes are
+   `sonr-*-btn`, so your app's CSS controls the chrome.
+
+```tsx
+import { useRef } from "react";
+import { SonrChart, ChartToolbar, type SonrChartHandle, type DataSource } from "sonrchart";
+
+function TradingChart({ source }: { source: DataSource }) {
+  const ref = useRef<SonrChartHandle>(null);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: 520 }}>
+      <ChartToolbar chartRef={ref} intervals={["1", "5", "60", "D"]} interval="1" onIntervalChange={/* ... */ () => {}} />
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <SonrChart ref={ref} symbol="AAPL" interval="1" dataSource={source} theme="dark" sessions indicators={["VOL"]} />
+      </div>
+    </div>
+  );
+}
+```
+
+> **Bundler note:** sonrchart ships ESM + CJS with types, and bundles KLineChart
+> in. It's browser-only (canvas), so if you server-render, load it client-side.
 
 ## Props
 
