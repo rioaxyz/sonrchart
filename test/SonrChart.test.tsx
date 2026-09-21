@@ -8,32 +8,42 @@ import { createRef } from "react";
 const h = vi.hoisted(() => {
   const charts: any[] = [];
   const make = () => {
-    const inds: string[] = [];
+    const inds: { name: string; paneId: string }[] = [];
+    let ovSeq = 0;
     const chart: any = {
       _overlays: [] as any[],
       setStyles: vi.fn(),
       setDataLoader: vi.fn(),
       setSymbol: vi.fn(),
       setPeriod: vi.fn(),
+      setPaneOptions: vi.fn(),
+      getConvertPictureUrl: vi.fn(() => "data:image/png;base64,FAKE"),
       createIndicator: vi.fn((v: any) => {
         const name = typeof v === "string" ? v : v.name;
-        inds.push(name);
-        return "pane_" + name;
+        const paneId = v?.paneId ?? "pane_" + name;
+        inds.push({ name, paneId });
+        return paneId;
       }),
-      getIndicators: vi.fn((f?: any) =>
-        (f?.name ? inds.filter((n) => n === f.name) : inds).map((n) => ({ name: n })),
-      ),
+      getIndicators: vi.fn((f?: any) => (f?.name ? inds.filter((i) => i.name === f.name) : inds.slice())),
       overrideIndicator: vi.fn(),
       removeIndicator: vi.fn((f?: any) => {
-        const i = inds.indexOf(f?.name);
+        const i = inds.findIndex((x) => x.name === f?.name);
         if (i >= 0) inds.splice(i, 1);
         return true;
       }),
       createOverlay: vi.fn((o: any) => {
-        chart._overlays.push(o);
-        return "ov_" + chart._overlays.length;
+        const id = "ov_" + ++ovSeq;
+        chart._overlays.push({ id, ...o });
+        return id;
       }),
-      removeOverlay: vi.fn(),
+      getOverlays: vi.fn((f?: any) =>
+        f?.groupId ? chart._overlays.filter((o: any) => o.groupId === f.groupId) : chart._overlays.slice(),
+      ),
+      removeOverlay: vi.fn((f?: any) => {
+        if (f?.groupId) chart._overlays = chart._overlays.filter((o: any) => o.groupId !== f.groupId);
+        else if (f?.id) chart._overlays = chart._overlays.filter((o: any) => o.id !== f.id);
+        return true;
+      }),
     };
     charts.push(chart);
     return chart;
@@ -42,7 +52,11 @@ const h = vi.hoisted(() => {
 });
 
 vi.mock("klinecharts", () => ({
-  init: vi.fn(() => h.make()),
+  init: vi.fn((_el: unknown, opts: unknown) => {
+    const c = h.make();
+    c._initOptions = opts;
+    return c;
+  }),
   dispose: vi.fn(),
   registerIndicator: vi.fn(),
 }));
@@ -198,5 +212,110 @@ describe("SonrChart — price lines & draggable order lines (#19)", () => {
     render(<SonrChart symbol="A" dataSource={source()} orderLines={[{ id: "e", price: 50, draggable: false }]} />);
     const ov = lastChart()._overlays.at(-1);
     expect(ov.lock).toBe(true);
+  });
+});
+
+describe("SonrChart — drawing tools & magnet (#3, #13)", () => {
+  it("startDrawing creates a tagged overlay; clearDrawings removes them", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    act(() => ref.current!.startDrawing("fibonacciLine"));
+    const c = lastChart();
+    expect(c._overlays.some((o: any) => o.name === "fibonacciLine" && o.groupId === "sonr-user-drawing")).toBe(true);
+    act(() => ref.current!.clearDrawings());
+    expect(c.removeOverlay).toHaveBeenCalledWith({ groupId: "sonr-user-drawing" });
+    expect(c._overlays.some((o: any) => o.groupId === "sonr-user-drawing")).toBe(false);
+  });
+
+  it("applies the magnet mode to new drawings", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { rerender } = render(<SonrChart ref={ref} symbol="A" dataSource={source()} magnet="strong" />);
+    act(() => ref.current!.startDrawing("segment"));
+    expect(lastChart()._overlays.at(-1)).toMatchObject({ name: "segment", mode: "strong_magnet" });
+    rerender(<SonrChart ref={ref} symbol="A" dataSource={source()} magnet={false} />);
+    act(() => ref.current!.startDrawing("segment"));
+    expect(lastChart()._overlays.at(-1)).toMatchObject({ mode: "normal" });
+  });
+});
+
+describe("SonrChart — pane heights (#7)", () => {
+  it("sets a sub-pane height by indicator name", () => {
+    render(<SonrChart symbol="A" dataSource={source()} indicators={["VOL", "MACD"]} paneHeights={{ MACD: 120 }} />);
+    expect(lastChart().setPaneOptions).toHaveBeenCalledWith({ id: "pane_MACD", height: 120 });
+  });
+});
+
+describe("SonrChart — symbol resolution (#8)", () => {
+  const flush = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve(); }); };
+
+  it("sets the resolved symbol info", async () => {
+    const info = { ticker: "AAPL", name: "Apple", pricePrecision: 2 };
+    const ds: DataSource = { getBars: vi.fn(async () => bars), resolveSymbol: vi.fn(async () => info) };
+    render(<SonrChart symbol="AAPL" dataSource={ds} />);
+    await flush();
+    expect(ds.resolveSymbol).toHaveBeenCalledWith("AAPL");
+    expect(lastChart().setSymbol).toHaveBeenCalledWith(info);
+  });
+
+  it("skips loading and fires onSymbolError for an unknown symbol", async () => {
+    const onSymbolError = vi.fn();
+    const ds: DataSource = { getBars: vi.fn(async () => bars), resolveSymbol: vi.fn(async () => null) };
+    render(<SonrChart symbol="BAD" dataSource={ds} onSymbolError={onSymbolError} />);
+    await flush();
+    expect(onSymbolError).toHaveBeenCalledWith("BAD");
+    expect(lastChart().setSymbol).not.toHaveBeenCalled();
+  });
+});
+
+describe("SonrChart — price scale (#12)", () => {
+  it("sets the scale type + inversion on the y-axis at init", () => {
+    render(<SonrChart symbol="A" dataSource={source()} priceScale={{ type: "logarithm", invert: true }} />);
+    expect(lastChart()._initOptions.layout.yAxis).toMatchObject({ name: "logarithm", reverse: true });
+  });
+
+  it("re-inits (new chart) when the scale type changes", () => {
+    const { rerender } = render(<SonrChart symbol="A" dataSource={source()} priceScale={{ type: "normal" }} />);
+    const before = h.charts.length;
+    rerender(<SonrChart symbol="A" dataSource={source()} priceScale={{ type: "percentage" }} />);
+    expect(h.charts.length).toBe(before + 1); // rebuilt
+    expect(lastChart()._initOptions.layout.yAxis).toMatchObject({ name: "percentage" });
+  });
+});
+
+describe("SonrChart — snapshot (#20)", () => {
+  it("returns the chart picture url", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    expect(ref.current!.snapshot()).toBe("data:image/png;base64,FAKE");
+    expect(lastChart().getConvertPictureUrl).toHaveBeenCalledWith(true, "png", undefined);
+  });
+});
+
+describe("SonrChart — persistence (#15)", () => {
+  it("exports drawings + indicators + price scale and re-imports them", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} indicators={["VOL"]} priceScale={{ type: "percentage" }} />);
+    act(() => ref.current!.startDrawing("segment"));
+    const c = lastChart();
+    // Give the drawing some points, as a finished overlay would have.
+    c._overlays.find((o: any) => o.name === "segment").points = [{ value: 1 }, { value: 2 }];
+
+    const state = ref.current!.exportState();
+    expect(state.version).toBe(1);
+    expect(state.indicators.map((i) => i.name)).toContain("VOL");
+    expect(state.drawings.find((d) => d.name === "segment")!.points).toEqual([{ value: 1 }, { value: 2 }]);
+    expect(state.priceScale).toEqual({ type: "percentage" });
+
+    act(() => ref.current!.importState(state));
+    // Re-import clears then recreates: exactly one segment remains.
+    expect(c._overlays.filter((o: any) => o.name === "segment").length).toBe(1);
+  });
+
+  it("ignores state with the wrong version", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.importState({ version: 99 as any, drawings: [], indicators: [] }));
+    expect(c.removeOverlay).not.toHaveBeenCalledWith({ groupId: "sonr-user-drawing" });
   });
 });
