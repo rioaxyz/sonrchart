@@ -1,0 +1,46 @@
+{
+  "name": "sonrchart",
+  "version": "0.1.0",
+  "description": "A themed, data-source-agnostic React charting component for financial candlestick charts, built on KLineChart.",
+  "license": "MIT",
+  "author": "Rioa, LLC",
+  "repository": { "type": "git", "url": "https://github.com/rioaxyz/sonrchart.git" },
+  "keywords": ["charts", "candlestick", "trading", "klinecharts", "react", "finance", "sonr"],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "files": ["dist"],
+  "sideEffects": ["*.css"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "dependencies": {
+    "klinecharts": "^10.0.3"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.11"
+  }
+}
