@@ -1,9 +1,13 @@
 # sonrchart
 
-A themed, data-source-agnostic React charting component for financial
-candlestick charts, built on [KLineChart](https://github.com/klinecharts/KLineChart)
-(MIT). Extracted from the Sonr trading app so the chart engine can be developed,
-versioned, and tested on its own.
+**Own the glass, not the ocean.** A themed, data-source-agnostic React charting
+component for financial candlestick charts, built on
+[KLineChart](https://github.com/klinecharts/KLineChart) (MIT). Extracted from the
+Sonr trading app so the chart engine can be developed, versioned, and tested on
+its own.
+
+> New here? Read the [lore](LORE.md) for the why. MIT-licensed — see
+> [LICENSE](LICENSE).
 
 The design goal: KLineChart gives us candles, ~50+ indicators, drawing tools,
 and sub-panes for free; sonrchart wraps it with the Sonr look, a clean React
@@ -88,4 +92,4 @@ runs with no backend — the same shape a real host adapter implements.
 
 ## License
 
-MIT © Rioa, LLC
+[MIT](LICENSE) © Rioa, LLC
