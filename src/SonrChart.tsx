@@ -3,13 +3,18 @@ import { dispose, init, type Chart, type DeepPartial, type Styles } from "klinec
 import { themeStyles } from "./theme";
 import { PATTERN_INDICATOR, SESSION_INDICATOR, registerSonrIndicators } from "./indicators";
 import { asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
+import { USER_DRAWING_GROUP } from "./drawings";
 import type {
+  ChartState,
   DataSource,
+  DrawingTool,
   IndicatorSpec,
   Interval,
+  Magnet,
   OrderLine,
   PatternMarker,
   PriceLine,
+  PriceScale,
   SessionTint,
   Theme,
 } from "./types";
@@ -18,46 +23,82 @@ registerSonrIndicators();
 
 const CANDLE_PANE = "candle_pane";
 
+function magnetMode(m: Magnet | undefined): "normal" | "weak_magnet" | "strong_magnet" {
+  if (m === true || m === "weak") return "weak_magnet";
+  if (m === "strong") return "strong_magnet";
+  return "normal";
+}
+
 export interface SonrChartProps {
-  /** Ticker to chart, e.g. "AAPL". */
   symbol: string;
-  /** Bar interval. Defaults to "1" (one minute). */
   interval?: Interval;
-  /** Where bars come from — the sole integration seam (see DataSource). */
   dataSource: DataSource;
-  /** "dark" (default) | "light". */
   theme?: Theme;
-  /** Extra KLineChart style overrides merged over the Sonr theme. */
   styles?: DeepPartial<Styles>;
-  /** Indicators to show. Strings ("VOL") or specs ({ name, pane, calcParams }).
-   *  Defaults to ["VOL"]. Pass [] for a bare price pane. (issue #4) */
+  /** Indicators to show. Strings ("VOL") or specs. Default ["VOL"]. (#4) */
   indicators?: (string | IndicatorSpec)[];
-  /** Session background tinting for pre/after-hours. (issue #10) */
+  /** Per-indicator sub-pane heights in px, keyed by indicator name. (#7) */
+  paneHeights?: Record<string, number>;
+  /** Session background tinting for pre/after-hours. (#10) */
   sessions?: SessionTint;
-  /** Pattern-context markers drawn on the price pane. (issue #5) */
+  /** Pattern-context markers on the price pane. (#5) */
   patterns?: PatternMarker[];
-  /** Static horizontal reference lines (entry / stop / target). */
+  /** Static reference lines (entry / stop / target). */
   priceLines?: PriceLine[];
-  /** Draggable on-chart order/position lines. (issue #19) */
+  /** Draggable order/position lines. (#19) */
   orderLines?: OrderLine[];
+  /** Price-scale mode (log / percentage / invert / inside). (#12) */
+  priceScale?: PriceScale;
+  /** Magnet mode for drawing tools — snap points to nearby OHLC. (#13) */
+  magnet?: Magnet;
   /** How many bars to request on load. Default 500. */
   barCount?: number;
-  /** Fired once the chart instance exists. */
   onReady?: (chart: Chart) => void;
+  /** Fired when resolveSymbol returns null for the requested ticker. (#8) */
+  onSymbolError?: (symbol: string) => void;
   className?: string;
   style?: React.CSSProperties;
 }
 
-/** Imperative handle: the raw chart plus an indicator-control surface (the API
- *  half of issue #4 — host UIs drive these; see IndicatorMenu for a ready UI). */
+/** Imperative surface: raw chart, indicator control (#4), drawing tools (#3),
+ *  price scale (#12), snapshot (#20), and state save/load (#15). */
 export interface SonrChartHandle {
   chart(): Chart | null;
   addIndicator(spec: string | IndicatorSpec): void;
   removeIndicator(name: string): void;
   listIndicators(): string[];
+  /** Start interactive drawing of a tool; honors the current magnet mode. */
+  startDrawing(tool: DrawingTool): void;
+  /** Remove all user-drawn overlays (leaves price/order lines + indicators). */
+  clearDrawings(): void;
+  /** Capture the chart to a data URL (PNG by default). */
+  snapshot(opts?: { type?: "png" | "jpeg"; background?: string; includeOverlays?: boolean }): string | null;
+  /** Serialize user drawings + indicators + price scale (#15). */
+  exportState(): ChartState;
+  /** Restore state produced by exportState (#15). */
+  importState(state: ChartState): void;
 }
 
 let _seq = 0;
+
+// The candle pane's y-axis config for a price scale. KLineChart fixes the scale
+// TYPE (normal/percentage/logarithm) and inversion at pane creation, so this is
+// applied at chart init — the component rebuilds when `priceScale` changes.
+function yAxisLayout(ps?: PriceScale) {
+  if (!ps) return undefined;
+  return {
+    yAxis: {
+      ...(ps.type ? { name: ps.type } : {}),
+      reverse: ps.invert ?? false,
+      inside: ps.inside ?? false,
+    },
+  };
+}
+
+// Stable key so a priceScale change re-inits the chart.
+function scaleKey(ps?: PriceScale) {
+  return ps ? `${ps.type ?? "normal"}:${ps.invert ? 1 : 0}:${ps.inside ? 1 : 0}` : "";
+}
 
 export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function SonrChart(
   {
@@ -67,12 +108,16 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     theme = "dark",
     styles,
     indicators = ["VOL"],
+    paneHeights,
     sessions,
     patterns,
     priceLines,
     orderLines,
+    priceScale,
+    magnet,
     barCount = 500,
     onReady,
+    onSymbolError,
     className,
     style,
   },
@@ -82,6 +127,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   const chartRef = useRef<Chart | null>(null);
   const idRef = useRef(`sonrchart-${++_seq}`);
   const overlayIds = useRef<string[]>([]);
+  const magnetRef = useRef<Magnet | undefined>(magnet);
+  magnetRef.current = magnet;
 
   const createIndicator = (spec: IndicatorSpec) => {
     const chart = chartRef.current;
@@ -96,6 +143,15 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     );
   };
 
+  const applyPaneHeights = () => {
+    const chart = chartRef.current;
+    if (!chart || !paneHeights) return;
+    for (const [name, height] of Object.entries(paneHeights)) {
+      const ind = chart.getIndicators({ name })[0];
+      if (ind?.paneId) chart.setPaneOptions({ id: ind.paneId, height });
+    }
+  };
+
   useImperativeHandle(
     ref,
     () => ({
@@ -108,18 +164,65 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         (chartRef.current?.getIndicators() ?? [])
           .map((ind) => ind.name)
           .filter((n) => n !== SESSION_INDICATOR && n !== PATTERN_INDICATOR),
+      startDrawing: (tool: DrawingTool) => {
+        chartRef.current?.createOverlay({
+          name: tool,
+          groupId: USER_DRAWING_GROUP,
+          mode: magnetMode(magnetRef.current),
+        });
+      },
+      clearDrawings: () => {
+        chartRef.current?.removeOverlay({ groupId: USER_DRAWING_GROUP });
+      },
+      snapshot: (opts) => {
+        const chart = chartRef.current;
+        if (!chart) return null;
+        return chart.getConvertPictureUrl(opts?.includeOverlays ?? true, opts?.type ?? "png", opts?.background);
+      },
+      exportState: (): ChartState => {
+        const chart = chartRef.current;
+        const drawings = (chart?.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? []).map((o) => ({
+          name: o.name,
+          points: o.points as unknown[],
+          styles: o.styles,
+          mode: o.mode,
+        }));
+        const inds = (chart?.getIndicators() ?? [])
+          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR)
+          .map((i) => ({ name: i.name, paneId: i.paneId }));
+        return { version: 1, drawings, indicators: inds, priceScale };
+      },
+      importState: (state: ChartState) => {
+        const chart = chartRef.current;
+        if (!chart || state?.version !== 1) return;
+        chart.removeOverlay({ groupId: USER_DRAWING_GROUP });
+        for (const d of state.drawings ?? []) {
+          chart.createOverlay({ name: d.name, points: d.points as never, styles: d.styles as never, mode: d.mode as never, groupId: USER_DRAWING_GROUP });
+        }
+        for (const ind of state.indicators ?? []) {
+          if (!chart.getIndicators({ name: ind.name }).length) {
+            chart.createIndicator({ name: ind.name, ...(ind.paneId === CANDLE_PANE ? { paneId: CANDLE_PANE } : {}) }, false);
+          }
+        }
+        // priceScale in the state is informational; the host re-applies it via
+        // the `priceScale` prop (scale type is fixed at chart init).
+      },
     }),
+    // paneHeights/priceScale captured by closure; recreated per render is fine.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
-  // Create the chart, wire the data loader, load the symbol. Rebuilt on a
-  // symbol/interval change (a clean history swap).
+  // Create the chart, wire the data loader, resolve + load the symbol.
   useEffect(() => {
     const el = elRef.current;
     if (!el) return;
     el.id = idRef.current;
 
-    const chart = init(el, { timezone: "America/New_York" }) as Chart;
+    const chart = init(el, {
+      timezone: "America/New_York",
+      layout: yAxisLayout(priceScale),
+    } as never) as Chart;
     chartRef.current = chart;
     chart.setStyles(mergeStyles(themeStyles(theme), styles));
 
@@ -145,34 +248,55 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       unsubscribeBar: () => unsub(),
     });
 
-    chart.setSymbol({ ticker: symbol });
-    chart.setPeriod(toPeriod(interval));
-    // Session tint sits underneath everything else on the candle pane.
-    if (sessions) {
-      chart.createIndicator({ name: SESSION_INDICATOR, paneId: CANDLE_PANE, extendData: sessionColors(sessions) }, false);
-    }
-    for (const i of indicators) createIndicator(asSpec(i));
-    if (patterns && patterns.length) {
-      chart.createIndicator({ name: PATTERN_INDICATOR, paneId: CANDLE_PANE, extendData: patterns }, false);
-    }
-
-    onReady?.(chart);
+    let disposed = false;
+    (async () => {
+      // Symbol resolution (#8): validate/enrich before loading.
+      let info: { ticker: string; name?: string; pricePrecision?: number; volumePrecision?: number } = { ticker: symbol };
+      if (dataSource.resolveSymbol) {
+        const resolved = await dataSource.resolveSymbol(symbol);
+        if (disposed) return;
+        if (!resolved) {
+          onSymbolError?.(symbol);
+          return; // unknown symbol — do not load
+        }
+        info = resolved;
+      }
+      chart.setSymbol(info);
+      chart.setPeriod(toPeriod(interval));
+      if (sessions) {
+        chart.createIndicator({ name: SESSION_INDICATOR, paneId: CANDLE_PANE, extendData: sessionColors(sessions) }, false);
+      }
+      for (const i of indicators) createIndicator(asSpec(i));
+      if (patterns && patterns.length) {
+        chart.createIndicator({ name: PATTERN_INDICATOR, paneId: CANDLE_PANE, extendData: patterns }, false);
+      }
+      applyPaneHeights();
+      onReady?.(chart);
+    })();
 
     return () => {
+      disposed = true;
       unsub();
       dispose(idRef.current);
       chartRef.current = null;
       overlayIds.current = [];
     };
+    // priceScale is in the deps (via scaleKey) because the scale type/inversion
+    // is fixed at init — changing it re-inits the chart.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, interval]);
+  }, [symbol, interval, scaleKey(priceScale)]);
 
-  // Re-theme without a rebuild.
   useEffect(() => {
     chartRef.current?.setStyles(mergeStyles(themeStyles(theme), styles));
   }, [theme, styles]);
 
-  // Session tint reconcile (issue #10).
+  // Pane heights reconcile (#7).
+  useEffect(() => {
+    applyPaneHeights();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paneHeights]);
+
+  // Session tint reconcile (#10).
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -186,7 +310,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     }
   }, [sessions]);
 
-  // Pattern markers reconcile (issue #5).
+  // Pattern markers reconcile (#5).
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -201,7 +325,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     }
   }, [patterns]);
 
-  // Reconcile price-line + order-line overlays whenever either changes.
+  // Price-line + order-line overlays.
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -221,7 +345,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
 
     for (const ol of orderLines ?? []) {
       const draggable = ol.draggable !== false;
-      const priceOf = (o: any): number | null => {
+      const priceOf = (o: { overlay?: { points?: Array<{ value?: number }> } }): number | null => {
         const v = o?.overlay?.points?.[0]?.value;
         return typeof v === "number" ? v : null;
       };

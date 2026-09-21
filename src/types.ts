@@ -15,6 +15,17 @@ export interface Bar {
  *  DataSource understands; these are what the built-in period mapping knows. */
 export type Interval = "10S" | "30S" | "1" | "5" | "15" | "30" | "60" | "D" | (string & {});
 
+/** Resolved metadata for a symbol (issue #8). All fields optional except the
+ *  ticker; the host supplies whatever it knows. */
+export interface SymbolInfo {
+  ticker: string;
+  name?: string;
+  /** Decimal places for prices; drives the y-axis format. */
+  pricePrecision?: number;
+  /** Decimal places for volume. */
+  volumePrecision?: number;
+}
+
 /**
  * How sonrchart gets its data. This is the whole integration seam: the
  * component knows nothing about where bars come from, so any host — a REST
@@ -28,6 +39,48 @@ export interface DataSource {
    * closed). Return an unsubscribe function. Omit for a static chart.
    */
   subscribe?(symbol: string, interval: Interval, onBar: (bar: Bar) => void): () => void;
+  /**
+   * Optional symbol resolution (issue #8). Validate/enrich a ticker before it
+   * loads. Return `null` for an unknown symbol (the chart fires `onSymbolError`
+   * and skips loading), or a SymbolInfo to set precision/name.
+   */
+  resolveSymbol?(symbol: string): Promise<SymbolInfo | null>;
+}
+
+/** Price-scale configuration (issue #12). */
+export interface PriceScale {
+  /** "normal" (default), "percentage" (% change), or "logarithm". */
+  type?: "normal" | "percentage" | "logarithm";
+  /** Flip the axis so price increases downward. */
+  invert?: boolean;
+  /** Draw the y-axis labels inside the plot area. */
+  inside?: boolean;
+}
+
+/** Crosshair/drawing magnet mode (issue #13). `true` = weak. */
+export type Magnet = boolean | "weak" | "strong";
+
+/** A KLineChart drawing-tool name (issue #3). */
+export type DrawingTool =
+  | "segment"
+  | "rayLine"
+  | "straightLine"
+  | "horizontalStraightLine"
+  | "verticalStraightLine"
+  | "priceLine"
+  | "priceChannelLine"
+  | "parallelStraightLine"
+  | "fibonacciLine"
+  | "simpleAnnotation"
+  | "simpleTag";
+
+/** Serialized chart state for save/load (issue #15). Opaque JSON the host
+ *  persists and hands back to `importState`. */
+export interface ChartState {
+  version: 1;
+  drawings: Array<{ name: string; points: unknown[]; styles?: unknown; mode?: string }>;
+  indicators: Array<{ name: string; paneId?: string }>;
+  priceScale?: PriceScale;
 }
 
 /** A horizontal reference line drawn across the chart (e.g. a trade plan's

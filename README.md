@@ -72,15 +72,48 @@ The component fills its parent, so give the parent a height.
 | `theme` | `"dark" \| "light"` | Default `"dark"` (the Sonr console palette). |
 | `styles` | `DeepPartial<Styles>` | KLineChart style overrides merged over the theme. |
 | `indicators` | `(string \| IndicatorSpec)[]` | Indicators to show — a name (`"VOL"`) or a spec (`{ name, pane: "main" \| "new", calcParams }`). Default `["VOL"]`. |
+| `paneHeights` | `Record<string, number>` | Sub-pane pixel heights, keyed by indicator name. |
 | `sessions` | `boolean \| { premarket?, afterhours? }` | Tint pre/after-hours session backgrounds (ET). |
 | `patterns` | `PatternMarker[]` | Setup markers (`{ time, kind, label }`) drawn on the price pane. |
 | `priceLines` | `PriceLine[]` | Static horizontal reference lines (entry / stop / target). |
 | `orderLines` | `OrderLine[]` | Draggable order/position lines; `onMove(price, phase)` fires as the user drags. |
+| `priceScale` | `{ type?, invert?, inside? }` | Scale mode — `"normal" \| "percentage" \| "logarithm"`, plus invert / labels-inside. |
+| `magnet` | `boolean \| "weak" \| "strong"` | Snap drawing points to nearby OHLC. |
 | `barCount` | `number` | Bars requested on load. Default 500. |
 | `onReady` | `(chart) => void` | The raw KLineChart instance, for advanced use. |
+| `onSymbolError` | `(symbol) => void` | Fired when `dataSource.resolveSymbol` returns `null`. |
 
-A `ref` exposes `{ chart(), addIndicator(spec), removeIndicator(name), listIndicators() }`
-for direct KLineChart access and indicator control.
+A `ref` exposes the full control surface:
+
+```ts
+handle.addIndicator(spec); handle.removeIndicator(name); handle.listIndicators();
+handle.startDrawing(tool); handle.clearDrawings();      // drawing tools
+handle.snapshot({ type: "png" });                        // -> data URL
+handle.exportState(); handle.importState(state);         // save / load
+handle.chart();                                          // raw KLineChart
+```
+
+### Chrome components
+
+Drop-in, ref-driven UI you can use as-is or replace:
+
+- **`<IndicatorMenu chartRef={ref} />`** — toggle indicators.
+- **`<DrawingToolbar chartRef={ref} />`** — the curated drawing tools + Clear.
+- **`<ChartToolbar chartRef={ref} intervals=… />`** — composes the interval
+  buttons, indicator menu, drawing tools, and a Snapshot button into one bar.
+- **`downloadSnapshot(handle, "chart.png")`** — save the chart as an image.
+
+### Symbol resolution
+
+Add `resolveSymbol(symbol)` to your `DataSource` to validate/enrich a ticker
+before it loads — return a `SymbolInfo` (name, price/volume precision) or `null`
+for an unknown symbol (the chart then fires `onSymbolError` and skips loading).
+
+### Persistence
+
+`exportState()` returns a plain-JSON `ChartState` (user drawings + indicators +
+scale) for the host to store; `importState(state)` restores the drawings and
+indicators.
 
 ### Indicator config UI
 
