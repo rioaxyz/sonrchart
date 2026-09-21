@@ -20,9 +20,10 @@ const _etFmt = new Intl.DateTimeFormat("en-US", {
   hourCycle: "h23",
 });
 
-type Session = "pre" | "regular" | "post" | "closed";
+export type Session = "pre" | "regular" | "post" | "closed";
 
-function etSession(timeMs: number): Session {
+/** Classify a UTC epoch-ms timestamp into a US-equities session (ET, DST-aware). */
+export function etSession(timeMs: number): Session {
   const parts = _etFmt.formatToParts(new Date(timeMs));
   const h = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
   const m = Number(parts.find((p) => p.type === "minute")?.value ?? "0");

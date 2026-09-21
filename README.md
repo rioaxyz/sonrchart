@@ -109,10 +109,34 @@ npm install
 npm run dev        # live demo at http://localhost:5300 (synthetic data, no backend)
 npm run build      # tsup -> dist/ (ESM + CJS + d.ts)
 npm run typecheck
+npm test           # vitest run
+npm run coverage   # vitest run --coverage
+npm run check      # typecheck + test + build (what CI runs)
 ```
 
 The demo (`demo/`) drives the chart from a synthetic random-walk source, so it
 runs with no backend — the same shape a real host adapter implements.
+
+## Testing
+
+Unit + integration tests run under [Vitest](https://vitest.dev) (jsdom) and
+gate every push/PR via GitHub Actions (`.github/workflows/ci.yml`):
+
+- **Pure logic** (`test/internal.test.ts`, `test/session.test.ts`) — interval→
+  period mapping, bar conversion, style merge, and the ET session classifier
+  including its DST behavior.
+- **Feature wiring** (`test/SonrChart.test.tsx`) — KLineChart is mocked so each
+  feature is asserted at the integration boundary: data-loader plumbing, the
+  indicator API + specs (#4), session-indicator create/override/remove (#10),
+  pattern-indicator lifecycle (#5), and static vs. draggable overlays with the
+  `onMove` drag callback (#19).
+- **Custom-indicator drawing** (`test/indicatorsDraw.test.ts`) — the canvas
+  `draw` callbacks run against a fake 2D context: session bands fill pre/after-
+  hours only, pattern markers draw a triangle + label colored by direction.
+- **Config UI** (`test/IndicatorMenu.test.tsx`) and the demo data source.
+
+Coverage sits near 98% of `src/`. The one path not unit-tested is real
+pixel rendering, which the demo harness (`npm run dev`) exercises end to end.
 
 ## License
 

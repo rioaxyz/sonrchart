@@ -4,8 +4,19 @@
   "description": "A themed, data-source-agnostic React charting component for financial candlestick charts, built on KLineChart.",
   "license": "MIT",
   "author": "Rioa, LLC",
-  "repository": { "type": "git", "url": "https://github.com/rioaxyz/sonrchart.git" },
-  "keywords": ["charts", "candlestick", "trading", "klinecharts", "react", "finance", "sonr"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rioaxyz/sonrchart.git"
+  },
+  "keywords": [
+    "charts",
+    "candlestick",
+    "trading",
+    "klinecharts",
+    "react",
+    "finance",
+    "sonr"
+  ],
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -18,12 +29,20 @@
     },
     "./styles.css": "./dist/styles.css"
   },
-  "files": ["dist"],
-  "sideEffects": ["*.css"],
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "*.css"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "vite",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "check": "npm run typecheck && npm run test && npm run build",
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
@@ -34,13 +53,19 @@
     "klinecharts": "^10.0.3"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^2.1.9",
+    "jsdom": "^30.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tsup": "^8.3.0",
     "typescript": "^5.6.0",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^2.1.9"
   }
 }

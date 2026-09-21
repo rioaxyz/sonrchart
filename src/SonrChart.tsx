@@ -1,23 +1,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import {
-  dispose,
-  init,
-  type Chart,
-  type DeepPartial,
-  type KLineData,
-  type PeriodType,
-  type Styles,
-} from "klinecharts";
+import { dispose, init, type Chart, type DeepPartial, type Styles } from "klinecharts";
 import { themeStyles } from "./theme";
-import {
-  DEFAULT_SESSION_COLORS,
-  PATTERN_INDICATOR,
-  SESSION_INDICATOR,
-  registerSonrIndicators,
-  type SessionColors,
-} from "./indicators";
+import { PATTERN_INDICATOR, SESSION_INDICATOR, registerSonrIndicators } from "./indicators";
+import { asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
 import type {
-  Bar,
   DataSource,
   IndicatorSpec,
   Interval,
@@ -72,32 +58,6 @@ export interface SonrChartHandle {
 }
 
 let _seq = 0;
-
-function toKLine(b: Bar): KLineData {
-  return { timestamp: b.time, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume ?? 0 };
-}
-
-function toPeriod(interval: Interval): { type: PeriodType; span: number } {
-  if (interval === "10S") return { type: "second", span: 10 };
-  if (interval === "30S") return { type: "second", span: 30 };
-  if (interval === "D" || interval === "1D") return { type: "day", span: 1 };
-  if (interval === "60") return { type: "hour", span: 1 };
-  return { type: "minute", span: parseInt(String(interval), 10) || 1 };
-}
-
-function asSpec(i: string | IndicatorSpec): IndicatorSpec {
-  return typeof i === "string" ? { name: i } : i;
-}
-
-function sessionColors(s: SessionTint): SessionColors {
-  if (s && typeof s === "object") {
-    return {
-      premarket: s.premarket ?? DEFAULT_SESSION_COLORS.premarket,
-      afterhours: s.afterhours ?? DEFAULT_SESSION_COLORS.afterhours,
-    };
-  }
-  return DEFAULT_SESSION_COLORS;
-}
 
 export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function SonrChart(
   {
@@ -289,13 +249,3 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
 
   return <div ref={elRef} className={className} style={{ width: "100%", height: "100%", ...style }} />;
 });
-
-// Shallow-ish merge so callers' overrides win over the theme.
-function mergeStyles(base: DeepPartial<Styles>, over?: DeepPartial<Styles>): DeepPartial<Styles> {
-  if (!over) return base;
-  const out: any = { ...base };
-  for (const k of Object.keys(over) as (keyof Styles)[]) {
-    out[k] = { ...(base as any)[k], ...(over as any)[k] };
-  }
-  return out;
-}
