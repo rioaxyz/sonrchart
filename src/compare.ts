@@ -24,26 +24,32 @@ export function registerCompareIndicator(): void {
     series: "price",
     figures: [],
     calc: (dataList) => dataList.map(() => ({})),
-    draw: ({ ctx, indicator, bounding, xAxis, yAxis }) => {
+    draw: ({ ctx, chart, indicator, xAxis, yAxis }) => {
       const lines = (indicator.extendData as CompareLine[]) || [];
       if (lines.length === 0) return false;
-      const w = bounding.width;
+
       ctx.save();
       ctx.lineWidth = 1.5;
       for (const line of lines) {
+        const pts = line.points;
+        const n = pts.length;
+        if (n === 0) continue;
+        // Compare points are 1:1 with the main bars (in order), so the visible
+        // data range indexes straight into them — convert only what's on screen
+        // (+1 bar of margin so line segments reach the edges).
+        const range = chart.getVisibleRange();
+        const from = Math.max(0, (range?.from ?? 0) - 1);
+        const to = Math.min(n - 1, (range?.to ?? n - 1) + 1);
         ctx.strokeStyle = line.color;
         ctx.beginPath();
         let started = false;
-        for (const p of line.points) {
+        for (let i = from; i <= to; i++) {
+          const p = pts[i];
           if (p.value == null) {
             started = false;
             continue;
           }
           const x = xAxis.convertTimestampToPixel(p.time);
-          if (x < -2 || x > w + 2) {
-            started = false;
-            continue;
-          }
           const y = yAxis.convertToPixel(p.value);
           if (!started) {
             ctx.moveTo(x, y);

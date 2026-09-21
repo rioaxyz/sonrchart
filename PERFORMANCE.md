@@ -46,6 +46,23 @@ Markers (`patterns` prop) are read from `extendData` (no per-frame indicator
 lookup), the canvas state is set once per pass, and anything off-screen is
 skipped. Typical marker counts are small, so this stays negligible.
 
+## Compare overlay
+
+The compare lines (`compareSeries`) are also drawn every frame by a custom
+indicator. Its points are aligned 1:1 with the main bars, so the **visible data
+range indexes straight into them** — `draw` converts only the on-screen points
+(+1 bar margin), not the whole history, for each symbol. That drops a 500-bar,
+2-symbol overlay from ~0.10 ms/frame to ~0.013 ms/frame when zoomed, and it
+scales with symbol count. Comparison symbols are also fetched in parallel
+(`Promise.all`), not one after another.
+
+## Heikin Ashi & undo history
+
+Heikin Ashi is a data transform, not a per-frame cost: the batch transform runs
+once per load and the live `HaTransformer` is O(1) per streamed bar. The drawing
+undo/redo stack is bounded (oldest snapshots drop past a cap) so long sessions
+don't grow memory without limit.
+
 ## Overlay reconcile (price / order lines)
 
 `priceLines` / `orderLines` are usually passed as fresh array literals, so the
