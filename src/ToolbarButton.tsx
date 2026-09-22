@@ -1,4 +1,5 @@
-import { type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useEffect, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { ensureDefaultStyles } from "./defaultStyles";
 
 // A consistently-styled toolbar button (issue #18) for custom header controls.
 // It carries the same `sonr-*-btn` class the built-in toolbars use, so custom
@@ -13,6 +14,7 @@ export function ToolbarButton({
   active?: boolean;
   children: ReactNode;
 } & ButtonHTMLAttributes<HTMLButtonElement>) {
+  useEffect(ensureDefaultStyles, []);
   return (
     <button
       type="button"

@@ -10,6 +10,9 @@ const DARK = {
   muted: "#78828e",
   grid: "#1d232b",
   axis: "#1d232b",
+  // Crosshair axis-label pill (time on x, price on y) — a solid dark chip.
+  pill: "#2a2f38",
+  pillText: "#e6ebe9",
 };
 
 const LIGHT = {
@@ -17,6 +20,9 @@ const LIGHT = {
   muted: "#5c6675",
   grid: "#d8dee8",
   axis: "#d8dee8",
+  // A dark chip with light text reads clearly over a light chart (as TV does).
+  pill: "#2b313c",
+  pillText: "#ffffff",
 };
 
 /**
@@ -45,8 +51,38 @@ export function themeStyles(theme: Theme): DeepPartial<Styles> {
     xAxis: { tickText: { color: c.muted }, axisLine: { color: c.axis } },
     yAxis: { tickText: { color: c.muted }, axisLine: { color: c.axis } },
     crosshair: {
-      horizontal: { line: { color: c.muted } },
-      vertical: { line: { color: c.muted } },
+      // Floating axis-label pills that follow the pointer, TradingView-style:
+      // the hovered bar's time on the x-axis, the pointer's price on the y-axis.
+      horizontal: {
+        line: { color: c.muted },
+        text: {
+          show: true,
+          color: c.pillText,
+          backgroundColor: c.pill,
+          borderColor: c.pill,
+          borderRadius: 2,
+          paddingLeft: 6,
+          paddingRight: 6,
+          paddingTop: 4,
+          paddingBottom: 4,
+          size: 11,
+        },
+      },
+      vertical: {
+        line: { color: c.muted },
+        text: {
+          show: true,
+          color: c.pillText,
+          backgroundColor: c.pill,
+          borderColor: c.pill,
+          borderRadius: 2,
+          paddingLeft: 6,
+          paddingRight: 6,
+          paddingTop: 4,
+          paddingBottom: 4,
+          size: 11,
+        },
+      },
     },
   };
 }
