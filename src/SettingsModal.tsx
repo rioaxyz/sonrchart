@@ -55,6 +55,7 @@ export function SettingsModal({
   const [crosshairColor, setCrosshairColor] = useState("#78828e");
   const [indicators, setIndicators] = useState<string[]>([]);
   const [indColors, setIndColors] = useState<Record<string, string>>({});
+  const [uncWatermark, setUncWatermark] = useState(false);
 
   // Seed from the chart's current styles each time the dialog opens.
   useEffect(() => {
@@ -69,16 +70,26 @@ export function SettingsModal({
       setCrosshairColor(hex(s?.crosshair?.horizontal?.line?.color, "#78828e"));
     }
     setIndicators(chartRef.current?.listIndicators?.() ?? []);
+    setUncWatermark(!!chartRef.current?.getWatermark?.());
+    const unsubWm = chartRef.current?.subscribeWatermark?.((v) => setUncWatermark(!!v));
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      unsubWm?.();
+    };
   }, [open, chartRef, onClose]);
 
   if (!open || typeof document === "undefined") return null;
 
   const chart = () => chartRef.current?.chart?.() ?? null;
+
+  // Watermark: controlled by the host if it passed onWatermarkChange, otherwise
+  // driven straight through the chart handle (works with no host wiring).
+  const wmValue = onWatermarkChange ? !!watermark : uncWatermark;
+  const wmChange = onWatermarkChange ?? ((on: boolean) => chartRef.current?.setWatermark(on));
 
   const applyCandles = (up: string, down: string) => {
     chart()?.setStyles({
@@ -175,11 +186,9 @@ export function SettingsModal({
             )}
             {section === "grid" && (
               <>
-                {onWatermarkChange && (
-                  <Row label="Watermark (symbol + interval)">
-                    <input type="checkbox" checked={!!watermark} onChange={(e) => onWatermarkChange(e.target.checked)} />
-                  </Row>
-                )}
+                <Row label="Watermark (symbol + interval)">
+                  <input type="checkbox" checked={wmValue} onChange={(e) => wmChange(e.target.checked)} />
+                </Row>
                 <Row label="Show grid">
                   <input
                     type="checkbox"

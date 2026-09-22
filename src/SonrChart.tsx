@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { dispose, init, utils, type Chart, type DeepPartial, type KLineData, type Nullable, type Styles } from "klinecharts";
 import { themeStyles, PALETTE } from "./theme";
 import { PATTERN_INDICATOR, SESSION_INDICATOR, WATERMARK_INDICATOR, registerSonrIndicators, type WatermarkData } from "./indicators";
@@ -113,12 +113,51 @@ export interface SonrChartHandle {
   setMagnet(magnet: Magnet | undefined): void;
   /** Subscribe to magnet-mode changes. Returns unsubscribe. */
   subscribeMagnet(cb: (magnet: Magnet | undefined) => void): () => void;
+  // Handle-driven display settings — let the toolbar control them with no host
+  // wiring (uncontrolled), while a `*` prop can still control them.
+  getCandleStyle(): CandleStyle;
+  setCandleStyle(style: CandleStyle): void;
+  subscribeCandleStyle(cb: (style: CandleStyle) => void): () => void;
+  getPriceScale(): PriceScale | undefined;
+  setPriceScale(scale: PriceScale): void;
+  subscribePriceScale(cb: (scale: PriceScale) => void): () => void;
+  getSessions(): SessionTint | undefined;
+  setSessions(on: SessionTint): void;
+  subscribeSessions(cb: (on: SessionTint) => void): () => void;
+  getWatermark(): boolean;
+  setWatermark(on: boolean): void;
+  subscribeWatermark(cb: (on: boolean) => void): () => void;
 }
 
 let _seq = 0;
 
 // A colored legend cell (title or value) in the candle tooltip.
 type Tip = { text: string; color: string };
+
+// Controllable-but-not-required state: the prop is an INITIAL value (and a live
+// override when the host explicitly changes it), while `set` lets the toolbar
+// drive the value through the chart handle with no host wiring. This is what
+// makes the candle-type / price-scale / sessions / watermark controls work out
+// of the box — a bare consumer gets them for free; a host can still control them
+// by passing the prop. `subscribe` notifies observers (the toolbar) on change.
+function useControllable<T>(prop: T | undefined, fallback: T) {
+  const [value, setValue] = useState<T>(prop === undefined ? fallback : prop);
+  const propRef = useRef(prop);
+  if (prop !== propRef.current) {
+    propRef.current = prop;
+    if (prop !== undefined) setValue(prop); // host changed the prop → adopt it
+  }
+  const subs = useRef(new Set<(v: T) => void>());
+  useEffect(() => {
+    subs.current.forEach((cb) => cb(value));
+  }, [value]);
+  const set = useCallback((v: T) => setValue(v), []);
+  const subscribe = useCallback((cb: (v: T) => void) => {
+    subs.current.add(cb);
+    return () => subs.current.delete(cb);
+  }, []);
+  return { value, set, subscribe };
+}
 
 // --- watermark helpers -------------------------------------------------------
 // Bare ticker for the watermark (drop any "EXCHANGE:" prefix).
@@ -166,14 +205,14 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     styles,
     indicators = ["VOL"],
     paneHeights,
-    sessions,
-    watermark,
+    sessions: sessionsProp,
+    watermark: watermarkProp,
     patterns,
     priceLines,
     orderLines,
-    priceScale,
+    priceScale: priceScaleProp,
     magnet,
-    candleStyle,
+    candleStyle: candleStyleProp,
     compareSeries,
     barCount = 500,
     onReady,
@@ -212,8 +251,26 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   // recreating the overlay.
   const orderMoveRef = useRef(new Map<string, OrderLine["onMove"]>());
   // Live-updated prop mirrors read from inside the (stable) data loader.
+  // Out-of-the-box, handle-driven display settings (host may still control via
+  // the matching prop). Defaults preserve the previous "prop not passed" behavior.
+  const candle = useControllable<CandleStyle>(candleStyleProp, "candle");
+  const scale = useControllable<PriceScale>(priceScaleProp, { type: "normal" });
+  const sess = useControllable<SessionTint>(sessionsProp, false);
+  const wm = useControllable<boolean>(watermarkProp, false);
+  const candleStyle = candle.value;
+  const priceScale = scale.value;
+  const sessions = sess.value;
+  const watermark = wm.value;
   const candleStyleRef = useRef(candleStyle);
   candleStyleRef.current = candleStyle;
+  // Live mirrors so the (stable, []-deps) imperative handle's getters read the
+  // current value, not the one captured on first render.
+  const priceScaleRef = useRef(priceScale);
+  priceScaleRef.current = priceScale;
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+  const watermarkRef = useRef(watermark);
+  watermarkRef.current = watermark;
   const compareRef = useRef(compareSeries);
   compareRef.current = compareSeries;
   // Live mirrors read from inside the (stable) candle-legend callback so it
@@ -472,6 +529,18 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         magnetSubs.current.add(cb);
         return () => magnetSubs.current.delete(cb);
       },
+      getCandleStyle: () => candleStyleRef.current ?? "candle",
+      setCandleStyle: (s) => candle.set(s),
+      subscribeCandleStyle: (cb) => candle.subscribe(cb),
+      getPriceScale: () => priceScaleRef.current,
+      setPriceScale: (s) => scale.set(s),
+      subscribePriceScale: (cb) => scale.subscribe(cb),
+      getSessions: () => sessionsRef.current,
+      setSessions: (s) => sess.set(s),
+      subscribeSessions: (cb) => sess.subscribe(cb),
+      getWatermark: () => watermarkRef.current,
+      setWatermark: (on) => wm.set(on),
+      subscribeWatermark: (cb) => wm.subscribe(cb),
     }),
     // paneHeights/priceScale captured by closure; recreated per render is fine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
