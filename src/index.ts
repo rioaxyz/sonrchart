@@ -3,8 +3,13 @@ export type { SonrChartProps, SonrChartHandle } from "./SonrChart";
 export { IndicatorMenu, DEFAULT_INDICATOR_OPTIONS } from "./IndicatorMenu";
 export type { IndicatorOption } from "./IndicatorMenu";
 export { DrawingToolbar } from "./DrawingToolbar";
+export { CandleMenu, DEFAULT_CANDLE_STYLES } from "./CandleMenu";
+export type { CandleStyleOption } from "./CandleMenu";
+export { PriceScaleMenu } from "./PriceScaleMenu";
+export { SettingsModal } from "./SettingsModal";
 export { ChartToolbar } from "./ChartToolbar";
 export { ToolbarButton } from "./ToolbarButton";
+export { ensureDefaultStyles } from "./defaultStyles";
 export { DEFAULT_DRAWING_TOOLS, USER_DRAWING_GROUP } from "./drawings";
 export type { DrawingToolOption } from "./drawings";
 export { downloadSnapshot } from "./snapshot";
@@ -14,8 +19,11 @@ export {
   registerSonrIndicators,
   SESSION_INDICATOR,
   PATTERN_INDICATOR,
+  WATERMARK_INDICATOR,
+  VWAP_INDICATOR,
   DEFAULT_SESSION_COLORS,
 } from "./indicators";
+export type { WatermarkData } from "./indicators";
 export type {
   Bar,
   CandleStyle,

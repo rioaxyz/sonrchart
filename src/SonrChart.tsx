@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import { dispose, init, type Chart, type DeepPartial, type Styles } from "klinecharts";
-import { themeStyles } from "./theme";
-import { PATTERN_INDICATOR, SESSION_INDICATOR, registerSonrIndicators } from "./indicators";
+import { dispose, init, utils, type Chart, type DeepPartial, type KLineData, type Nullable, type Styles } from "klinecharts";
+import { themeStyles, PALETTE } from "./theme";
+import { PATTERN_INDICATOR, SESSION_INDICATOR, WATERMARK_INDICATOR, registerSonrIndicators, type WatermarkData } from "./indicators";
 import { CANDLE_TYPE, HaTransformer, isHeikinAshi, toHeikinAshi } from "./candles";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
 import { asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
@@ -46,6 +46,8 @@ export interface SonrChartProps {
   paneHeights?: Record<string, number>;
   /** Session background tinting for pre/after-hours. (#10) */
   sessions?: SessionTint;
+  /** Underlaid ticker + interval watermark behind the candles. */
+  watermark?: boolean;
   /** Pattern-context markers on the price pane. (#5) */
   patterns?: PatternMarker[];
   /** Static reference lines (entry / stop / target). */
@@ -78,6 +80,13 @@ export interface SonrChartHandle {
   listIndicators(): string[];
   /** Start interactive drawing of a tool; honors the current magnet mode. */
   startDrawing(tool: DrawingTool): void;
+  /** Cancel an armed-but-unplaced drawing (toggle the tool off). */
+  cancelDrawing(): void;
+  /** The tool currently armed for drawing, or null if none. */
+  activeDrawing(): DrawingTool | null;
+  /** Subscribe to armed-tool changes (arm → tool, placed/cancelled → null).
+   *  Returns an unsubscribe fn. Lets a toolbar highlight the active tool. */
+  subscribeDrawing(cb: (tool: DrawingTool | null) => void): () => void;
   /** Remove all user-drawn overlays (leaves price/order lines + indicators). */
   clearDrawings(): void;
   /** Capture the chart to a data URL (PNG by default). */
@@ -96,9 +105,38 @@ export interface SonrChartHandle {
   redo(): void;
   canUndo(): boolean;
   canRedo(): boolean;
+  /** Subscribe to undo/redo-availability changes (#16). Returns unsubscribe. */
+  subscribeHistory(cb: () => void): () => void;
+  /** Current magnet mode for new drawings (#13). */
+  getMagnet(): Magnet | undefined;
+  /** Set the magnet mode imperatively (a changed `magnet` prop still overrides). */
+  setMagnet(magnet: Magnet | undefined): void;
+  /** Subscribe to magnet-mode changes. Returns unsubscribe. */
+  subscribeMagnet(cb: (magnet: Magnet | undefined) => void): () => void;
 }
 
 let _seq = 0;
+
+// A colored legend cell (title or value) in the candle tooltip.
+type Tip = { text: string; color: string };
+
+// --- watermark helpers -------------------------------------------------------
+// Bare ticker for the watermark (drop any "EXCHANGE:" prefix).
+function bareTicker(symbol: string): string {
+  return symbol.includes(":") ? symbol.split(":").pop() ?? symbol : symbol;
+}
+// Human interval label for the watermark subtitle.
+function intervalLabel(iv: string): string {
+  const m: Record<string, string> = { "10S": "10s", "30S": "30s", "1": "1m", "5": "5m", "15": "15m", "30": "30m", "60": "1h", D: "1D", "1D": "1D", "1440": "1D" };
+  return m[iv] ?? iv;
+}
+// Faint watermark ink for the theme (candles read cleanly over it).
+function watermarkColor(theme: Theme): string {
+  return theme === "dark" ? "rgba(230,235,233,0.055)" : "rgba(26,31,41,0.06)";
+}
+function buildWatermark(symbol: string, interval: string, theme: Theme): WatermarkData {
+  return { title: bareTicker(symbol).toUpperCase(), subtitle: intervalLabel(interval), color: watermarkColor(theme) };
+}
 
 // The candle pane's y-axis config for a price scale. KLineChart fixes the scale
 // TYPE (normal/percentage/logarithm) and inversion at pane creation, so this is
@@ -129,6 +167,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     indicators = ["VOL"],
     paneHeights,
     sessions,
+    watermark,
     patterns,
     priceLines,
     orderLines,
@@ -148,8 +187,23 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   const chartRef = useRef<Chart | null>(null);
   const idRef = useRef(`sonrchart-${++_seq}`);
   const overlayIds = useRef<string[]>([]);
+  // Magnet mode. Prop-seeded, but a toolbar toggle can override it imperatively;
+  // a *changed* prop still wins (so the host stays authoritative when it drives
+  // magnet), while an unchanged prop won't clobber a toolbar-set value.
   const magnetRef = useRef<Magnet | undefined>(magnet);
-  magnetRef.current = magnet;
+  const magnetPropRef = useRef<Magnet | undefined>(magnet);
+  if (magnet !== magnetPropRef.current) {
+    magnetPropRef.current = magnet;
+    magnetRef.current = magnet;
+  }
+  const magnetSubs = useRef(new Set<(m: Magnet | undefined) => void>());
+  const setMagnet = (m: Magnet | undefined) => {
+    magnetRef.current = m;
+    magnetSubs.current.forEach((cb) => cb(m));
+  };
+  // History-change subscribers (the toolbar's undo/redo enablement).
+  const historySubs = useRef(new Set<() => void>());
+  const notifyHistory = () => historySubs.current.forEach((cb) => cb());
   // Signature of the current line overlays' *visual* fields; lets the reconcile
   // skip a full remove+recreate when a parent re-render changes only array/
   // callback identity, not content (avoids overlay thrash and drag fighting).
@@ -162,6 +216,12 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   candleStyleRef.current = candleStyle;
   const compareRef = useRef(compareSeries);
   compareRef.current = compareSeries;
+  // Live mirrors read from inside the (stable) candle-legend callback so it
+  // reflects the current theme and the resolved price precision without being
+  // re-created on every theme/symbol change.
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
+  const pricePrecRef = useRef(2);
   // Heikin Ashi live transformer (rebuilt per data load in the create effect).
   const haRef = useRef(new HaTransformer());
   // Drawing undo/redo history (#16). stack[ptr] is the current drawing set;
@@ -169,6 +229,17 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   type Snap = Array<{ name: string; points: unknown[]; styles?: unknown; mode?: string }>;
   const historyRef = useRef<{ stack: Snap[]; ptr: number }>({ stack: [[]], ptr: 0 });
   const restoringRef = useRef(false);
+
+  // Armed-drawing state (#3): which tool is mid-draw, the id of its in-progress
+  // overlay (so it can be cancelled), and subscribers (the toolbar) that want to
+  // reflect the armed tool as an active/highlighted button.
+  const activeToolRef = useRef<DrawingTool | null>(null);
+  const progressIdRef = useRef<string | null>(null);
+  const drawingSubs = useRef(new Set<(tool: DrawingTool | null) => void>());
+  const setActiveTool = (tool: DrawingTool | null) => {
+    activeToolRef.current = tool;
+    drawingSubs.current.forEach((cb) => cb(tool));
+  };
 
   const snapshotDrawings = (): Snap =>
     (chartRef.current?.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? []).map((o) => ({
@@ -187,14 +258,18 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     // Bound memory: drop the oldest entries past the cap.
     if (h.stack.length > HISTORY_CAP) h.stack = h.stack.slice(h.stack.length - HISTORY_CAP);
     h.ptr = h.stack.length - 1;
+    notifyHistory();
   };
 
   const beginDrawing = (name: string) => {
-    chartRef.current?.createOverlay({
+    const id = chartRef.current?.createOverlay({
       name,
       groupId: USER_DRAWING_GROUP,
       mode: magnetMode(magnetRef.current),
       onDrawEnd: () => {
+        // Drawing placed: the overlay is now a finished drawing, not in progress.
+        progressIdRef.current = null;
+        setActiveTool(null);
         pushHistory();
         return false;
       },
@@ -203,6 +278,21 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         return false;
       },
     });
+    progressIdRef.current = typeof id === "string" ? id : Array.isArray(id) ? (id[0] ?? null) : null;
+    setActiveTool(name as DrawingTool);
+  };
+
+  // Cancel an armed-but-unplaced drawing (toggling the tool off). Removes only
+  // the in-progress overlay, leaving finished drawings untouched.
+  const cancelDrawing = () => {
+    const id = progressIdRef.current;
+    progressIdRef.current = null;
+    setActiveTool(null);
+    if (id) {
+      restoringRef.current = true; // a cancelled draw isn't a history step
+      chartRef.current?.removeOverlay({ id });
+      restoringRef.current = false;
+    }
   };
 
   const restoreDrawings = (snap: Snap) => {
@@ -297,8 +387,14 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       listIndicators: () =>
         (chartRef.current?.getIndicators() ?? [])
           .map((ind) => ind.name)
-          .filter((n) => n !== SESSION_INDICATOR && n !== PATTERN_INDICATOR && n !== COMPARE_INDICATOR),
+          .filter((n) => n !== SESSION_INDICATOR && n !== PATTERN_INDICATOR && n !== COMPARE_INDICATOR && n !== WATERMARK_INDICATOR),
       startDrawing: (tool: DrawingTool) => beginDrawing(tool),
+      cancelDrawing: () => cancelDrawing(),
+      activeDrawing: () => activeToolRef.current,
+      subscribeDrawing: (cb) => {
+        drawingSubs.current.add(cb);
+        return () => drawingSubs.current.delete(cb);
+      },
       clearDrawings: () => {
         chartRef.current?.removeOverlay({ groupId: USER_DRAWING_GROUP });
         pushHistory();
@@ -317,7 +413,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
           mode: o.mode,
         }));
         const inds = (chart?.getIndicators() ?? [])
-          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR)
+          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR)
           .map((i) => ({ name: i.name, paneId: i.paneId }));
         return { version: 1, drawings, indicators: inds, priceScale };
       },
@@ -337,13 +433,13 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       },
       getIndicatorSet: (): IndicatorSpec[] =>
         (chartRef.current?.getIndicators() ?? [])
-          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR)
+          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR)
           .map((i) => ({ name: i.name, pane: i.paneId === CANDLE_PANE ? "main" : "new" })),
       applyIndicatorSet: (specs) => {
         const chart = chartRef.current;
         if (!chart) return;
         for (const i of chart.getIndicators()) {
-          if (i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR) {
+          if (i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR) {
             chart.removeIndicator({ name: i.name });
           }
         }
@@ -355,15 +451,27 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         if (h.ptr <= 0) return;
         h.ptr -= 1;
         restoreDrawings(h.stack[h.ptr]);
+        notifyHistory();
       },
       redo: () => {
         const h = historyRef.current;
         if (h.ptr >= h.stack.length - 1) return;
         h.ptr += 1;
         restoreDrawings(h.stack[h.ptr]);
+        notifyHistory();
       },
       canUndo: () => historyRef.current.ptr > 0,
       canRedo: () => historyRef.current.ptr < historyRef.current.stack.length - 1,
+      subscribeHistory: (cb) => {
+        historySubs.current.add(cb);
+        return () => historySubs.current.delete(cb);
+      },
+      getMagnet: () => magnetRef.current,
+      setMagnet: (m) => setMagnet(m),
+      subscribeMagnet: (cb) => {
+        magnetSubs.current.add(cb);
+        return () => magnetSubs.current.delete(cb);
+      },
     }),
     // paneHeights/priceScale captured by closure; recreated per render is fine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -384,6 +492,40 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     chart.setStyles(mergeStyles(themeStyles(theme), styles));
     // Candle rendering style (#1).
     chart.setStyles({ candle: { type: CANDLE_TYPE[candleStyleRef.current ?? "candle"] } });
+    // The crosshair x-axis pill should show the full date + time (like TV), even
+    // on intraday where the axis ticks only show time. Prepend the date for the
+    // crosshair context only; leave the x-axis ticks and tooltip untouched.
+    chart.setFormatter({
+      formatDate: ({ dateTimeFormat, timestamp, template, type }) => {
+        const t = type === "crosshair" && !/[YMD]/.test(template) ? `YYYY-MM-DD ${template}` : template;
+        return utils.formatDate(dateTimeFormat, timestamp, t);
+      },
+    });
+    // Candle legend without the time row: the hovered bar's time lives in the
+    // crosshair x-axis pill instead (like TradingView), leaving the legend to
+    // show O/H/L/C/V colored by candle direction.
+    chart.setStyles({
+      candle: {
+        tooltip: {
+          legend: {
+            template: (data: { current: Nullable<KLineData> }): { title: Tip; value: Tip }[] => {
+              const k = data.current;
+              if (!k) return [];
+              const label = (themeRef.current === "dark" ? PALETTE.DARK : PALETTE.LIGHT).muted;
+              const dir = (k.close ?? 0) >= (k.open ?? 0) ? PALETTE.GREEN : PALETTE.RED;
+              const price = (v?: number) => utils.formatThousands(utils.formatPrecision(v ?? 0, pricePrecRef.current), ",");
+              return [
+                { title: { text: "O", color: label }, value: { text: price(k.open), color: dir } },
+                { title: { text: "H", color: label }, value: { text: price(k.high), color: dir } },
+                { title: { text: "L", color: label }, value: { text: price(k.low), color: dir } },
+                { title: { text: "C", color: label }, value: { text: price(k.close), color: dir } },
+                { title: { text: "V", color: label }, value: { text: utils.formatBigNumber(k.volume ?? 0), color: label } },
+              ];
+            },
+          },
+        },
+      },
+    } as DeepPartial<Styles>);
     // Fresh Heikin Ashi transformer + fresh undo history for this chart.
     haRef.current = new HaTransformer();
     historyRef.current = { stack: [[]], ptr: 0 };
@@ -432,7 +574,15 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         info = resolved;
       }
       chart.setSymbol(info);
+      pricePrecRef.current = info.pricePrecision ?? 2;
       chart.setPeriod(toPeriod(interval));
+      // Watermark first so it sits at the very back (behind session tint + candles).
+      if (watermark) {
+        chart.createIndicator(
+          { name: WATERMARK_INDICATOR, paneId: CANDLE_PANE, extendData: buildWatermark(info.ticker ?? symbol, interval, theme) },
+          false,
+        );
+      }
       if (sessions) {
         chart.createIndicator({ name: SESSION_INDICATOR, paneId: CANDLE_PANE, extendData: sessionColors(sessions) }, false);
       }
@@ -492,6 +642,21 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       chart.removeIndicator({ name: SESSION_INDICATOR });
     }
   }, [sessions]);
+
+  // Watermark reconcile: create/update/remove, and refresh its ticker+interval
+  // text the instant the symbol, interval, or theme changes.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const present = chart.getIndicators({ name: WATERMARK_INDICATOR }).length > 0;
+    if (watermark && !present) {
+      chart.createIndicator({ name: WATERMARK_INDICATOR, paneId: CANDLE_PANE, extendData: buildWatermark(symbol, interval, theme) }, false);
+    } else if (watermark && present) {
+      chart.overrideIndicator({ name: WATERMARK_INDICATOR, extendData: buildWatermark(symbol, interval, theme) });
+    } else if (!watermark && present) {
+      chart.removeIndicator({ name: WATERMARK_INDICATOR });
+    }
+  }, [watermark, symbol, interval, theme]);
 
   // Pattern markers reconcile (#5).
   useEffect(() => {

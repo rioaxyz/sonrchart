@@ -12,6 +12,43 @@ import type { PatternMarker } from "./types";
 
 export const SESSION_INDICATOR = "SONR_SESSION";
 export const PATTERN_INDICATOR = "SONR_PATTERNS";
+export const WATERMARK_INDICATOR = "SONR_WATERMARK";
+export const VWAP_INDICATOR = "VWAP";
+
+/** Background watermark content (the underlaid ticker + interval). */
+export interface WatermarkData {
+  title: string;
+  subtitle?: string;
+  color: string;
+}
+
+// A distinct, theme-agnostic line color for VWAP (violet) so it reads apart from
+// MAs, order lines (amber), and price lines (blue).
+const VWAP_COLOR = "#a970ff";
+
+type VwapBar = { timestamp: number; high: number; low: number; close: number; volume?: number };
+
+/** Volume-weighted average price, anchored to the ET trading day (resets at ET
+ *  midnight). Pure cumulative arithmetic — one pass, no allocation beyond the
+ *  result. Falls back to the typical price on a zero-volume bar. */
+export function computeVWAP(dataList: VwapBar[]): Array<{ vwap: number }> {
+  let day = Number.NaN;
+  let pv = 0;
+  let vol = 0;
+  return dataList.map((d) => {
+    const idx = etDayIndex(d.timestamp);
+    if (idx !== day) {
+      day = idx;
+      pv = 0;
+      vol = 0;
+    }
+    const typical = (d.high + d.low + d.close) / 3;
+    const v = d.volume ?? 0;
+    pv += typical * v;
+    vol += v;
+    return { vwap: vol > 0 ? pv / vol : typical };
+  });
+}
 
 let _registered = false;
 
@@ -47,6 +84,12 @@ function etOffsetMinutes(timeMs: number): number {
   if (_offsetCache.size > 4096) _offsetCache.clear();
   _offsetCache.set(bucket, diff);
   return diff;
+}
+
+/** ET calendar-day index (days since epoch, in America/New_York). VWAP anchors
+ *  its cumulative sums to this so it resets at ET midnight, each trading day. */
+export function etDayIndex(timeMs: number): number {
+  return Math.floor((Math.floor(timeMs / 60_000) + etOffsetMinutes(timeMs)) / 1440);
 }
 
 export type Session = "pre" | "regular" | "post" | "closed";
@@ -128,6 +171,65 @@ export function registerSonrIndicators(): void {
         }
       }
       flush(to);
+      return false;
+    },
+  });
+
+  // VWAP: volume-weighted average price, overlaid on the candle pane, anchored
+  // to the ET trading day (resets at midnight ET, matching a standard daily
+  // VWAP). Pure cumulative arithmetic in calc; KLineChart draws the line.
+  registerIndicator<{ vwap: number }>({
+    name: VWAP_INDICATOR,
+    shortName: "VWAP",
+    series: "price",
+    precision: 2,
+    figures: [
+      {
+        key: "vwap",
+        title: "VWAP: ",
+        type: "line",
+        // Default to the violet, but honor an override applied via
+        // overrideIndicator({ name: "VWAP", styles: { lines: [{ color }] } }) —
+        // that lands on indicator.styles.lines[0], so the settings color picker
+        // recolors VWAP like any other line indicator.
+        styles: ({ indicator }) => ({ color: indicator.styles?.lines?.[0]?.color ?? VWAP_COLOR }),
+      },
+    ],
+    calc: (dataList) => computeVWAP(dataList),
+  });
+
+  // Symbol/interval watermark, drawn on the candle pane BEHIND the candles (same
+  // background layer as the session tint). Content comes from extendData so it
+  // updates the instant the ticker or interval changes.
+  registerIndicator<Record<string, never>, unknown, WatermarkData>({
+    name: WATERMARK_INDICATOR,
+    shortName: "",
+    series: "price",
+    figures: [],
+    calc: (dataList) => dataList.map(() => ({})),
+    draw: ({ ctx, bounding, indicator }) => {
+      const wm = indicator.extendData as WatermarkData | undefined;
+      if (!wm || !wm.title) return false;
+      const top = bounding.top ?? 0;
+      const h = bounding.height;
+      const w = bounding.width;
+      if (w < 40 || h < 40) return false;
+      const cx = w / 2;
+      const cy = top + h / 2;
+      const titleSize = Math.max(20, Math.min(96, Math.min(w * 0.16, h * 0.28)));
+      const hasSub = !!wm.subtitle;
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = wm.color;
+      ctx.font = `700 ${titleSize}px ui-sans-serif, -apple-system, "Segoe UI", sans-serif`;
+      ctx.fillText(wm.title, cx, hasSub ? cy - titleSize * 0.34 : cy);
+      if (hasSub) {
+        const subSize = titleSize * 0.48;
+        ctx.font = `600 ${subSize}px ui-sans-serif, -apple-system, "Segoe UI", sans-serif`;
+        ctx.fillText(wm.subtitle as string, cx, cy + subSize * 0.7);
+      }
+      ctx.restore();
       return false;
     },
   });

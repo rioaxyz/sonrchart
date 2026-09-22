@@ -19,19 +19,24 @@ function fakeHandle() {
 }
 
 describe("IndicatorMenu (#4 config UI)", () => {
-  it("renders a button per option and seeds active state from the chart", async () => {
+  it("opens a dropdown with a row per option and seeds active state from the chart", async () => {
     const { handle, set } = fakeHandle();
     set.add("VOL");
     const ref = createRef<SonrChartHandle>();
     (ref as any).current = handle;
     render(<IndicatorMenu chartRef={ref} options={[{ name: "VOL", label: "Volume" }, { name: "MACD", label: "MACD" }]} />);
-    // buttons present (accessible name is the button text = the indicator name)
-    expect(screen.getByRole("button", { name: "VOL" })).toBeInTheDocument();
-    // it carries the label as a tooltip
-    expect(screen.getByRole("button", { name: "VOL" })).toHaveAttribute("title", "Volume");
-    // Flush the mount-tick seed (setTimeout 0) inside act, then assert VOL is pressed.
+    // Flush the mount-tick seed (setTimeout 0) so the active set (VOL) is read.
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
-    expect(screen.getByRole("button", { name: "VOL" })).toHaveAttribute("aria-pressed", "true");
+    // Collapsed by default: a single trigger showing the active count.
+    const trigger = screen.getByRole("button", { name: /Indicators/ });
+    expect(trigger).toHaveTextContent("(1)");
+    expect(screen.queryByRole("menuitemcheckbox", { name: /VOL/ })).toBeNull();
+    // Open it → one row per option, VOL seeded as checked, label as tooltip.
+    await userEvent.click(trigger);
+    const vol = screen.getByRole("menuitemcheckbox", { name: /VOL/ });
+    expect(vol).toHaveAttribute("title", "Volume");
+    expect(vol).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("menuitemcheckbox", { name: /MACD/ })).toHaveAttribute("aria-checked", "false");
   });
 
   it("toggles an indicator on and off through the handle", async () => {
@@ -39,14 +44,15 @@ describe("IndicatorMenu (#4 config UI)", () => {
     const ref = createRef<SonrChartHandle>();
     (ref as any).current = handle;
     render(<IndicatorMenu chartRef={ref} options={[{ name: "MACD", label: "MACD", pane: "new" }]} />);
-    const btn = screen.getByRole("button", { name: /MACD/ });
+    await userEvent.click(screen.getByRole("button", { name: /Indicators/ }));
+    const opt = screen.getByRole("menuitemcheckbox", { name: /MACD/ });
 
-    await userEvent.click(btn);
+    await userEvent.click(opt);
     expect(handle.addIndicator).toHaveBeenCalledWith({ name: "MACD", pane: "new" });
-    expect(btn).toHaveAttribute("aria-pressed", "true");
+    expect(opt).toHaveAttribute("aria-checked", "true");
 
-    await userEvent.click(btn);
+    await userEvent.click(opt);
     expect(handle.removeIndicator).toHaveBeenCalledWith("MACD");
-    expect(btn).toHaveAttribute("aria-pressed", "false");
+    expect(opt).toHaveAttribute("aria-checked", "false");
   });
 });

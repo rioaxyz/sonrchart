@@ -13,6 +13,7 @@ const h = vi.hoisted(() => {
     const chart: any = {
       _overlays: [] as any[],
       setStyles: vi.fn(),
+      setFormatter: vi.fn(),
       setDataLoader: vi.fn(),
       setSymbol: vi.fn(),
       setPeriod: vi.fn(),
@@ -63,6 +64,12 @@ vi.mock("klinecharts", () => ({
   }),
   dispose: vi.fn(),
   registerIndicator: vi.fn(),
+  utils: {
+    formatDate: vi.fn(() => "2026-09-21 19:39"),
+    formatPrecision: vi.fn((v: number) => String(v)),
+    formatThousands: vi.fn((v: string) => v),
+    formatBigNumber: vi.fn((v: number) => String(v)),
+  },
 }));
 
 import { SonrChart, type SonrChartHandle } from "../src/SonrChart";
