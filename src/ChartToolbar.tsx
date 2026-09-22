@@ -36,6 +36,9 @@ export function ChartToolbar({
   onWatermarkChange,
   indicatorOptions,
   drawingTools,
+  showCandle = true,
+  showScale = true,
+  showSessions = true,
   showDrawing = true,
   showSnapshot = true,
   showSettings = true,
@@ -58,6 +61,9 @@ export function ChartToolbar({
   onWatermarkChange?: (on: boolean) => void;
   indicatorOptions?: IndicatorOption[];
   drawingTools?: DrawingToolOption[];
+  showCandle?: boolean;
+  showScale?: boolean;
+  showSessions?: boolean;
   showDrawing?: boolean;
   showSnapshot?: boolean;
   showSettings?: boolean;
@@ -68,6 +74,44 @@ export function ChartToolbar({
   useEffect(ensureDefaultStyles, []);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Uncontrolled fallbacks: when the host doesn't pass an onXChange callback, the
+  // candle/scale/sessions controls drive the chart directly through its handle
+  // (mirrored here so they reflect state) — so they work out of the box with no
+  // host wiring. A host that passes value + onXChange stays in control.
+  const [uncCandle, setUncCandle] = useState<CandleStyle>("candle");
+  const [uncScale, setUncScale] = useState<PriceScale>({ type: "normal" });
+  const [uncSessions, setUncSessions] = useState(false);
+  useEffect(() => {
+    const unsubs: Array<() => void> = [];
+    let cancelled = false;
+    const attach = () => {
+      if (cancelled) return;
+      const h = chartRef.current;
+      if (!h?.subscribeCandleStyle) {
+        setTimeout(attach, 50);
+        return;
+      }
+      setUncCandle(h.getCandleStyle());
+      unsubs.push(h.subscribeCandleStyle(setUncCandle));
+      setUncScale(h.getPriceScale() ?? { type: "normal" });
+      unsubs.push(h.subscribePriceScale(setUncScale));
+      setUncSessions(!!h.getSessions());
+      unsubs.push(h.subscribeSessions((v) => setUncSessions(!!v)));
+    };
+    attach();
+    return () => {
+      cancelled = true;
+      for (const u of unsubs) u();
+    };
+  }, [chartRef]);
+
+  const candleValue = onCandleStyleChange ? (candleStyle ?? "candle") : uncCandle;
+  const candleChange = onCandleStyleChange ?? ((s: CandleStyle) => chartRef.current?.setCandleStyle(s));
+  const scaleValue = onPriceScaleChange ? (priceScale ?? { type: "normal" }) : uncScale;
+  const scaleChange = onPriceScaleChange ?? ((s: PriceScale) => chartRef.current?.setPriceScale(s));
+  const sessionsValue = onSessionsChange ? !!sessions : uncSessions;
+  const sessionsChange = onSessionsChange ?? ((on: boolean) => chartRef.current?.setSessions(on));
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
@@ -130,19 +174,17 @@ export function ChartToolbar({
             ))}
           </div>
         )}
-        {onCandleStyleChange && (
-          <CandleMenu value={candleStyle} onChange={onCandleStyleChange} options={candleStyles} />
-        )}
+        {showCandle && <CandleMenu value={candleValue} onChange={candleChange} options={candleStyles} />}
         <IndicatorMenu chartRef={chartRef} options={indicatorOptions} />
-        {onPriceScaleChange && <PriceScaleMenu value={priceScale} onChange={onPriceScaleChange} />}
-        {onSessionsChange && (
+        {showScale && <PriceScaleMenu value={scaleValue} onChange={scaleChange} />}
+        {showSessions && (
           <div className="sonr-session-group" role="group" aria-label="Sessions">
             <button
               type="button"
-              className={`sonr-session-btn${sessions ? " on" : ""}`}
-              aria-pressed={!!sessions}
+              className={`sonr-session-btn${sessionsValue ? " on" : ""}`}
+              aria-pressed={!!sessionsValue}
               title="Extended-hours session tinting"
-              onClick={() => onSessionsChange(!sessions)}
+              onClick={() => sessionsChange(!sessionsValue)}
             >
               Sessions
             </button>

@@ -56,6 +56,19 @@ function fakeHandle(): SonrChartHandle {
       histSubs.add(cb);
       return () => histSubs.delete(cb);
     },
+    // Handle-driven (uncontrolled) display settings.
+    getCandleStyle: () => "candle",
+    setCandleStyle: vi.fn(),
+    subscribeCandleStyle: (_cb: (v: any) => void) => () => {},
+    getPriceScale: () => ({ type: "normal" }),
+    setPriceScale: vi.fn(),
+    subscribePriceScale: (_cb: (v: any) => void) => () => {},
+    getSessions: () => false,
+    setSessions: vi.fn(),
+    subscribeSessions: (_cb: (v: any) => void) => () => {},
+    getWatermark: () => false,
+    setWatermark: vi.fn(),
+    subscribeWatermark: (_cb: (v: any) => void) => () => {},
     // test hooks (not part of the real handle)
     _setHistory: (u: boolean, r: boolean) => {
       undoable = u;
@@ -159,6 +172,23 @@ describe("ChartToolbar (#17)", () => {
     expect(screen.getByRole("button", { name: /Indicators/ })).toBeInTheDocument(); // indicator dropdown trigger
     expect(screen.getByRole("button", { name: "Trend line" })).toBeInTheDocument(); // drawing
     expect(screen.getByRole("button", { name: "Snapshot" })).toBeInTheDocument();
+  });
+
+  it("out of the box (no host callbacks) drives candle/scale/sessions via the handle", async () => {
+    const h = fakeHandle();
+    // Only interval is wired; candle type, price scale, and sessions still render
+    // and drive the chart through its handle.
+    render(<ChartToolbar chartRef={ref(h)} intervals={["1"]} interval="1" onIntervalChange={vi.fn()} showDrawing={false} showSnapshot={false} showSettings={false} />);
+    await userEvent.click(screen.getByRole("button", { name: /Candle type/ }));
+    await userEvent.click(screen.getByRole("menuitemradio", { name: /Heikin Ashi/ }));
+    expect(h.setCandleStyle).toHaveBeenCalledWith("heikin_ashi");
+
+    await userEvent.click(screen.getByRole("button", { name: /Scale/ }));
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "Logarithmic" }));
+    expect(h.setPriceScale).toHaveBeenCalledWith(expect.objectContaining({ type: "logarithm" }));
+
+    await userEvent.click(screen.getByRole("button", { name: "Sessions" }));
+    expect(h.setSessions).toHaveBeenCalledWith(true);
   });
 
   it("fires onIntervalChange when an interval is clicked", async () => {
