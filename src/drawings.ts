@@ -22,6 +22,11 @@ export const DEFAULT_DRAWING_TOOLS: DrawingToolOption[] = [
   { tool: "simpleTag", label: "Tag" },
   { tool: "brush", label: "Brush" },
   { tool: "highlighter", label: "Highlighter" },
+  { tool: "rectangle", label: "Rectangle" },
+  { tool: "ellipse", label: "Ellipse" },
+  { tool: "triangle", label: "Triangle" },
+  { tool: "priceRange", label: "Price range" },
+  { tool: "riskReward", label: "Risk / reward" },
 ];
 
 // Every user-started drawing is tagged with this group id so clearDrawings()

@@ -7,6 +7,7 @@ import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type Compare
 import { asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
 import { USER_DRAWING_GROUP } from "./drawings";
 import { BRUSH_OVERLAY, brushStyle, isBrushTool, registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
+import { registerShapeOverlays } from "./shapes";
 import type {
   CandleStyle,
   ChartState,
@@ -28,6 +29,7 @@ import type {
 registerSonrIndicators();
 registerCompareIndicator();
 registerBrushOverlay();
+registerShapeOverlays();
 
 const CANDLE_PANE = "candle_pane";
 

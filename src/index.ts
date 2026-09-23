@@ -17,6 +17,17 @@ export { downloadSnapshot } from "./snapshot";
 export { toHeikinAshi } from "./candles";
 export { BRUSH_OVERLAY } from "./brush";
 export type { BrushStyle, BrushTool } from "./brush";
+export {
+  registerShapeOverlays,
+  SHAPE_OVERLAYS,
+  SHAPE_RECTANGLE,
+  SHAPE_ELLIPSE,
+  SHAPE_TRIANGLE,
+  SHAPE_PRICE_RANGE,
+  SHAPE_RISK_REWARD,
+  priceRangeLabel,
+  riskRewardStats,
+} from "./shapes";
 export { themeStyles, PALETTE } from "./theme";
 export {
   registerSonrIndicators,

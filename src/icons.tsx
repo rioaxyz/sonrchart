@@ -64,6 +64,18 @@ export function DrawIcon({ tool }: { tool: DrawingTool }) {
       return <Svg><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z" /></Svg>;
     case "simpleTag":
       return <Svg><path d="M3 3h5l5.5 5.5-5 5L3 8z" /><circle cx="6" cy="6" r="1" fill="currentColor" stroke="none" /></Svg>;
+    case "rectangle":
+      return <Svg><rect x="2.5" y="4" width="11" height="8" rx="0.6" /></Svg>;
+    case "ellipse":
+      return <Svg><ellipse cx="8" cy="8" rx="6" ry="4" /></Svg>;
+    case "triangle":
+      return <Svg><path d="M8 3l5.5 10h-11z" /></Svg>;
+    case "priceRange":
+      // A box with a double-headed vertical measure arrow.
+      return <Svg><rect x="2.5" y="4" width="11" height="8" rx="0.6" /><line x1="8" y1="5.5" x2="8" y2="10.5" /><path d="M6.5 7L8 5.5 9.5 7" /><path d="M6.5 9L8 10.5 9.5 9" /></Svg>;
+    case "riskReward":
+      // Stacked reward (top) / risk (bottom) boxes split at the entry line.
+      return <Svg><rect x="3" y="3" width="10" height="4.5" /><rect x="3" y="8.5" width="10" height="4.5" /><line x1="2" y1="8" x2="14" y2="8" /></Svg>;
     default:
       return <Svg><line x1="4" y1="12" x2="12" y2="4" /></Svg>;
   }
