@@ -22,6 +22,10 @@ function fakeChart(calcParamsByName: Record<string, number[]> = {}) {
 
 function handleWith(chart: any, indicators: string[] = []): SonrChartHandle {
   const brush: any = { brush: { color: "#e6ebe9", size: 2 }, highlighter: { color: "rgba(245,214,66,0.35)", size: 14 } };
+  let locked = false;
+  let visible = true;
+  const templates: string[] = [];
+  const tplSubs = new Set<() => void>();
   return {
     chart: () => chart,
     listIndicators: () => indicators,
@@ -33,6 +37,31 @@ function handleWith(chart: any, indicators: string[] = []): SonrChartHandle {
     getWatermark: () => ({ symbol: true, interval: true, color: "#e6ebe9", opacity: 0.06 }),
     setWatermark: vi.fn(),
     subscribeWatermark: () => () => {},
+    // #35 drawing management
+    getDrawingsLocked: () => locked,
+    setDrawingsLocked: vi.fn((v: boolean) => {
+      locked = v;
+    }),
+    getDrawingsVisible: () => visible,
+    setDrawingsVisible: vi.fn((v: boolean) => {
+      visible = v;
+    }),
+    saveDrawingTemplate: vi.fn((name: string) => {
+      templates.push(name);
+      tplSubs.forEach((cb) => cb());
+    }),
+    applyDrawingTemplate: vi.fn(),
+    deleteDrawingTemplate: vi.fn((name: string) => {
+      const i = templates.indexOf(name);
+      if (i >= 0) templates.splice(i, 1);
+      tplSubs.forEach((cb) => cb());
+    }),
+    listDrawingTemplates: () => templates.slice(),
+    subscribeDrawingTemplates: (cb: () => void) => {
+      tplSubs.add(cb);
+      return () => tplSubs.delete(cb);
+    },
+    cloneLastDrawing: vi.fn(),
   } as unknown as SonrChartHandle;
 }
 
@@ -119,6 +148,33 @@ describe("SettingsModal (#settings)", () => {
     const widths = screen.getAllByRole("spinbutton") as HTMLInputElement[];
     fireEvent.input(widths[0], { target: { value: "8" } });
     expect(h.setBrushStyle).toHaveBeenCalledWith("brush", expect.objectContaining({ size: 8 }));
+  });
+
+  it("drives lock/hide, clone, and templates from the Drawings section (#35)", async () => {
+    const h = handleWith(fakeChart());
+    render(<SettingsModal chartRef={ref(h)} open onClose={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Drawings" }));
+
+    // Lock all + hide all checkboxes drive the handle.
+    await userEvent.click(screen.getByRole("checkbox", { name: "Lock all drawings" }));
+    expect(h.setDrawingsLocked).toHaveBeenCalledWith(true);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Hide all drawings" }));
+    expect(h.setDrawingsVisible).toHaveBeenCalledWith(false);
+
+    // Clone last.
+    await userEvent.click(screen.getByRole("button", { name: "Clone last drawing" }));
+    expect(h.cloneLastDrawing).toHaveBeenCalled();
+
+    // Save a template, then apply + delete it from the list.
+    await userEvent.type(screen.getByLabelText("Template name"), "setup");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(h.saveDrawingTemplate).toHaveBeenCalledWith("setup");
+    expect(screen.getByText("setup")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(h.applyDrawingTemplate).toHaveBeenCalledWith("setup");
+    await userEvent.click(screen.getByRole("button", { name: "Delete setup" }));
+    expect(h.deleteDrawingTemplate).toHaveBeenCalledWith("setup");
   });
 
   it("closes on the ✕ button", async () => {

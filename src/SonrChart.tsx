@@ -6,6 +6,7 @@ import { CANDLE_TYPE, HaTransformer, isCustomSeries, isHeikinAshi, toHeikinAshi 
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
 import { asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
 import { USER_DRAWING_GROUP } from "./drawings";
+import { DrawingTemplateStore, type DrawingSnapshot } from "./drawingTemplates";
 import { BRUSH_OVERLAY, brushStyle, isBrushTool, registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
 import { isEditableTarget, resolveShortcut, type ShortcutAction } from "./keyboard";
 import { registerShapeOverlays } from "./shapes";
@@ -147,6 +148,28 @@ export interface SonrChartHandle {
   setBrushStyle(tool: BrushTool, style: BrushStyle): void;
   /** Subscribe to brush-style changes (for a settings UI). Returns unsubscribe. */
   subscribeBrush(cb: () => void): () => void;
+  // Drawing management tooling (#35) ---------------------------------------
+  /** Lock every user drawing (non-interactive) or unlock them. New drawings
+   *  inherit the current lock state. */
+  setDrawingsLocked(locked: boolean): void;
+  /** Whether user drawings are currently locked. */
+  getDrawingsLocked(): boolean;
+  /** Show/hide every user drawing at once. New drawings inherit visibility. */
+  setDrawingsVisible(visible: boolean): void;
+  /** Whether user drawings are currently visible. */
+  getDrawingsVisible(): boolean;
+  /** Save the current user drawings as a named template (in-memory). */
+  saveDrawingTemplate(name: string): void;
+  /** Replace the current user drawings with a saved template's set. */
+  applyDrawingTemplate(name: string): void;
+  /** Names of all saved drawing templates. */
+  listDrawingTemplates(): string[];
+  /** Delete a saved drawing template. */
+  deleteDrawingTemplate(name: string): void;
+  /** Subscribe to drawing-template list changes. Returns unsubscribe. */
+  subscribeDrawingTemplates(cb: () => void): () => void;
+  /** Duplicate the most-recently-added user drawing (same points/style). */
+  cloneLastDrawing(): void;
 }
 
 let _seq = 0;
@@ -416,6 +439,17 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   const brushSubs = useRef(new Set<() => void>());
   const notifyBrush = () => brushSubs.current.forEach((cb) => cb());
 
+  // Drawing management tooling (#35): lock/hide state (mirrored for getters, and
+  // inherited by drawings created after a toggle), plus a named-template store.
+  const lockedRef = useRef(false);
+  const hiddenRef = useRef(false);
+  const templatesRef = useRef(new DrawingTemplateStore());
+  // Push the current lock/visible state onto every user drawing. Also called
+  // after creating overlays so fresh drawings inherit the state.
+  const applyDrawingFlags = () => {
+    chartRef.current?.overrideOverlay({ groupId: USER_DRAWING_GROUP, lock: lockedRef.current, visible: !hiddenRef.current } as never);
+  };
+
   const snapshotDrawings = (): Snap =>
     (chartRef.current?.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? []).map((o) => ({
       name: o.name,
@@ -452,6 +486,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         // Drawing placed: the overlay is now a finished drawing, not in progress.
         progressIdRef.current = null;
         pushHistory();
+        // A freshly placed drawing inherits the current lock/hide state.
+        applyDrawingFlags();
         // Brush/highlighter are "sticky": stay armed and immediately re-arm for
         // the next stroke, so you can draw repeatedly without re-clicking the
         // toolbar. The tool stays active until toggled off (cancelDrawing).
@@ -505,6 +541,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       });
     }
     restoringRef.current = false;
+    // Restored drawings inherit the current lock/hide state.
+    applyDrawingFlags();
   };
 
   // Fetch each comparison symbol, align to the main bars, and (re)build the
@@ -683,6 +721,58 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       subscribeBrush: (cb) => {
         brushSubs.current.add(cb);
         return () => brushSubs.current.delete(cb);
+      },
+      // Drawing management tooling (#35) -----------------------------------
+      setDrawingsLocked: (locked) => {
+        lockedRef.current = locked;
+        applyDrawingFlags();
+      },
+      getDrawingsLocked: () => lockedRef.current,
+      setDrawingsVisible: (visible) => {
+        hiddenRef.current = !visible;
+        applyDrawingFlags();
+      },
+      getDrawingsVisible: () => !hiddenRef.current,
+      saveDrawingTemplate: (name) => {
+        templatesRef.current.save(name, snapshotDrawings() as DrawingSnapshot);
+      },
+      applyDrawingTemplate: (name) => {
+        const snap = templatesRef.current.get(name);
+        if (!snap) return;
+        restoreDrawings(snap as Snap);
+        // Reset the undo history to the applied drawing set (like importState).
+        historyRef.current = { stack: [snapshotDrawings()], ptr: 0 };
+        notifyHistory();
+      },
+      listDrawingTemplates: () => templatesRef.current.list(),
+      deleteDrawingTemplate: (name) => templatesRef.current.delete(name),
+      subscribeDrawingTemplates: (cb) => templatesRef.current.subscribe(cb),
+      cloneLastDrawing: () => {
+        const chart = chartRef.current;
+        if (!chart) return;
+        const drawings = chart.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? [];
+        const last = drawings[drawings.length - 1];
+        if (!last) return;
+        restoringRef.current = true;
+        chart.createOverlay({
+          name: last.name,
+          points: last.points as never,
+          styles: last.styles as never,
+          mode: last.mode as never,
+          extendData: last.extendData as never,
+          groupId: USER_DRAWING_GROUP,
+          onDrawEnd: () => {
+            pushHistory();
+            return false;
+          },
+          onRemoved: () => {
+            pushHistory();
+            return false;
+          },
+        });
+        restoringRef.current = false;
+        applyDrawingFlags();
+        pushHistory();
       },
     }),
     // paneHeights/priceScale captured by closure; recreated per render is fine.
