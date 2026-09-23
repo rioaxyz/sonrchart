@@ -59,6 +59,17 @@ const CSS = `
 :where(.sonr-menu-name){font-weight:700;min-width:38px;}
 :where(.sonr-menu-label){color:#555;font-size:11px;}
 :where(.sonr-menu-label-wide){color:#000;font-size:12px;}
+:where(.sonr-search){display:inline-flex;align-items:center;}
+:where(.sonr-search-input){appearance:none;-webkit-appearance:none;background:#fff;color:#000;border:1px solid #000;border-radius:3px;font:inherit;font-size:11px;line-height:18px;padding:0 6px;width:120px;}
+:where(.sonr-search-input::placeholder){color:#888;}
+:where(.sonr-search-dropdown){display:flex;flex-direction:column;min-width:200px;max-height:60vh;overflow-y:auto;background:#fff;color:#000;border:1px solid #000;border-radius:4px;box-shadow:0 6px 20px rgba(0,0,0,0.25);padding:4px;z-index:2147483000;}
+:where(.sonr-search-option){display:flex;align-items:baseline;gap:8px;background:none;border:none;border-radius:3px;color:#000;cursor:pointer;font:inherit;font-size:12px;line-height:22px;padding:2px 8px;text-align:left;white-space:nowrap;}
+:where(.sonr-search-option:hover,.sonr-search-option.active){background:#e6e6e6;}
+:where(.sonr-search-expr){border-bottom:1px solid #ccc;}
+:where(.sonr-search-sym){font-weight:700;min-width:44px;}
+:where(.sonr-search-name){color:#555;font-size:11px;overflow:hidden;text-overflow:ellipsis;}
+:where(.sonr-search-ex){color:#888;font-size:10px;margin-left:auto;}
+:where(.sonr-search-msg){color:#555;font-size:12px;padding:4px 8px;}
 `;
 
 /** Inject the default toolbar stylesheet once. No-op on the server, when already
