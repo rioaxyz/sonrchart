@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { SonrChartHandle } from "./SonrChart";
 import { ensureDefaultStyles } from "./defaultStyles";
 import { useDropdown } from "./useDropdown";
+import { mergeLabels, type Labels } from "./labels";
 
 // A drop-in indicator config UI (issue #4). A single toolbar button opens a
 // dropdown list of indicators; toggling a row adds/removes it live through the
@@ -54,12 +55,15 @@ export function IndicatorMenu({
   chartRef,
   options = DEFAULT_INDICATOR_OPTIONS,
   className,
+  labels,
 }: {
   chartRef: RefObject<SonrChartHandle>;
   options?: IndicatorOption[];
   className?: string;
+  labels?: Partial<Labels>;
 }) {
   useEffect(ensureDefaultStyles, []);
+  const L = mergeLabels(labels);
 
   const [active, setActive] = useState<string[]>([]);
   const { open, toggle: toggleOpen, pos, triggerRef, panelRef } = useDropdown();
@@ -85,7 +89,7 @@ export function IndicatorMenu({
   const count = active.length;
 
   return (
-    <div className={className ?? "sonr-indicator-menu"} role="group" aria-label="Indicators">
+    <div className={className ?? "sonr-indicator-menu"} role="group" aria-label={L.indicators}>
       <button
         ref={triggerRef}
         type="button"
@@ -94,7 +98,7 @@ export function IndicatorMenu({
         aria-expanded={open}
         onClick={toggleOpen}
       >
-        Indicators{count > 0 ? ` (${count})` : ""}
+        {L.indicators}{count > 0 ? ` (${count})` : ""}
         <span className="sonr-menu-caret" aria-hidden>
           ▾
         </span>
@@ -106,7 +110,7 @@ export function IndicatorMenu({
             ref={panelRef}
             className="sonr-menu-dropdown"
             role="menu"
-            aria-label="Indicators"
+            aria-label={L.indicators}
             style={{ position: "fixed", top: pos.top, left: pos.left }}
           >
             {options.map((opt) => {

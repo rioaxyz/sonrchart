@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, act } from "@testing-library/react";
+import { render, act, screen, fireEvent } from "@testing-library/react";
 import { createRef } from "react";
 
 // A stateful KLineChart mock: init() returns a spy-backed chart that tracks
@@ -49,6 +49,14 @@ const h = vi.hoisted(() => {
         else if (f?.id) chart._overlays = chart._overlays.filter((o: any) => o.id !== f.id);
         return true;
       }),
+      overrideOverlay: vi.fn((o: any) => {
+        const { id, groupId, name, ...rest } = o ?? {};
+        for (const ov of chart._overlays) {
+          const match = (id && ov.id === id) || (groupId && ov.groupId === groupId) || (name && ov.name === name) || (!id && !groupId && !name);
+          if (match) Object.assign(ov, rest);
+        }
+        return true;
+      }),
     };
     charts.push(chart);
     return chart;
@@ -75,6 +83,8 @@ vi.mock("klinecharts", () => ({
 
 import { SonrChart, type SonrChartHandle } from "../src/SonrChart";
 import { SESSION_INDICATOR, PATTERN_INDICATOR, SERIES_INDICATOR, WATERMARK_INDICATOR, DEFAULT_SESSION_COLORS } from "../src/indicators";
+import { registerTheme } from "../src/theme";
+import { utils } from "klinecharts";
 import type { DataSource } from "../src/types";
 
 const bars = [
@@ -322,6 +332,100 @@ describe("SonrChart — drawing tools & magnet (#3, #13)", () => {
   });
 });
 
+describe("SonrChart — drawing management tooling (#35)", () => {
+  it("lock/hide all call overrideOverlay on the drawing group and mirror the state", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    // A placed drawing to override.
+    act(() => ref.current!.startDrawing("segment"));
+    act(() => c._overlays.at(-1).onDrawEnd({}));
+
+    expect(ref.current!.getDrawingsLocked()).toBe(false);
+    expect(ref.current!.getDrawingsVisible()).toBe(true);
+
+    act(() => ref.current!.setDrawingsLocked(true));
+    expect(ref.current!.getDrawingsLocked()).toBe(true);
+    expect(c.overrideOverlay).toHaveBeenCalledWith(expect.objectContaining({ groupId: "sonr-user-drawing", lock: true }));
+    expect(c._overlays.find((o: any) => o.name === "segment").lock).toBe(true);
+
+    act(() => ref.current!.setDrawingsVisible(false));
+    expect(ref.current!.getDrawingsVisible()).toBe(false);
+    expect(c.overrideOverlay).toHaveBeenCalledWith(expect.objectContaining({ groupId: "sonr-user-drawing", visible: false }));
+    expect(c._overlays.find((o: any) => o.name === "segment").visible).toBe(false);
+  });
+
+  it("new drawings inherit the current lock/hide state", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.setDrawingsLocked(true));
+    act(() => ref.current!.setDrawingsVisible(false));
+    act(() => ref.current!.startDrawing("segment"));
+    act(() => c._overlays.at(-1).onDrawEnd({}));
+    const seg = c._overlays.find((o: any) => o.name === "segment");
+    expect(seg.lock).toBe(true);
+    expect(seg.visible).toBe(false);
+  });
+
+  it("saves a drawing template and re-applies it, restoring the overlays", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment"));
+    c._overlays.find((o: any) => o.name === "segment").points = [{ value: 1 }, { value: 2 }];
+    act(() => c._overlays.at(-1).onDrawEnd({}));
+
+    act(() => ref.current!.saveDrawingTemplate("setup"));
+    expect(ref.current!.listDrawingTemplates()).toEqual(["setup"]);
+
+    // Clear the board, then apply the template back.
+    act(() => ref.current!.clearDrawings());
+    expect(c._overlays.filter((o: any) => o.groupId === "sonr-user-drawing").length).toBe(0);
+    act(() => ref.current!.applyDrawingTemplate("setup"));
+    const restored = c._overlays.filter((o: any) => o.groupId === "sonr-user-drawing");
+    expect(restored.length).toBe(1);
+    expect(restored[0].name).toBe("segment");
+    expect(restored[0].points).toEqual([{ value: 1 }, { value: 2 }]);
+  });
+
+  it("deletes a template and notifies subscribers", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const cb = vi.fn();
+    act(() => { ref.current!.subscribeDrawingTemplates(cb); });
+    act(() => ref.current!.saveDrawingTemplate("a"));
+    expect(cb).toHaveBeenCalled();
+    expect(ref.current!.listDrawingTemplates()).toEqual(["a"]);
+    act(() => ref.current!.deleteDrawingTemplate("a"));
+    expect(ref.current!.listDrawingTemplates()).toEqual([]);
+  });
+
+  it("cloneLastDrawing duplicates the most-recent user overlay", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment"));
+    c._overlays.find((o: any) => o.name === "segment").points = [{ value: 3 }, { value: 4 }];
+    act(() => c._overlays.at(-1).onDrawEnd({}));
+    expect(c._overlays.filter((o: any) => o.name === "segment").length).toBe(1);
+
+    act(() => ref.current!.cloneLastDrawing());
+    const segs = c._overlays.filter((o: any) => o.name === "segment");
+    expect(segs.length).toBe(2);
+    expect(segs[1].points).toEqual([{ value: 3 }, { value: 4 }]);
+    expect(segs[1].groupId).toBe("sonr-user-drawing");
+  });
+
+  it("cloneLastDrawing is a no-op with no drawings", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.cloneLastDrawing());
+    expect(c._overlays.filter((o: any) => o.groupId === "sonr-user-drawing").length).toBe(0);
+  });
+});
+
 describe("SonrChart — pane heights (#7)", () => {
   it("sets a sub-pane height by indicator name", () => {
     render(<SonrChart symbol="A" dataSource={source()} indicators={["VOL", "MACD"]} paneHeights={{ MACD: 120 }} />);
@@ -524,6 +628,116 @@ describe("SonrChart — undo/redo (#16)", () => {
   });
 });
 
+describe("SonrChart — keyboard shortcuts (#14)", () => {
+  const GROUP = "sonr-user-drawing";
+  const drawings = (c: any) => c._overlays.filter((o: any) => o.groupId === GROUP);
+  const chartEl = () => screen.getByRole("application");
+
+  it("makes the container focusable + labeled for keyboard users", () => {
+    render(<SonrChart symbol="A" dataSource={source()} />);
+    const el = chartEl();
+    expect(el.getAttribute("tabindex")).toBe("0");
+    expect(el).toHaveAttribute("aria-label", "Sonr chart");
+  });
+
+  it("Escape cancels an armed drawing", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    act(() => ref.current!.startDrawing("segment"));
+    expect(ref.current!.activeDrawing()).toBe("segment");
+    fireEvent.keyDown(chartEl(), { key: "Escape" });
+    expect(ref.current!.activeDrawing()).toBeNull();
+    expect(drawings(lastChart()).length).toBe(0);
+  });
+
+  it("Cmd/Ctrl+Z undoes and Shift+Z redoes drawings", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    const draw = () => { act(() => ref.current!.startDrawing("segment")); c._overlays.at(-1).onDrawEnd({}); };
+    draw();
+    draw();
+    expect(drawings(c).length).toBe(2);
+    fireEvent.keyDown(chartEl(), { key: "z", metaKey: true });
+    expect(drawings(c).length).toBe(1);
+    fireEvent.keyDown(chartEl(), { key: "z", metaKey: true, shiftKey: true });
+    expect(drawings(c).length).toBe(2);
+  });
+
+  it("Ctrl+Y also redoes", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment"));
+    c._overlays.at(-1).onDrawEnd({});
+    fireEvent.keyDown(chartEl(), { key: "z", ctrlKey: true }); // undo → 0
+    expect(drawings(c).length).toBe(0);
+    fireEvent.keyDown(chartEl(), { key: "y", ctrlKey: true }); // redo → 1
+    expect(drawings(c).length).toBe(1);
+  });
+
+  it("Delete clears drawings when no tool is armed", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment"));
+    c._overlays.at(-1).onDrawEnd({}); // finished → not armed
+    expect(drawings(c).length).toBe(1);
+    fireEvent.keyDown(chartEl(), { key: "Delete" });
+    expect(c.removeOverlay).toHaveBeenCalledWith({ groupId: GROUP });
+    expect(drawings(c).length).toBe(0);
+  });
+
+  it("Delete does NOT clear while a tool is armed (but still notifies onShortcut)", () => {
+    const onShortcut = vi.fn();
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} onShortcut={onShortcut} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment")); // armed, not finished
+    fireEvent.keyDown(chartEl(), { key: "Backspace" });
+    expect(c.removeOverlay).not.toHaveBeenCalledWith({ groupId: GROUP });
+    expect(onShortcut).toHaveBeenCalledWith("delete", expect.anything());
+  });
+
+  it("calls onShortcut for every recognized shortcut", () => {
+    const onShortcut = vi.fn();
+    render(<SonrChart symbol="A" dataSource={source()} onShortcut={onShortcut} />);
+    fireEvent.keyDown(chartEl(), { key: "Escape" });
+    fireEvent.keyDown(chartEl(), { key: "z", metaKey: true });
+    expect(onShortcut).toHaveBeenCalledWith("escape", expect.anything());
+    expect(onShortcut).toHaveBeenCalledWith("undo", expect.anything());
+  });
+
+  it("ignores shortcuts typed into an input (does not hijack typing)", () => {
+    const onShortcut = vi.fn();
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} onShortcut={onShortcut} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment"));
+    c._overlays.at(-1).onDrawEnd({});
+    // An input inside the chart (e.g. a symbol search) must keep its keys.
+    const input = document.createElement("input");
+    chartEl().appendChild(input);
+    fireEvent.keyDown(input, { key: "Backspace" });
+    fireEvent.keyDown(input, { key: "z", metaKey: true });
+    expect(onShortcut).not.toHaveBeenCalled();
+    expect(drawings(c).length).toBe(1); // untouched
+  });
+
+  it("does nothing when keyboard is disabled", () => {
+    const onShortcut = vi.fn();
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} keyboard={false} onShortcut={onShortcut} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment"));
+    c._overlays.at(-1).onDrawEnd({});
+    fireEvent.keyDown(chartEl(), { key: "z", metaKey: true });
+    fireEvent.keyDown(chartEl(), { key: "Delete" });
+    expect(onShortcut).not.toHaveBeenCalled();
+    expect(drawings(c).length).toBe(1);
+  });
+});
+
 describe("SonrChart — undo/redo tail truncation (#16)", () => {
   it("drops the redo tail when a new drawing is made after an undo", () => {
     const ref = createRef<SonrChartHandle>();
@@ -537,5 +751,57 @@ describe("SonrChart — undo/redo tail truncation (#16)", () => {
     draw(); // new drawing after undo → redo tail discarded
     expect(ref.current!.canRedo()).toBe(false);
     expect(c._overlays.filter((o: any) => o.groupId === "sonr-user-drawing").length).toBe(2);
+  });
+});
+
+describe("SonrChart — named custom themes (#46)", () => {
+  const gridColorCall = (c: any) => c.setStyles.mock.calls.map((x: any[]) => x[0]?.grid?.horizontal?.color).filter(Boolean);
+
+  it("applies a registered theme's styles via setStyles", () => {
+    registerTheme("chart-neon", { grid: { horizontal: { color: "#00ffcc" } } });
+    render(<SonrChart symbol="A" dataSource={source()} theme="chart-neon" />);
+    expect(gridColorCall(lastChart())).toContain("#00ffcc");
+  });
+
+  it("applies an inline customThemes entry", () => {
+    render(<SonrChart symbol="A" dataSource={source()} theme="inline" customThemes={{ inline: { grid: { horizontal: { color: "#abc123" } } } }} />);
+    expect(gridColorCall(lastChart())).toContain("#abc123");
+  });
+
+  it("getTheme/setTheme drive the theme through the handle", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    expect(ref.current!.getTheme()).toBe("dark");
+    act(() => ref.current!.setTheme("light"));
+    expect(ref.current!.getTheme()).toBe("light");
+    // Switching to light re-applies the light grid color.
+    expect(gridColorCall(c)).toContain("#d8dee8");
+  });
+});
+
+describe("SonrChart — formatters (#46)", () => {
+  it("uses a host dateFormat for the crosshair pill", () => {
+    render(<SonrChart symbol="A" dataSource={source()} dateFormat="YYYY/MM/DD" />);
+    const fmt = lastChart().setFormatter.mock.calls.at(-1)![0];
+    (utils.formatDate as any).mockClear();
+    fmt.formatDate({ dateTimeFormat: {}, timestamp: 1000, template: "HH:mm", type: "crosshair" });
+    expect((utils.formatDate as any)).toHaveBeenCalledWith({}, 1000, "YYYY/MM/DD");
+  });
+
+  it("keeps the default date+time pill when no dateFormat is given", () => {
+    render(<SonrChart symbol="A" dataSource={source()} />);
+    const fmt = lastChart().setFormatter.mock.calls.at(-1)![0];
+    (utils.formatDate as any).mockClear();
+    fmt.formatDate({ dateTimeFormat: {}, timestamp: 1000, template: "HH:mm", type: "crosshair" });
+    // Default prepends the date to a time-only crosshair template.
+    expect((utils.formatDate as any)).toHaveBeenCalledWith({}, 1000, "YYYY-MM-DD HH:mm");
+  });
+
+  it("wires a host priceFormatter into formatBigNumber", () => {
+    const priceFormatter = (v: number) => `$${v.toFixed(2)}`;
+    render(<SonrChart symbol="A" dataSource={source()} priceFormatter={priceFormatter} />);
+    const fmt = lastChart().setFormatter.mock.calls.at(-1)![0];
+    expect(fmt.formatBigNumber(12.5)).toBe("$12.50");
   });
 });

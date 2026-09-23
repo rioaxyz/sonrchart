@@ -1,5 +1,7 @@
 export { SonrChart } from "./SonrChart";
 export type { SonrChartProps, SonrChartHandle } from "./SonrChart";
+export { resolveShortcut, isEditableTarget } from "./keyboard";
+export type { ShortcutAction } from "./keyboard";
 export { IndicatorMenu, DEFAULT_INDICATOR_OPTIONS } from "./IndicatorMenu";
 export type { IndicatorOption } from "./IndicatorMenu";
 export { DrawingToolbar } from "./DrawingToolbar";
@@ -13,11 +15,27 @@ export { ToolbarButton } from "./ToolbarButton";
 export { ensureDefaultStyles } from "./defaultStyles";
 export { DEFAULT_DRAWING_TOOLS, USER_DRAWING_GROUP } from "./drawings";
 export type { DrawingToolOption } from "./drawings";
+export { DrawingTemplateStore } from "./drawingTemplates";
+export type { DrawingSnapshot, DrawingSnapshotItem } from "./drawingTemplates";
 export { downloadSnapshot } from "./snapshot";
 export { toHeikinAshi } from "./candles";
 export { BRUSH_OVERLAY } from "./brush";
 export type { BrushStyle, BrushTool } from "./brush";
-export { themeStyles, PALETTE } from "./theme";
+export {
+  registerShapeOverlays,
+  SHAPE_OVERLAYS,
+  SHAPE_RECTANGLE,
+  SHAPE_ELLIPSE,
+  SHAPE_TRIANGLE,
+  SHAPE_PRICE_RANGE,
+  SHAPE_RISK_REWARD,
+  priceRangeLabel,
+  riskRewardStats,
+} from "./shapes";
+export { themeStyles, resolveThemeStyles, registerTheme, getRegisteredTheme, PALETTE } from "./theme";
+export { getCSSCustomProperty, setCSSCustomProperty } from "./css";
+export { DEFAULT_LABELS, mergeLabels } from "./labels";
+export type { Labels } from "./labels";
 export {
   registerSonrIndicators,
   SESSION_INDICATOR,

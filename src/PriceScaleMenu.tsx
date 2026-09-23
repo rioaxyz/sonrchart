@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { PriceScale } from "./types";
 import { ensureDefaultStyles } from "./defaultStyles";
 import { useDropdown } from "./useDropdown";
+import { mergeLabels, type Labels } from "./labels";
 
 // A single-select dropdown for the price-scale type (#12), driven by props (the
 // host owns the value and passes it to both <SonrChart priceScale> and here).
@@ -11,24 +12,22 @@ import { useDropdown } from "./useDropdown";
 
 type ScaleType = NonNullable<PriceScale["type"]>;
 
-const SCALE_LABELS: Record<ScaleType, string> = {
-  normal: "Normal",
-  logarithm: "Logarithmic",
-  percentage: "Percent",
-};
 const SCALE_ORDER: ScaleType[] = ["normal", "logarithm", "percentage"];
 
 export function PriceScaleMenu({
   value,
   onChange,
   className,
+  labels,
 }: {
   value?: PriceScale;
   onChange?: (scale: PriceScale) => void;
   className?: string;
+  labels?: Partial<Labels>;
 }) {
   useEffect(ensureDefaultStyles, []);
 
+  const L = mergeLabels(labels);
   const { open, setOpen, toggle: toggleOpen, pos, triggerRef, panelRef } = useDropdown();
   const type = (value?.type ?? "normal") as ScaleType;
 
@@ -48,7 +47,7 @@ export function PriceScaleMenu({
         title="Price scale"
         onClick={toggleOpen}
       >
-        Scale: {SCALE_LABELS[type]}
+        {L.scale}: {L.scaleTypes[type]}
         <span className="sonr-menu-caret" aria-hidden>
           ▾
         </span>
@@ -77,7 +76,7 @@ export function PriceScaleMenu({
                   <span className="sonr-menu-check" aria-hidden>
                     {on ? "✓" : ""}
                   </span>
-                  <span className="sonr-menu-label sonr-menu-label-wide">{SCALE_LABELS[t]}</span>
+                  <span className="sonr-menu-label sonr-menu-label-wide">{L.scaleTypes[t]}</span>
                 </button>
               );
             })}

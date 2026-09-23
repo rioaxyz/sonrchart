@@ -113,7 +113,13 @@ export type DrawingTool =
   | "simpleTag"
   // Freehand tools (custom continuous-draw overlay).
   | "brush"
-  | "highlighter";
+  | "highlighter"
+  // Shape & measurement tools (custom overlays, see shapes.ts).
+  | "rectangle"
+  | "ellipse"
+  | "triangle"
+  | "priceRange"
+  | "riskReward";
 
 /** Serialized chart state for save/load (issue #15). Opaque JSON the host
  *  persists and hands back to `importState`. */

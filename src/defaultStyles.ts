@@ -50,6 +50,11 @@ const CSS = `
 :where(.sonr-set-inputs){display:flex;align-items:center;flex-wrap:wrap;gap:6px;}
 :where(.sonr-set-inputs-label){color:#555;font-size:11px;}
 :where(.sonr-set-num){appearance:textfield;-moz-appearance:textfield;width:52px;background:#fff;color:#000;border:1px solid #000;border-radius:3px;font:inherit;font-size:12px;line-height:18px;padding:1px 4px;}
+:where(.sonr-set-btn){align-self:flex-start;}
+:where(.sonr-set-tpl-save){display:flex;align-items:center;gap:6px;}
+:where(.sonr-set-tpl-save .sonr-search-input){flex:1;width:auto;}
+:where(.sonr-set-tpl-row){display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;}
+:where(.sonr-set-tpl-actions){display:inline-flex;align-items:center;gap:6px;}
 :where(.sonr-menu-trigger){display:inline-flex;align-items:center;gap:4px;}
 :where(.sonr-menu-caret){font-size:9px;opacity:0.7;}
 :where(.sonr-menu-dropdown){display:flex;flex-direction:column;min-width:180px;max-height:60vh;overflow-y:auto;background:#fff;color:#000;border:1px solid #000;border-radius:4px;box-shadow:0 6px 20px rgba(0,0,0,0.25);padding:4px;z-index:2147483000;}

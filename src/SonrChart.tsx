@@ -1,12 +1,15 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { dispose, init, utils, type Chart, type DeepPartial, type KLineData, type Nullable, type Styles } from "klinecharts";
-import { themeStyles, PALETTE } from "./theme";
+import { resolveThemeStyles, PALETTE } from "./theme";
 import { PATTERN_INDICATOR, SERIES_INDICATOR, SESSION_INDICATOR, WATERMARK_INDICATOR, registerSonrIndicators, type SeriesData, type WatermarkData } from "./indicators";
 import { CANDLE_TYPE, HaTransformer, isCustomSeries, isHeikinAshi, toHeikinAshi } from "./candles";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
 import { asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
 import { USER_DRAWING_GROUP } from "./drawings";
+import { DrawingTemplateStore, type DrawingSnapshot } from "./drawingTemplates";
 import { BRUSH_OVERLAY, brushStyle, isBrushTool, registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
+import { isEditableTarget, resolveShortcut, type ShortcutAction } from "./keyboard";
+import { registerShapeOverlays } from "./shapes";
 import type {
   CandleStyle,
   ChartState,
@@ -28,6 +31,7 @@ import type {
 registerSonrIndicators();
 registerCompareIndicator();
 registerBrushOverlay();
+registerShapeOverlays();
 
 const CANDLE_PANE = "candle_pane";
 
@@ -41,7 +45,11 @@ export interface SonrChartProps {
   symbol: string;
   interval?: Interval;
   dataSource: DataSource;
-  theme?: Theme;
+  /** "dark" | "light", or the name of a theme registered via `registerTheme`
+   *  or supplied in `customThemes`. (#46) */
+  theme?: Theme | string;
+  /** Inline named custom themes, looked up before the global registry. (#46) */
+  customThemes?: Record<string, DeepPartial<Styles>>;
   styles?: DeepPartial<Styles>;
   /** Indicators to show. Strings ("VOL") or specs. Default ["VOL"]. (#4) */
   indicators?: (string | IndicatorSpec)[];
@@ -68,6 +76,17 @@ export interface SonrChartProps {
   compareSeries?: CompareSpec[];
   /** How many bars to request on load. Default 500. */
   barCount?: number;
+  /** Enable built-in keyboard shortcuts when the chart is focused. (#14)
+   *  Default true. See `onShortcut` to observe/extend them. */
+  keyboard?: boolean;
+  /** Called for every recognized shortcut ("escape" | "undo" | "redo" |
+   *  "delete") while the chart is focused, even when the built-in also runs —
+   *  a host can observe or extend the behavior. (#14) */
+  onShortcut?: (action: string, e: KeyboardEvent) => void;
+  /** Override the crosshair price pill / big-number formatting. (#46) */
+  priceFormatter?: (value: number) => string;
+  /** Override the crosshair date template, e.g. "YYYY-MM-DD HH:mm". (#46) */
+  dateFormat?: string;
   onReady?: (chart: Chart) => void;
   /** Fired when resolveSymbol returns null for the requested ticker. (#8) */
   onSymbolError?: (symbol: string) => void;
@@ -119,6 +138,11 @@ export interface SonrChartHandle {
   subscribeMagnet(cb: (magnet: Magnet | undefined) => void): () => void;
   // Handle-driven display settings — let the toolbar control them with no host
   // wiring (uncontrolled), while a `*` prop can still control them.
+  /** Current theme selector ("dark"/"light" or a registered/custom name). (#46) */
+  getTheme(): Theme | string;
+  /** Apply a theme by name imperatively (a changed `theme` prop still wins). (#46) */
+  setTheme(theme: Theme | string): void;
+  subscribeTheme(cb: (theme: Theme | string) => void): () => void;
   getCandleStyle(): CandleStyle;
   setCandleStyle(style: CandleStyle): void;
   subscribeCandleStyle(cb: (style: CandleStyle) => void): () => void;
@@ -137,6 +161,28 @@ export interface SonrChartHandle {
   setBrushStyle(tool: BrushTool, style: BrushStyle): void;
   /** Subscribe to brush-style changes (for a settings UI). Returns unsubscribe. */
   subscribeBrush(cb: () => void): () => void;
+  // Drawing management tooling (#35) ---------------------------------------
+  /** Lock every user drawing (non-interactive) or unlock them. New drawings
+   *  inherit the current lock state. */
+  setDrawingsLocked(locked: boolean): void;
+  /** Whether user drawings are currently locked. */
+  getDrawingsLocked(): boolean;
+  /** Show/hide every user drawing at once. New drawings inherit visibility. */
+  setDrawingsVisible(visible: boolean): void;
+  /** Whether user drawings are currently visible. */
+  getDrawingsVisible(): boolean;
+  /** Save the current user drawings as a named template (in-memory). */
+  saveDrawingTemplate(name: string): void;
+  /** Replace the current user drawings with a saved template's set. */
+  applyDrawingTemplate(name: string): void;
+  /** Names of all saved drawing templates. */
+  listDrawingTemplates(): string[];
+  /** Delete a saved drawing template. */
+  deleteDrawingTemplate(name: string): void;
+  /** Subscribe to drawing-template list changes. Returns unsubscribe. */
+  subscribeDrawingTemplates(cb: () => void): () => void;
+  /** Duplicate the most-recently-added user drawing (same points/style). */
+  cloneLastDrawing(): void;
 }
 
 let _seq = 0;
@@ -244,14 +290,14 @@ function seriesConfig(style: CandleStyle, theme: Theme): SeriesData {
 // Apply a candle style to the chart: for a custom series style, hide the native
 // bars and draw/refresh SONR_SERIES; otherwise restore the theme bar colors and
 // drop the series indicator. Safe to call on every candle-style/theme change.
-function applyCandleStyle(chart: Chart, style: CandleStyle | undefined, theme: Theme): void {
+function applyCandleStyle(chart: Chart, style: CandleStyle | undefined, styleObj: DeepPartial<Styles>, baseTheme: Theme): void {
   const s = style ?? "candle";
   const custom = isCustomSeries(s);
-  const bar = custom ? HIDDEN_BAR : (themeStyles(theme).candle as { bar?: unknown } | undefined)?.bar;
+  const bar = custom ? HIDDEN_BAR : (styleObj.candle as { bar?: unknown } | undefined)?.bar;
   chart.setStyles({ candle: { type: CANDLE_TYPE[s], ...(bar ? { bar } : {}) } } as DeepPartial<Styles>);
   const present = chart.getIndicators({ name: SERIES_INDICATOR }).length > 0;
   if (custom) {
-    const ext = seriesConfig(s, theme);
+    const ext = seriesConfig(s, baseTheme);
     if (present) chart.overrideIndicator({ name: SERIES_INDICATOR, extendData: ext });
     else chart.createIndicator({ name: SERIES_INDICATOR, paneId: CANDLE_PANE, extendData: ext }, false);
   } else if (present) {
@@ -283,7 +329,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     symbol,
     interval = "1",
     dataSource,
-    theme = "dark",
+    theme: themeProp,
+    customThemes,
     styles,
     indicators = ["VOL"],
     paneHeights,
@@ -297,6 +344,10 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     candleStyle: candleStyleProp,
     compareSeries,
     barCount = 500,
+    keyboard = true,
+    onShortcut,
+    priceFormatter,
+    dateFormat,
     onReady,
     onSymbolError,
     className,
@@ -306,6 +357,11 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
 ) {
   const elRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<Chart | null>(null);
+  // Captured imperative handle + latest onShortcut, so the (stable) keyboard
+  // listener can drive the same operations the host uses. (#14)
+  const handleRef = useRef<SonrChartHandle | null>(null);
+  const onShortcutRef = useRef(onShortcut);
+  onShortcutRef.current = onShortcut;
   const idRef = useRef(`sonrchart-${++_seq}`);
   const overlayIds = useRef<string[]>([]);
   // Magnet mode. Prop-seeded, but a toolbar toggle can override it imperatively;
@@ -335,19 +391,26 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   // Live-updated prop mirrors read from inside the (stable) data loader.
   // Out-of-the-box, handle-driven display settings (host may still control via
   // the matching prop). Defaults preserve the previous "prop not passed" behavior.
+  const th = useControllable<Theme | string>(themeProp, "dark");
   const candle = useControllable<CandleStyle>(candleStyleProp, "candle");
   const scale = useControllable<PriceScale>(priceScaleProp, { type: "normal" });
   const sess = useControllable<SessionTint>(sessionsProp, false);
+  const theme = th.value;
   const candleStyle = candle.value;
   const priceScale = scale.value;
   const sessions = sess.value;
+  // Resolved KLineChart style object for the current theme (built-in or named).
+  const themeStyleObj = resolveThemeStyles(theme, customThemes);
+  // A named/custom theme has no intrinsic dark/light; default its boolean-driven
+  // bits (watermark ink, series neutral, legend label) to the dark base.
+  const baseTheme: Theme = theme === "light" ? "light" : "dark";
   // Watermark is a merge-able config (symbol/interval/color/opacity), so it uses
   // its own controllable-ish state rather than the scalar useControllable helper.
-  const [watermark, setWatermarkState] = useState<WatermarkOptions>(() => normalizeWatermark(watermarkProp, theme));
+  const [watermark, setWatermarkState] = useState<WatermarkOptions>(() => normalizeWatermark(watermarkProp, baseTheme));
   const wmPropRef = useRef(watermarkProp);
   if (watermarkProp !== wmPropRef.current) {
     wmPropRef.current = watermarkProp;
-    if (watermarkProp !== undefined) setWatermarkState(normalizeWatermark(watermarkProp, theme));
+    if (watermarkProp !== undefined) setWatermarkState(normalizeWatermark(watermarkProp, baseTheme));
   }
   const wmSubs = useRef(new Set<() => void>());
   const setWatermark = (next: boolean | Partial<WatermarkOptions>) => setWatermarkState((cur) => mergeWatermark(cur, next));
@@ -369,9 +432,17 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   // Live mirrors read from inside the (stable) candle-legend callback so it
   // reflects the current theme and the resolved price precision without being
   // re-created on every theme/symbol change.
-  const themeRef = useRef(theme);
-  themeRef.current = theme;
+  const themeRef = useRef(baseTheme);
+  themeRef.current = baseTheme;
+  // The raw theme selector (name), for the handle's getTheme().
+  const themeSelRef = useRef(theme);
+  themeSelRef.current = theme;
   const pricePrecRef = useRef(2);
+  // Host formatter overrides, read live from the (stable) formatter callbacks.
+  const dateFormatRef = useRef(dateFormat);
+  dateFormatRef.current = dateFormat;
+  const priceFormatterRef = useRef(priceFormatter);
+  priceFormatterRef.current = priceFormatter;
   // Heikin Ashi live transformer (rebuilt per data load in the create effect).
   const haRef = useRef(new HaTransformer());
   // Drawing undo/redo history (#16). stack[ptr] is the current drawing set;
@@ -393,11 +464,22 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   // Brush/highlighter stroke styles (color + width), configurable from settings.
   // Seeded from the theme presets; each new stroke reads the current value.
   const brushStylesRef = useRef<Record<BrushTool, BrushStyle>>({
-    brush: brushStyle("brush", theme),
-    highlighter: brushStyle("highlighter", theme),
+    brush: brushStyle("brush", baseTheme),
+    highlighter: brushStyle("highlighter", baseTheme),
   });
   const brushSubs = useRef(new Set<() => void>());
   const notifyBrush = () => brushSubs.current.forEach((cb) => cb());
+
+  // Drawing management tooling (#35): lock/hide state (mirrored for getters, and
+  // inherited by drawings created after a toggle), plus a named-template store.
+  const lockedRef = useRef(false);
+  const hiddenRef = useRef(false);
+  const templatesRef = useRef(new DrawingTemplateStore());
+  // Push the current lock/visible state onto every user drawing. Also called
+  // after creating overlays so fresh drawings inherit the state.
+  const applyDrawingFlags = () => {
+    chartRef.current?.overrideOverlay({ groupId: USER_DRAWING_GROUP, lock: lockedRef.current, visible: !hiddenRef.current } as never);
+  };
 
   const snapshotDrawings = (): Snap =>
     (chartRef.current?.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? []).map((o) => ({
@@ -435,6 +517,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         // Drawing placed: the overlay is now a finished drawing, not in progress.
         progressIdRef.current = null;
         pushHistory();
+        // A freshly placed drawing inherits the current lock/hide state.
+        applyDrawingFlags();
         // Brush/highlighter are "sticky": stay armed and immediately re-arm for
         // the next stroke, so you can draw repeatedly without re-clicking the
         // toolbar. The tool stays active until toggled off (cancelDrawing).
@@ -488,6 +572,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       });
     }
     restoringRef.current = false;
+    // Restored drawings inherit the current lock/hide state.
+    applyDrawingFlags();
   };
 
   // Fetch each comparison symbol, align to the main bars, and (re)build the
@@ -546,9 +632,28 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     }
   };
 
+  // Crosshair date + price formatting (#46). Default: prepend the date to the
+  // crosshair time pill (TV-style). A host `dateFormat` overrides the crosshair
+  // template; a host `priceFormatter` drives big-number/price formatting. Reads
+  // refs so it can be re-applied without recreating the chart.
+  const applyFormatter = (chart: Chart) => {
+    chart.setFormatter({
+      formatDate: ({ dateTimeFormat, timestamp, template, type }) => {
+        if (dateFormatRef.current && type === "crosshair") {
+          return utils.formatDate(dateTimeFormat, timestamp, dateFormatRef.current);
+        }
+        const t = type === "crosshair" && !/[YMD]/.test(template) ? `YYYY-MM-DD ${template}` : template;
+        return utils.formatDate(dateTimeFormat, timestamp, t);
+      },
+      ...(priceFormatterRef.current
+        ? { formatBigNumber: (value: string | number) => priceFormatterRef.current!(typeof value === "number" ? value : Number(value)) }
+        : {}),
+    });
+  };
+
   useImperativeHandle(
     ref,
-    () => ({
+    (): SonrChartHandle => (handleRef.current = {
       chart: () => chartRef.current,
       addIndicator: (i) => createIndicator(asSpec(i)),
       removeIndicator: (name) => {
@@ -643,6 +748,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         magnetSubs.current.add(cb);
         return () => magnetSubs.current.delete(cb);
       },
+      getTheme: () => themeSelRef.current,
+      setTheme: (t) => th.set(t),
+      subscribeTheme: (cb) => th.subscribe(cb),
       getCandleStyle: () => candleStyleRef.current ?? "candle",
       setCandleStyle: (s) => candle.set(s),
       subscribeCandleStyle: (cb) => candle.subscribe(cb),
@@ -667,11 +775,99 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         brushSubs.current.add(cb);
         return () => brushSubs.current.delete(cb);
       },
+      // Drawing management tooling (#35) -----------------------------------
+      setDrawingsLocked: (locked) => {
+        lockedRef.current = locked;
+        applyDrawingFlags();
+      },
+      getDrawingsLocked: () => lockedRef.current,
+      setDrawingsVisible: (visible) => {
+        hiddenRef.current = !visible;
+        applyDrawingFlags();
+      },
+      getDrawingsVisible: () => !hiddenRef.current,
+      saveDrawingTemplate: (name) => {
+        templatesRef.current.save(name, snapshotDrawings() as DrawingSnapshot);
+      },
+      applyDrawingTemplate: (name) => {
+        const snap = templatesRef.current.get(name);
+        if (!snap) return;
+        restoreDrawings(snap as Snap);
+        // Reset the undo history to the applied drawing set (like importState).
+        historyRef.current = { stack: [snapshotDrawings()], ptr: 0 };
+        notifyHistory();
+      },
+      listDrawingTemplates: () => templatesRef.current.list(),
+      deleteDrawingTemplate: (name) => templatesRef.current.delete(name),
+      subscribeDrawingTemplates: (cb) => templatesRef.current.subscribe(cb),
+      cloneLastDrawing: () => {
+        const chart = chartRef.current;
+        if (!chart) return;
+        const drawings = chart.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? [];
+        const last = drawings[drawings.length - 1];
+        if (!last) return;
+        restoringRef.current = true;
+        chart.createOverlay({
+          name: last.name,
+          points: last.points as never,
+          styles: last.styles as never,
+          mode: last.mode as never,
+          extendData: last.extendData as never,
+          groupId: USER_DRAWING_GROUP,
+          onDrawEnd: () => {
+            pushHistory();
+            return false;
+          },
+          onRemoved: () => {
+            pushHistory();
+            return false;
+          },
+        });
+        restoringRef.current = false;
+        applyDrawingFlags();
+        pushHistory();
+      },
     }),
     // paneHeights/priceScale captured by closure; recreated per render is fine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  // Keyboard shortcuts (#14). The listener lives on the chart container, so it
+  // only fires while focus is within the chart — global typing (symbol search,
+  // settings) is never hijacked. Every recognized shortcut notifies the host
+  // via `onShortcut`; the built-in runs too (delete is gated on no armed tool).
+  useEffect(() => {
+    const el = elRef.current;
+    if (!el || !keyboard) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isEditableTarget(e.target)) return; // never hijack an input/typing
+      const action: ShortcutAction | null = resolveShortcut(e);
+      if (!action) return;
+      // Let the host observe/extend first, even when a built-in also handles it.
+      onShortcutRef.current?.(action, e);
+      const api = handleRef.current;
+      if (!api) return;
+      if (action === "escape") {
+        api.cancelDrawing();
+      } else if (action === "undo") {
+        api.undo();
+        e.preventDefault();
+      } else if (action === "redo") {
+        api.redo();
+        e.preventDefault();
+      } else if (action === "delete") {
+        // Clear only when no tool is armed — Escape cancels an armed draw, so
+        // Delete/Backspace here removes the finished user drawings.
+        if (!api.activeDrawing()) {
+          api.clearDrawings();
+          e.preventDefault();
+        }
+      }
+    };
+    el.addEventListener("keydown", onKeyDown);
+    return () => el.removeEventListener("keydown", onKeyDown);
+  }, [keyboard]);
 
   // Create the chart, wire the data loader, resolve + load the symbol.
   useEffect(() => {
@@ -684,18 +880,11 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       layout: yAxisLayout(priceScale),
     } as never) as Chart;
     chartRef.current = chart;
-    chart.setStyles(mergeStyles(themeStyles(theme), styles));
+    chart.setStyles(mergeStyles(themeStyleObj, styles));
     // Candle rendering style (#1).
-    applyCandleStyle(chart, candleStyleRef.current, theme);
-    // The crosshair x-axis pill should show the full date + time (like TV), even
-    // on intraday where the axis ticks only show time. Prepend the date for the
-    // crosshair context only; leave the x-axis ticks and tooltip untouched.
-    chart.setFormatter({
-      formatDate: ({ dateTimeFormat, timestamp, template, type }) => {
-        const t = type === "crosshair" && !/[YMD]/.test(template) ? `YYYY-MM-DD ${template}` : template;
-        return utils.formatDate(dateTimeFormat, timestamp, t);
-      },
-    });
+    applyCandleStyle(chart, candleStyleRef.current, themeStyleObj, baseTheme);
+    // Crosshair date/price formatting (#46), default: TV-style date+time pill.
+    applyFormatter(chart);
     // Candle legend without the time row: the hovered bar's time lives in the
     // crosshair x-axis pill instead (like TradingView), leaving the legend to
     // show O/H/L/C/V colored by candle direction.
@@ -708,7 +897,10 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
               if (!k) return [];
               const label = (themeRef.current === "dark" ? PALETTE.DARK : PALETTE.LIGHT).muted;
               const dir = (k.close ?? 0) >= (k.open ?? 0) ? PALETTE.GREEN : PALETTE.RED;
-              const price = (v?: number) => utils.formatThousands(utils.formatPrecision(v ?? 0, pricePrecRef.current), ",");
+              const price = (v?: number) =>
+                priceFormatterRef.current
+                  ? priceFormatterRef.current(v ?? 0)
+                  : utils.formatThousands(utils.formatPrecision(v ?? 0, pricePrecRef.current), ",");
               return [
                 { title: { text: "O", color: label }, value: { text: price(k.open), color: dir } },
                 { title: { text: "H", color: label }, value: { text: price(k.high), color: dir } },
@@ -802,16 +994,31 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol, interval, scaleKey(priceScale), isHeikinAshi(candleStyle) ? "ha" : "std"]);
 
+  // Theme (#46): re-apply the resolved style object (built-in or named/custom)
+  // whenever the selector, custom map, or host styles change. Re-applies the
+  // candle style too so its bar colors track the new theme.
   useEffect(() => {
-    chartRef.current?.setStyles(mergeStyles(themeStyles(theme), styles));
-  }, [theme, styles]);
+    const chart = chartRef.current;
+    if (!chart) return;
+    chart.setStyles(mergeStyles(themeStyleObj, styles));
+    applyCandleStyle(chart, candleStyleRef.current, themeStyleObj, baseTheme);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme, styles, customThemes]);
 
   // Candle style (#1): a pure setStyles for non-HA swaps (no rebuild). HA
   // transitions are handled by the create effect's haKey dependency.
   useEffect(() => {
     const chart = chartRef.current;
-    if (chart) applyCandleStyle(chart, candleStyle, theme);
+    if (chart) applyCandleStyle(chart, candleStyle, themeStyleObj, baseTheme);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candleStyle, theme]);
+
+  // Formatter overrides (#46): re-apply when the host changes them at runtime.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (chart) applyFormatter(chart);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateFormat, priceFormatter]);
 
   // Compare / multi-symbol overlays (#9).
   useEffect(() => {
@@ -932,5 +1139,14 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [priceLines, orderLines]);
 
-  return <div ref={elRef} className={className} style={{ width: "100%", height: "100%", ...style }} />;
+  return (
+    <div
+      ref={elRef}
+      tabIndex={0}
+      role="application"
+      aria-label="Sonr chart"
+      className={className}
+      style={{ width: "100%", height: "100%", ...style }}
+    />
+  );
 });

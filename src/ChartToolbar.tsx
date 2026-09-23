@@ -12,6 +12,7 @@ import { downloadSnapshot } from "./snapshot";
 import { ensureDefaultStyles } from "./defaultStyles";
 import { CameraIcon, GearIcon } from "./icons";
 import { SettingsModal } from "./SettingsModal";
+import { mergeLabels, type Labels } from "./labels";
 
 // A composable chart chrome kit (issue #17): interval buttons, the indicator
 // menu, the drawing palette, and a snapshot button — all driving one chart ref.
@@ -46,6 +47,7 @@ export function ChartToolbar({
   onSymbolSelect,
   spreadOperators,
   className,
+  labels,
   children,
 }: {
   chartRef: RefObject<SonrChartHandle>;
@@ -76,9 +78,13 @@ export function ChartToolbar({
   /** Forwarded to SymbolSearch — allow spread/expression pass-through. */
   spreadOperators?: boolean;
   className?: string;
+  /** Localized chrome strings (issue #46). Merged over English defaults and
+   *  threaded to the menus/settings; omit for the current English. */
+  labels?: Partial<Labels>;
   children?: ReactNode;
 }) {
   useEffect(ensureDefaultStyles, []);
+  const L = mergeLabels(labels);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -188,11 +194,11 @@ export function ChartToolbar({
             ))}
           </div>
         )}
-        {showCandle && <CandleMenu value={candleValue} onChange={candleChange} options={candleStyles} />}
-        <IndicatorMenu chartRef={chartRef} options={indicatorOptions} />
-        {showScale && <PriceScaleMenu value={scaleValue} onChange={scaleChange} />}
+        {showCandle && <CandleMenu value={candleValue} onChange={candleChange} options={candleStyles} labels={labels} />}
+        <IndicatorMenu chartRef={chartRef} options={indicatorOptions} labels={labels} />
+        {showScale && <PriceScaleMenu value={scaleValue} onChange={scaleChange} labels={labels} />}
         {showSessions && (
-          <div className="sonr-session-group" role="group" aria-label="Sessions">
+          <div className="sonr-session-group" role="group" aria-label={L.sessions}>
             <button
               type="button"
               className={`sonr-session-btn${sessionsValue ? " on" : ""}`}
@@ -200,18 +206,18 @@ export function ChartToolbar({
               title="Extended-hours session tinting"
               onClick={() => sessionsChange(!sessionsValue)}
             >
-              Sessions
+              {L.sessions}
             </button>
           </div>
         )}
-        {showDrawing && <DrawingToolbar chartRef={chartRef} tools={drawingTools} />}
+        {showDrawing && <DrawingToolbar chartRef={chartRef} tools={drawingTools} labels={labels} />}
         {children}
         {showSnapshot && (
           <button
             type="button"
             className="sonr-snapshot-btn sonr-icon-btn"
             title="Save a snapshot"
-            aria-label="Snapshot"
+            aria-label={L.snapshot}
             onClick={() => downloadSnapshot(chartRef.current, snapshotName)}
           >
             <CameraIcon />
@@ -221,8 +227,8 @@ export function ChartToolbar({
           <button
             type="button"
             className={`sonr-settings-btn sonr-icon-btn${settingsOpen ? " on" : ""}`}
-            title="Chart settings"
-            aria-label="Chart settings"
+            title={L.settings}
+            aria-label={L.settings}
             aria-haspopup="dialog"
             aria-expanded={settingsOpen}
             onClick={() => setSettingsOpen((o) => !o)}
@@ -236,6 +242,7 @@ export function ChartToolbar({
           chartRef={chartRef}
           open={settingsOpen}
           onClose={() => setSettingsOpen(false)}
+          labels={labels}
         />
       )}
       {canLeft && (
