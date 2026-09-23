@@ -376,8 +376,12 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       onDrawEnd: () => {
         // Drawing placed: the overlay is now a finished drawing, not in progress.
         progressIdRef.current = null;
-        setActiveTool(null);
         pushHistory();
+        // Brush/highlighter are "sticky": stay armed and immediately re-arm for
+        // the next stroke, so you can draw repeatedly without re-clicking the
+        // toolbar. The tool stays active until toggled off (cancelDrawing).
+        if (brush) beginDrawing(tool);
+        else setActiveTool(null);
         return false;
       },
       onRemoved: () => {
