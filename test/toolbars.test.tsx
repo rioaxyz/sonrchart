@@ -84,33 +84,39 @@ function ref(handle: SonrChartHandle) {
 }
 
 describe("DrawingToolbar (#3)", () => {
-  it("starts a drawing per tool and clears via the ref", async () => {
+  const openTools = () => userEvent.click(screen.getByRole("button", { name: /Drawing tools/ }));
+  const toolsTrigger = () => screen.getByRole("button", { name: /Drawing tools/ });
+
+  it("opens a tool dropdown, starts a drawing per tool, and clears via the ref", async () => {
     const h = fakeHandle();
     render(<DrawingToolbar chartRef={ref(h)} tools={[{ tool: "segment", label: "Trend line" }]} />);
-    await userEvent.click(screen.getByRole("button", { name: "Trend line" }));
+    await openTools();
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "Trend line" }));
     expect(h.startDrawing).toHaveBeenCalledWith("segment");
+    // Clear stays a direct button.
     await userEvent.click(screen.getByRole("button", { name: /Clear/ }));
     expect(h.clearDrawings).toHaveBeenCalled();
   });
 
-  it("highlights the armed tool and toggles it off on a second click", async () => {
+  it("highlights the armed tool and toggles it off on a second selection", async () => {
     const h = fakeHandle();
     render(<DrawingToolbar chartRef={ref(h)} tools={[{ tool: "segment", label: "Trend line" }, { tool: "fibonacciLine", label: "Fibonacci" }]} />);
-    const trend = screen.getByRole("button", { name: "Trend line" });
-    const fib = screen.getByRole("button", { name: "Fibonacci" });
 
-    // Arm Trend line → it becomes active/highlighted.
-    await userEvent.click(trend);
+    // Arm Trend line → the trigger reflects an active tool (dropdown closes).
+    await openTools();
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "Trend line" }));
     expect(h.startDrawing).toHaveBeenCalledWith("segment");
-    expect(trend).toHaveAttribute("aria-pressed", "true");
-    expect(trend.classList.contains("on")).toBe(true);
-    expect(fib).toHaveAttribute("aria-pressed", "false");
+    expect(toolsTrigger().classList.contains("on")).toBe(true);
 
-    // Click it again → toggles off (cancel), highlight clears.
-    await userEvent.click(trend);
+    // Reopen → Trend line is checked, Fibonacci isn't.
+    await openTools();
+    expect(screen.getByRole("menuitemradio", { name: "Trend line" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("menuitemradio", { name: "Fibonacci" })).toHaveAttribute("aria-checked", "false");
+
+    // Select it again → toggles off (cancel), trigger no longer active.
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "Trend line" }));
     expect(h.cancelDrawing).toHaveBeenCalled();
-    expect(trend).toHaveAttribute("aria-pressed", "false");
-    expect(trend.classList.contains("on")).toBe(false);
+    expect(toolsTrigger().classList.contains("on")).toBe(false);
   });
 
   it("cycles the magnet mode off → weak → strong through the ref", async () => {
@@ -141,16 +147,15 @@ describe("DrawingToolbar (#3)", () => {
     expect(h.undo).toHaveBeenCalled();
   });
 
-  it("moves the highlight to the placed drawing's end (armed → null)", async () => {
+  it("clears the trigger highlight when the drawing is placed (armed → null)", async () => {
     const h = fakeHandle();
     render(<DrawingToolbar chartRef={ref(h)} tools={[{ tool: "segment", label: "Trend line" }]} />);
-    const trend = screen.getByRole("button", { name: "Trend line" });
-    await userEvent.click(trend);
-    expect(trend).toHaveAttribute("aria-pressed", "true");
+    await openTools();
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "Trend line" }));
+    expect(toolsTrigger().classList.contains("on")).toBe(true);
     // Simulate the chart reporting the drawing as placed (onDrawEnd → null).
-    (h as any).cancelDrawing(); // set(null) via the mock's pub/sub
-    await Promise.resolve();
-    expect(screen.getByRole("button", { name: "Trend line" })).toHaveAttribute("aria-pressed", "false");
+    act(() => (h as any).cancelDrawing()); // set(null) via the mock's pub/sub
+    expect(toolsTrigger().classList.contains("on")).toBe(false);
   });
 });
 
@@ -170,7 +175,7 @@ describe("ChartToolbar (#17)", () => {
     expect(screen.getByRole("toolbar")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "1" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /Indicators/ })).toBeInTheDocument(); // indicator dropdown trigger
-    expect(screen.getByRole("button", { name: "Trend line" })).toBeInTheDocument(); // drawing
+    expect(screen.getByRole("button", { name: /Drawing tools/ })).toBeInTheDocument(); // drawing-tools dropdown
     expect(screen.getByRole("button", { name: "Snapshot" })).toBeInTheDocument();
   });
 
