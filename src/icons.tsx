@@ -113,6 +113,11 @@ export function RedoIcon() {
   );
 }
 
+/** Pencil — the drawing-tools dropdown trigger (when no tool is armed). */
+export function PencilIcon() {
+  return <Svg><path d="M2.5 13.5l1-3 7-7 2 2-7 7-3 1z" /><path d="M9.5 4.5l2 2" /></Svg>;
+}
+
 /** Gear/cog — chart settings. Own 24×24 viewBox (feather-style settings path). */
 export function GearIcon() {
   return (

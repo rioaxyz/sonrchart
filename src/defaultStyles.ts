@@ -60,6 +60,8 @@ const CSS = `
 :where(.sonr-menu-name){font-weight:700;min-width:38px;}
 :where(.sonr-menu-label){color:#555;font-size:11px;}
 :where(.sonr-menu-label-wide){color:#000;font-size:12px;}
+:where(.sonr-draw-menu){display:inline-flex;align-items:center;}
+:where(.sonr-draw-opt-icon){display:inline-flex;align-items:center;justify-content:center;width:16px;flex:0 0 16px;}
 :where(.sonr-search){display:inline-flex;align-items:center;}
 :where(.sonr-search-input){appearance:none;-webkit-appearance:none;background:#fff;color:#000;border:1px solid #000;border-radius:3px;font:inherit;font-size:11px;line-height:18px;padding:0 6px;width:120px;}
 :where(.sonr-search-input::placeholder){color:#888;}

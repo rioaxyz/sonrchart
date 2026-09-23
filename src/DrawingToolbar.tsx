@@ -1,15 +1,16 @@
 import { useEffect, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import type { SonrChartHandle } from "./SonrChart";
 import type { DrawingTool, Magnet } from "./types";
 import { DEFAULT_DRAWING_TOOLS, type DrawingToolOption } from "./drawings";
 import { ensureDefaultStyles } from "./defaultStyles";
-import { DrawIcon, ClearIcon, UndoIcon, RedoIcon } from "./icons";
+import { DrawIcon, ClearIcon, UndoIcon, RedoIcon, PencilIcon } from "./icons";
+import { useDropdown } from "./useDropdown";
 
-// Drop-in drawing chrome (issues #3, #13, #16): a tool palette, a magnet-mode
-// toggle, undo/redo, and a Clear button — all driving one chart ref. Each tool
-// button arms interactive drawing and highlights while armed (clicking it again
-// cancels); the armed state clears once the drawing is placed. Compose your own
-// UI on the same ref API if you prefer.
+// Drop-in drawing chrome (issues #3, #13, #16): the line/drawing tools collapse
+// into a single dropdown (there are a lot of them), with a magnet-mode toggle,
+// undo/redo, and Clear alongside as their own buttons — all driving one chart
+// ref. Compose your own UI on the same ref API if you prefer.
 
 // Magnet cycles off → weak → strong → off.
 function normalizeMagnet(m: Magnet | undefined): "off" | "weak" | "strong" {
@@ -44,6 +45,7 @@ export function DrawingToolbar({
   const [magnet, setMagnetState] = useState<"off" | "weak" | "strong">("off");
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  const { open, setOpen, toggle: toggleOpen, pos, triggerRef, panelRef } = useDropdown();
 
   // Subscribe to the chart's drawing/magnet/history state. The handle may not be
   // populated on the first tick (the chart mounts as a sibling), so retry until
@@ -82,26 +84,65 @@ export function DrawingToolbar({
     // Clicking the armed tool toggles it off; otherwise arm the new tool.
     if (active === tool) h.cancelDrawing();
     else h.startDrawing(tool);
+    setOpen(false);
   };
+
+  const activeLabel = tools.find((t) => t.tool === active)?.label;
 
   return (
     <div className={className ?? "sonr-drawing-toolbar"} role="group" aria-label="Drawing tools">
-      {tools.map((t) => {
-        const on = active === t.tool;
-        return (
-          <button
-            key={t.tool}
-            type="button"
-            className={`sonr-draw-btn sonr-icon-btn${on ? " on" : ""}`}
-            aria-pressed={on}
-            aria-label={t.label}
-            title={t.label}
-            onClick={() => onToolClick(t.tool)}
-          >
-            <DrawIcon tool={t.tool} />
-          </button>
-        );
-      })}
+      {/* Tool palette — collapsed into one dropdown. */}
+      <div className="sonr-draw-menu">
+        <button
+          ref={triggerRef}
+          type="button"
+          className={`sonr-menu-trigger sonr-icon-trigger${open ? " open" : ""}${active ? " on" : ""}`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={activeLabel ? `Drawing tools: ${activeLabel}` : "Drawing tools"}
+          title={activeLabel ? `Drawing tool: ${activeLabel}` : "Drawing tools"}
+          onClick={toggleOpen}
+        >
+          {active ? <DrawIcon tool={active} /> : <PencilIcon />}
+          <span className="sonr-menu-caret" aria-hidden>
+            ▾
+          </span>
+        </button>
+        {open &&
+          typeof document !== "undefined" &&
+          createPortal(
+            <div
+              ref={panelRef}
+              className="sonr-menu-dropdown"
+              role="menu"
+              aria-label="Drawing tools"
+              style={{ position: "fixed", top: pos.top, left: pos.left }}
+            >
+              {tools.map((t) => {
+                const on = active === t.tool;
+                return (
+                  <button
+                    key={t.tool}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={on}
+                    className={`sonr-menu-option${on ? " on" : ""}`}
+                    onClick={() => onToolClick(t.tool)}
+                  >
+                    <span className="sonr-menu-check" aria-hidden>
+                      {on ? "✓" : ""}
+                    </span>
+                    <span className="sonr-draw-opt-icon" aria-hidden>
+                      <DrawIcon tool={t.tool} />
+                    </span>
+                    <span className="sonr-menu-label sonr-menu-label-wide">{t.label}</span>
+                  </button>
+                );
+              })}
+            </div>,
+            document.body,
+          )}
+      </div>
       {showMagnet && (
         <button
           type="button"
