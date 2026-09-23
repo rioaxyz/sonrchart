@@ -55,6 +55,7 @@ export function SettingsModal({
   const [crosshairColor, setCrosshairColor] = useState("#78828e");
   const [indicators, setIndicators] = useState<string[]>([]);
   const [indColors, setIndColors] = useState<Record<string, string>>({});
+  const [indParams, setIndParams] = useState<Record<string, number[]>>({});
   const [uncWatermark, setUncWatermark] = useState(false);
 
   // Seed from the chart's current styles each time the dialog opens.
@@ -69,7 +70,19 @@ export function SettingsModal({
       setGridShow(s?.grid?.horizontal?.show !== false);
       setCrosshairColor(hex(s?.crosshair?.horizontal?.line?.color, "#78828e"));
     }
-    setIndicators(chartRef.current?.listIndicators?.() ?? []);
+    const names = chartRef.current?.listIndicators?.() ?? [];
+    setIndicators(names);
+    // Seed each active indicator's calculation params from the raw chart, so the
+    // inputs editor shows the live values. Only keep non-empty numeric arrays.
+    const params: Record<string, number[]> = {};
+    for (const name of names) {
+      const found = chart?.getIndicators?.({ name });
+      const cp = Array.isArray(found) ? (found[0]?.calcParams as unknown) : undefined;
+      if (Array.isArray(cp) && cp.length > 0 && cp.every((n) => typeof n === "number")) {
+        params[name] = cp.slice();
+      }
+    }
+    setIndParams(params);
     setUncWatermark(!!chartRef.current?.getWatermark?.());
     const unsubWm = chartRef.current?.subscribeWatermark?.((v) => setUncWatermark(!!v));
     const onKey = (e: KeyboardEvent) => {
@@ -115,6 +128,14 @@ export function SettingsModal({
     // Colour every line the same; KLineChart uses as many entries as the
     // indicator has and ignores the rest.
     chart()?.overrideIndicator({ name, styles: { lines: Array.from({ length: 6 }, () => ({ color })) } });
+  };
+  const applyIndicatorParams = (name: string, idx: number, value: number) => {
+    setIndParams((m) => {
+      const next = (m[name] ?? []).slice();
+      next[idx] = value;
+      chart()?.overrideIndicator({ name, calcParams: next });
+      return { ...m, [name]: next };
+    });
   };
 
   return createPortal(
@@ -169,19 +190,43 @@ export function SettingsModal({
               <>
                 <p className="sonr-set-note">An indicator must be active on the chart to change its settings — add it from the Indicators menu first.</p>
                 {indicators.length === 0 && <p className="sonr-set-empty">No indicators active.</p>}
-                {indicators.map((name) => (
-                  <Row key={name} label={name}>
-                    <input
-                      type="color"
-                      value={hex(indColors[name], "#a970ff")}
-                      onChange={(e) => {
-                        const c = e.target.value;
-                        setIndColors((m) => ({ ...m, [name]: c }));
-                        applyIndicator(name, c);
-                      }}
-                    />
-                  </Row>
-                ))}
+                {indicators.map((name) => {
+                  const params = indParams[name];
+                  return (
+                    <div key={name} className="sonr-set-ind">
+                      <Row label={name}>
+                        <input
+                          type="color"
+                          value={hex(indColors[name], "#a970ff")}
+                          onChange={(e) => {
+                            const c = e.target.value;
+                            setIndColors((m) => ({ ...m, [name]: c }));
+                            applyIndicator(name, c);
+                          }}
+                        />
+                      </Row>
+                      {params && params.length > 0 && (
+                        <div className="sonr-set-inputs" role="group" aria-label={`${name} inputs`}>
+                          <span className="sonr-set-inputs-label">Inputs</span>
+                          {params.map((p, idx) => (
+                            <input
+                              key={idx}
+                              type="number"
+                              className="sonr-set-num"
+                              aria-label={`${name} input ${idx + 1}`}
+                              value={p}
+                              onChange={(e) => {
+                                const v = e.target.valueAsNumber;
+                                if (Number.isNaN(v)) return;
+                                applyIndicatorParams(name, idx, v);
+                              }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </>
             )}
             {section === "grid" && (
