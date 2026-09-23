@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toHeikinAshi, HaTransformer, CANDLE_TYPE, isHeikinAshi } from "../src/candles";
+import { toHeikinAshi, HaTransformer, CANDLE_TYPE, isHeikinAshi, isCustomSeries, CUSTOM_SERIES } from "../src/candles";
 import type { Bar } from "../src/types";
 
 const raw: Bar[] = [
@@ -16,6 +16,20 @@ describe("candle style mapping (#1)", () => {
     expect(CANDLE_TYPE.ohlc).toBe("ohlc");
     expect(CANDLE_TYPE.area).toBe("area");
     expect(CANDLE_TYPE.heikin_ashi).toBe("candle_solid");
+  });
+  it("maps custom series styles to a hidden solid base (#33)", () => {
+    for (const s of CUSTOM_SERIES) expect(CANDLE_TYPE[s]).toBe("candle_solid");
+  });
+  it("flags custom series styles (#33)", () => {
+    expect(isCustomSeries("line")).toBe(true);
+    expect(isCustomSeries("step")).toBe(true);
+    expect(isCustomSeries("baseline")).toBe(true);
+    expect(isCustomSeries("column")).toBe(true);
+    expect(isCustomSeries("hlc")).toBe(true);
+    expect(isCustomSeries("high_low")).toBe(true);
+    expect(isCustomSeries("candle")).toBe(false);
+    expect(isCustomSeries("area")).toBe(false);
+    expect(isCustomSeries(undefined)).toBe(false);
   });
   it("flags heikin ashi", () => {
     expect(isHeikinAshi("heikin_ashi")).toBe(true);

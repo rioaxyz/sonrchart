@@ -86,6 +86,27 @@ export function ClearIcon() {
   );
 }
 
+/** Undo — curved arrow. Heavier stroke than the old ↶ glyph so it stays legible
+ *  at a muted color on a dark theme. */
+export function UndoIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" style={{ display: "block" }}>
+      <path d="M6 4 2.5 7.5 6 11" />
+      <path d="M2.5 7.5H9.5a3.75 3.75 0 0 1 0 7.5H7" />
+    </svg>
+  );
+}
+
+/** Redo — mirror of Undo. */
+export function RedoIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" style={{ display: "block" }}>
+      <path d="M10 4 13.5 7.5 10 11" />
+      <path d="M13.5 7.5H6.5a3.75 3.75 0 0 0 0 7.5H9" />
+    </svg>
+  );
+}
+
 /** Gear/cog — chart settings. Own 24×24 viewBox (feather-style settings path). */
 export function GearIcon() {
   return (

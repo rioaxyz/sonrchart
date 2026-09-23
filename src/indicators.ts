@@ -13,7 +13,17 @@ import type { PatternMarker } from "./types";
 export const SESSION_INDICATOR = "SONR_SESSION";
 export const PATTERN_INDICATOR = "SONR_PATTERNS";
 export const WATERMARK_INDICATOR = "SONR_WATERMARK";
+export const SERIES_INDICATOR = "SONR_SERIES";
 export const VWAP_INDICATOR = "VWAP";
+
+/** Config for the custom series renderer (line/step/baseline/column/hlc/high_low). */
+export interface SeriesData {
+  style: "line" | "step" | "baseline" | "column" | "hlc" | "high_low";
+  up: string;
+  down: string;
+  neutral: string;
+  baseline?: number;
+}
 
 /** Background watermark content (the underlaid ticker + interval). */
 export interface WatermarkData {
@@ -228,6 +238,109 @@ export function registerSonrIndicators(): void {
         const subSize = titleSize * 0.48;
         ctx.font = `600 ${subSize}px ui-sans-serif, -apple-system, "Segoe UI", sans-serif`;
         ctx.fillText(wm.subtitle as string, cx, cy + subSize * 0.7);
+      }
+      ctx.restore();
+      return false;
+    },
+  });
+
+  // Custom series renderer (issue #33): draws line / step / baseline / column /
+  // HLC / high-low on the candle pane, with the native candles hidden (SonrChart
+  // sets a transparent "area" base when one of these styles is active). Config
+  // arrives via extendData; only the visible range is walked each frame.
+  registerIndicator<Record<string, never>, unknown, SeriesData>({
+    name: SERIES_INDICATOR,
+    shortName: "",
+    series: "price",
+    figures: [],
+    calc: (dataList) => dataList.map(() => ({})),
+    draw: ({ ctx, chart, bounding, xAxis, yAxis, indicator }) => {
+      const cfg = indicator.extendData as SeriesData | undefined;
+      if (!cfg || !cfg.style) return false;
+      const data = chart.getDataList();
+      const n = data.length;
+      if (n === 0) return false;
+      const range = chart.getVisibleRange();
+      const from = Math.max(0, (range?.from ?? 0) - 1);
+      const to = Math.min(n - 1, (range?.to ?? n - 1));
+      if (to < from) return false;
+
+      const x = (i: number) => xAxis.convertTimestampToPixel(data[i].timestamp);
+      const yv = (v: number) => yAxis.convertToPixel(v);
+      const top = bounding.top ?? 0;
+      const paneBottom = top + bounding.height;
+      const half = Math.max(1, chart.getBarSpace().gapBar) / 2;
+      const { up, down, neutral } = cfg;
+      // Colour a bar by its close vs the previous close (open on the first bar).
+      const dir = (i: number) => (data[i].close >= (i > 0 ? data[i - 1].close : data[i].open) ? up : down);
+
+      ctx.save();
+      if (cfg.style === "line" || cfg.style === "step") {
+        ctx.strokeStyle = neutral;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        let started = false;
+        for (let i = from; i <= to; i++) {
+          const px = x(i);
+          const py = yv(data[i].close);
+          if (!started) {
+            ctx.moveTo(px, py);
+            started = true;
+          } else if (cfg.style === "step") {
+            ctx.lineTo(px, yv(data[i - 1].close));
+            ctx.lineTo(px, py);
+          } else {
+            ctx.lineTo(px, py);
+          }
+        }
+        ctx.stroke();
+      } else if (cfg.style === "baseline") {
+        const base = cfg.baseline ?? data[from].close;
+        ctx.lineWidth = 1.5;
+        for (let i = from + 1; i <= to; i++) {
+          ctx.strokeStyle = (data[i - 1].close + data[i].close) / 2 >= base ? up : down;
+          ctx.beginPath();
+          ctx.moveTo(x(i - 1), yv(data[i - 1].close));
+          ctx.lineTo(x(i), yv(data[i].close));
+          ctx.stroke();
+        }
+        // Dashed reference line at the baseline.
+        const by = yv(base);
+        ctx.strokeStyle = neutral;
+        ctx.globalAlpha = 0.5;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x(from), by);
+        ctx.lineTo(x(to), by);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+      } else if (cfg.style === "column") {
+        for (let i = from; i <= to; i++) {
+          const px = x(i);
+          const py = yv(data[i].close);
+          ctx.fillStyle = dir(i);
+          ctx.fillRect(px - half, py, half * 2, paneBottom - py);
+        }
+      } else {
+        // hlc / high_low
+        ctx.lineWidth = 1.4;
+        for (let i = from; i <= to; i++) {
+          const px = x(i);
+          ctx.strokeStyle = dir(i);
+          ctx.beginPath();
+          ctx.moveTo(px, yv(data[i].high));
+          ctx.lineTo(px, yv(data[i].low));
+          ctx.stroke();
+          if (cfg.style === "hlc") {
+            const cy = yv(data[i].close);
+            ctx.beginPath();
+            ctx.moveTo(px, cy);
+            ctx.lineTo(px + half, cy);
+            ctx.stroke();
+          }
+        }
       }
       ctx.restore();
       return false;
