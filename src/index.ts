@@ -32,7 +32,10 @@ export {
   priceRangeLabel,
   riskRewardStats,
 } from "./shapes";
-export { themeStyles, PALETTE } from "./theme";
+export { themeStyles, resolveThemeStyles, registerTheme, getRegisteredTheme, PALETTE } from "./theme";
+export { getCSSCustomProperty, setCSSCustomProperty } from "./css";
+export { DEFAULT_LABELS, mergeLabels } from "./labels";
+export type { Labels } from "./labels";
 export {
   registerSonrIndicators,
   SESSION_INDICATOR,

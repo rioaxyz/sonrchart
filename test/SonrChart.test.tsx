@@ -83,6 +83,8 @@ vi.mock("klinecharts", () => ({
 
 import { SonrChart, type SonrChartHandle } from "../src/SonrChart";
 import { SESSION_INDICATOR, PATTERN_INDICATOR, SERIES_INDICATOR, WATERMARK_INDICATOR, DEFAULT_SESSION_COLORS } from "../src/indicators";
+import { registerTheme } from "../src/theme";
+import { utils } from "klinecharts";
 import type { DataSource } from "../src/types";
 
 const bars = [
@@ -749,5 +751,57 @@ describe("SonrChart — undo/redo tail truncation (#16)", () => {
     draw(); // new drawing after undo → redo tail discarded
     expect(ref.current!.canRedo()).toBe(false);
     expect(c._overlays.filter((o: any) => o.groupId === "sonr-user-drawing").length).toBe(2);
+  });
+});
+
+describe("SonrChart — named custom themes (#46)", () => {
+  const gridColorCall = (c: any) => c.setStyles.mock.calls.map((x: any[]) => x[0]?.grid?.horizontal?.color).filter(Boolean);
+
+  it("applies a registered theme's styles via setStyles", () => {
+    registerTheme("chart-neon", { grid: { horizontal: { color: "#00ffcc" } } });
+    render(<SonrChart symbol="A" dataSource={source()} theme="chart-neon" />);
+    expect(gridColorCall(lastChart())).toContain("#00ffcc");
+  });
+
+  it("applies an inline customThemes entry", () => {
+    render(<SonrChart symbol="A" dataSource={source()} theme="inline" customThemes={{ inline: { grid: { horizontal: { color: "#abc123" } } } }} />);
+    expect(gridColorCall(lastChart())).toContain("#abc123");
+  });
+
+  it("getTheme/setTheme drive the theme through the handle", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    expect(ref.current!.getTheme()).toBe("dark");
+    act(() => ref.current!.setTheme("light"));
+    expect(ref.current!.getTheme()).toBe("light");
+    // Switching to light re-applies the light grid color.
+    expect(gridColorCall(c)).toContain("#d8dee8");
+  });
+});
+
+describe("SonrChart — formatters (#46)", () => {
+  it("uses a host dateFormat for the crosshair pill", () => {
+    render(<SonrChart symbol="A" dataSource={source()} dateFormat="YYYY/MM/DD" />);
+    const fmt = lastChart().setFormatter.mock.calls.at(-1)![0];
+    (utils.formatDate as any).mockClear();
+    fmt.formatDate({ dateTimeFormat: {}, timestamp: 1000, template: "HH:mm", type: "crosshair" });
+    expect((utils.formatDate as any)).toHaveBeenCalledWith({}, 1000, "YYYY/MM/DD");
+  });
+
+  it("keeps the default date+time pill when no dateFormat is given", () => {
+    render(<SonrChart symbol="A" dataSource={source()} />);
+    const fmt = lastChart().setFormatter.mock.calls.at(-1)![0];
+    (utils.formatDate as any).mockClear();
+    fmt.formatDate({ dateTimeFormat: {}, timestamp: 1000, template: "HH:mm", type: "crosshair" });
+    // Default prepends the date to a time-only crosshair template.
+    expect((utils.formatDate as any)).toHaveBeenCalledWith({}, 1000, "YYYY-MM-DD HH:mm");
+  });
+
+  it("wires a host priceFormatter into formatBigNumber", () => {
+    const priceFormatter = (v: number) => `$${v.toFixed(2)}`;
+    render(<SonrChart symbol="A" dataSource={source()} priceFormatter={priceFormatter} />);
+    const fmt = lastChart().setFormatter.mock.calls.at(-1)![0];
+    expect(fmt.formatBigNumber(12.5)).toBe("$12.50");
   });
 });
