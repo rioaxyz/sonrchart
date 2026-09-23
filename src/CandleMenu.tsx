@@ -4,6 +4,7 @@ import type { CandleStyle } from "./types";
 import { ensureDefaultStyles } from "./defaultStyles";
 import { useDropdown } from "./useDropdown";
 import { CandleIcon } from "./icons";
+import { mergeLabels, type Labels } from "./labels";
 
 // A single-select dropdown for the candle rendering style (#1), driven by props
 // (like the interval control) rather than the chart ref — the host owns the
@@ -34,16 +35,22 @@ export function CandleMenu({
   onChange,
   options = DEFAULT_CANDLE_STYLES,
   className,
+  labels,
 }: {
   value?: CandleStyle;
   onChange?: (style: CandleStyle) => void;
   options?: CandleStyleOption[];
   className?: string;
+  labels?: Partial<Labels>;
 }) {
   useEffect(ensureDefaultStyles, []);
 
+  const L = mergeLabels(labels);
+  // Prefer an explicit label override for a style; else the option's own label.
+  const labelFor = (opt: CandleStyleOption) => L.candleStyles[opt.style] ?? opt.label;
   const { open, setOpen, toggle: toggleOpen, pos, triggerRef, panelRef } = useDropdown();
   const current = options.find((o) => o.style === value);
+  const currentLabel = current ? labelFor(current) : "Candles";
 
   const pick = (style: CandleStyle) => {
     onChange?.(style);
@@ -51,15 +58,15 @@ export function CandleMenu({
   };
 
   return (
-    <div className={className ?? "sonr-candle-menu"} role="group" aria-label="Candle type">
+    <div className={className ?? "sonr-candle-menu"} role="group" aria-label={L.candleType}>
       <button
         ref={triggerRef}
         type="button"
         className={`sonr-menu-trigger sonr-icon-trigger${open ? " open" : ""}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Candle type: ${current?.label ?? "Candles"}`}
-        title={`Candle type: ${current?.label ?? "Candles"}`}
+        aria-label={`${L.candleType}: ${currentLabel}`}
+        title={`${L.candleType}: ${currentLabel}`}
         onClick={toggleOpen}
       >
         <CandleIcon />
@@ -74,7 +81,7 @@ export function CandleMenu({
             ref={panelRef}
             className="sonr-menu-dropdown"
             role="menu"
-            aria-label="Candle type"
+            aria-label={L.candleType}
             style={{ position: "fixed", top: pos.top, left: pos.left }}
           >
             {options.map((opt) => {
@@ -91,7 +98,7 @@ export function CandleMenu({
                   <span className="sonr-menu-check" aria-hidden>
                     {on ? "✓" : ""}
                   </span>
-                  <span className="sonr-menu-label sonr-menu-label-wide">{opt.label}</span>
+                  <span className="sonr-menu-label sonr-menu-label-wide">{labelFor(opt)}</span>
                 </button>
               );
             })}

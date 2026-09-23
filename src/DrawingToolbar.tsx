@@ -6,6 +6,7 @@ import { DEFAULT_DRAWING_TOOLS, type DrawingToolOption } from "./drawings";
 import { ensureDefaultStyles } from "./defaultStyles";
 import { DrawIcon, ClearIcon, UndoIcon, RedoIcon, PencilIcon } from "./icons";
 import { useDropdown } from "./useDropdown";
+import { mergeLabels, type Labels } from "./labels";
 
 // Drop-in drawing chrome (issues #3, #13, #16): the line/drawing tools collapse
 // into a single dropdown (there are a lot of them), with a magnet-mode toggle,
@@ -31,6 +32,7 @@ export function DrawingToolbar({
   showClear = true,
   showMagnet = true,
   showHistory = true,
+  labels,
 }: {
   chartRef: RefObject<SonrChartHandle>;
   tools?: DrawingToolOption[];
@@ -38,8 +40,12 @@ export function DrawingToolbar({
   showClear?: boolean;
   showMagnet?: boolean;
   showHistory?: boolean;
+  labels?: Partial<Labels>;
 }) {
   useEffect(ensureDefaultStyles, []);
+  const L = mergeLabels(labels);
+  // A tool's label override (if any) wins over the option's built-in label.
+  const labelFor = (t: DrawingToolOption) => L.drawingToolLabels[t.tool] ?? t.label;
 
   const [active, setActive] = useState<DrawingTool | null>(null);
   const [magnet, setMagnetState] = useState<"off" | "weak" | "strong">("off");
@@ -87,10 +93,11 @@ export function DrawingToolbar({
     setOpen(false);
   };
 
-  const activeLabel = tools.find((t) => t.tool === active)?.label;
+  const activeOpt = tools.find((t) => t.tool === active);
+  const activeLabel = activeOpt ? labelFor(activeOpt) : undefined;
 
   return (
-    <div className={className ?? "sonr-drawing-toolbar"} role="group" aria-label="Drawing tools">
+    <div className={className ?? "sonr-drawing-toolbar"} role="group" aria-label={L.drawingTools}>
       {/* Tool palette — collapsed into one dropdown. */}
       <div className="sonr-draw-menu">
         <button
@@ -99,8 +106,8 @@ export function DrawingToolbar({
           className={`sonr-menu-trigger sonr-icon-trigger${open ? " open" : ""}${active ? " on" : ""}`}
           aria-haspopup="menu"
           aria-expanded={open}
-          aria-label={activeLabel ? `Drawing tools: ${activeLabel}` : "Drawing tools"}
-          title={activeLabel ? `Drawing tool: ${activeLabel}` : "Drawing tools"}
+          aria-label={activeLabel ? `${L.drawingTools}: ${activeLabel}` : L.drawingTools}
+          title={activeLabel ? `${L.drawingTools}: ${activeLabel}` : L.drawingTools}
           onClick={toggleOpen}
         >
           {active ? <DrawIcon tool={active} /> : <PencilIcon />}
@@ -115,7 +122,7 @@ export function DrawingToolbar({
               ref={panelRef}
               className="sonr-menu-dropdown"
               role="menu"
-              aria-label="Drawing tools"
+              aria-label={L.drawingTools}
               style={{ position: "fixed", top: pos.top, left: pos.left }}
             >
               {tools.map((t) => {
@@ -135,7 +142,7 @@ export function DrawingToolbar({
                     <span className="sonr-draw-opt-icon" aria-hidden>
                       <DrawIcon tool={t.tool} />
                     </span>
-                    <span className="sonr-menu-label sonr-menu-label-wide">{t.label}</span>
+                    <span className="sonr-menu-label sonr-menu-label-wide">{labelFor(t)}</span>
                   </button>
                 );
               })}
@@ -148,10 +155,10 @@ export function DrawingToolbar({
           type="button"
           className={`sonr-draw-btn${magnet !== "off" ? " on" : ""}`}
           aria-pressed={magnet !== "off"}
-          title={`Magnet: ${magnet}${magnet === "off" ? " — snap new drawings to nearby OHLC" : ""} (click to cycle)`}
+          title={`${L.magnet}: ${magnet}${magnet === "off" ? " — snap new drawings to nearby OHLC" : ""} (click to cycle)`}
           onClick={() => chartRef.current?.setMagnet(NEXT_MAGNET[magnet])}
         >
-          Magnet{magnet !== "off" ? ` · ${magnet}` : ""}
+          {L.magnet}{magnet !== "off" ? ` · ${magnet}` : ""}
         </button>
       )}
       {showHistory && (
@@ -159,8 +166,8 @@ export function DrawingToolbar({
           <button
             type="button"
             className="sonr-draw-btn sonr-icon-btn"
-            title="Undo"
-            aria-label="Undo"
+            title={L.undo}
+            aria-label={L.undo}
             disabled={!canUndo}
             onClick={() => chartRef.current?.undo()}
           >
@@ -169,8 +176,8 @@ export function DrawingToolbar({
           <button
             type="button"
             className="sonr-draw-btn sonr-icon-btn"
-            title="Redo"
-            aria-label="Redo"
+            title={L.redo}
+            aria-label={L.redo}
             disabled={!canRedo}
             onClick={() => chartRef.current?.redo()}
           >
@@ -183,7 +190,7 @@ export function DrawingToolbar({
           type="button"
           className="sonr-draw-btn sonr-draw-clear sonr-icon-btn"
           title="Remove all drawings"
-          aria-label="Clear drawings"
+          aria-label={L.clear}
           onClick={() => chartRef.current?.clearDrawings()}
         >
           <ClearIcon />

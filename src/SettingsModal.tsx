@@ -4,6 +4,7 @@ import type { SonrChartHandle } from "./SonrChart";
 import type { BrushStyle, BrushTool } from "./brush";
 import type { WatermarkOptions } from "./types";
 import { ensureDefaultStyles } from "./defaultStyles";
+import { mergeLabels, type Labels } from "./labels";
 
 // A self-contained chart settings dialog (one modal, sections mirroring the
 // toolbar): Candles (bullish/bearish colors), Indicators (per-active-indicator
@@ -13,12 +14,7 @@ import { ensureDefaultStyles } from "./defaultStyles";
 
 type Section = "candles" | "indicators" | "grid" | "drawing";
 
-const SECTIONS: { key: Section; label: string }[] = [
-  { key: "candles", label: "Candles" },
-  { key: "indicators", label: "Indicators" },
-  { key: "grid", label: "Grid & Crosshair" },
-  { key: "drawing", label: "Drawing" },
-];
+const SECTION_KEYS: Section[] = ["candles", "indicators", "grid", "drawing"];
 
 const BRUSH_TOOLS: { tool: BrushTool; label: string }[] = [
   { tool: "brush", label: "Brush" },
@@ -61,12 +57,15 @@ export function SettingsModal({
   chartRef,
   open,
   onClose,
+  labels,
 }: {
   chartRef: RefObject<SonrChartHandle>;
   open: boolean;
   onClose: () => void;
+  labels?: Partial<Labels>;
 }) {
   useEffect(ensureDefaultStyles, []);
+  const L = mergeLabels(labels);
 
   const [section, setSection] = useState<Section>("candles");
   const [candleUp, setCandleUp] = useState("#35c98d");
@@ -180,25 +179,25 @@ export function SettingsModal({
   };
 
   return createPortal(
-    <div className="sonr-set-overlay" role="dialog" aria-modal="true" aria-label="Chart settings" onMouseDown={onClose}>
+    <div className="sonr-set-overlay" role="dialog" aria-modal="true" aria-label={L.settings} onMouseDown={onClose}>
       <div className="sonr-set-panel" onMouseDown={(e) => e.stopPropagation()}>
         <div className="sonr-set-head">
-          <span className="sonr-set-title">Chart settings</span>
+          <span className="sonr-set-title">{L.settings}</span>
           <button type="button" className="sonr-set-close" aria-label="Close settings" onClick={onClose}>
             ✕
           </button>
         </div>
         <div className="sonr-set-body">
           <nav className="sonr-set-nav" aria-label="Settings sections">
-            {SECTIONS.map((s) => (
+            {SECTION_KEYS.map((key) => (
               <button
-                key={s.key}
+                key={key}
                 type="button"
-                className={`sonr-set-navbtn${section === s.key ? " on" : ""}`}
-                aria-current={section === s.key}
-                onClick={() => setSection(s.key)}
+                className={`sonr-set-navbtn${section === key ? " on" : ""}`}
+                aria-current={section === key}
+                onClick={() => setSection(key)}
               >
-                {s.label}
+                {L.settingsSections[key]}
               </button>
             ))}
           </nav>
