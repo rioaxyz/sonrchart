@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, act } from "@testing-library/react";
+import { render, act, screen, fireEvent } from "@testing-library/react";
 import { createRef } from "react";
 
 // A stateful KLineChart mock: init() returns a spy-backed chart that tracks
@@ -521,6 +521,116 @@ describe("SonrChart — undo/redo (#16)", () => {
     render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
     act(() => ref.current!.undo());
     expect(ref.current!.canUndo()).toBe(false);
+  });
+});
+
+describe("SonrChart — keyboard shortcuts (#14)", () => {
+  const GROUP = "sonr-user-drawing";
+  const drawings = (c: any) => c._overlays.filter((o: any) => o.groupId === GROUP);
+  const chartEl = () => screen.getByRole("application");
+
+  it("makes the container focusable + labeled for keyboard users", () => {
+    render(<SonrChart symbol="A" dataSource={source()} />);
+    const el = chartEl();
+    expect(el.getAttribute("tabindex")).toBe("0");
+    expect(el).toHaveAttribute("aria-label", "Sonr chart");
+  });
+
+  it("Escape cancels an armed drawing", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    act(() => ref.current!.startDrawing("segment"));
+    expect(ref.current!.activeDrawing()).toBe("segment");
+    fireEvent.keyDown(chartEl(), { key: "Escape" });
+    expect(ref.current!.activeDrawing()).toBeNull();
+    expect(drawings(lastChart()).length).toBe(0);
+  });
+
+  it("Cmd/Ctrl+Z undoes and Shift+Z redoes drawings", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    const draw = () => { act(() => ref.current!.startDrawing("segment")); c._overlays.at(-1).onDrawEnd({}); };
+    draw();
+    draw();
+    expect(drawings(c).length).toBe(2);
+    fireEvent.keyDown(chartEl(), { key: "z", metaKey: true });
+    expect(drawings(c).length).toBe(1);
+    fireEvent.keyDown(chartEl(), { key: "z", metaKey: true, shiftKey: true });
+    expect(drawings(c).length).toBe(2);
+  });
+
+  it("Ctrl+Y also redoes", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment"));
+    c._overlays.at(-1).onDrawEnd({});
+    fireEvent.keyDown(chartEl(), { key: "z", ctrlKey: true }); // undo → 0
+    expect(drawings(c).length).toBe(0);
+    fireEvent.keyDown(chartEl(), { key: "y", ctrlKey: true }); // redo → 1
+    expect(drawings(c).length).toBe(1);
+  });
+
+  it("Delete clears drawings when no tool is armed", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment"));
+    c._overlays.at(-1).onDrawEnd({}); // finished → not armed
+    expect(drawings(c).length).toBe(1);
+    fireEvent.keyDown(chartEl(), { key: "Delete" });
+    expect(c.removeOverlay).toHaveBeenCalledWith({ groupId: GROUP });
+    expect(drawings(c).length).toBe(0);
+  });
+
+  it("Delete does NOT clear while a tool is armed (but still notifies onShortcut)", () => {
+    const onShortcut = vi.fn();
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} onShortcut={onShortcut} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment")); // armed, not finished
+    fireEvent.keyDown(chartEl(), { key: "Backspace" });
+    expect(c.removeOverlay).not.toHaveBeenCalledWith({ groupId: GROUP });
+    expect(onShortcut).toHaveBeenCalledWith("delete", expect.anything());
+  });
+
+  it("calls onShortcut for every recognized shortcut", () => {
+    const onShortcut = vi.fn();
+    render(<SonrChart symbol="A" dataSource={source()} onShortcut={onShortcut} />);
+    fireEvent.keyDown(chartEl(), { key: "Escape" });
+    fireEvent.keyDown(chartEl(), { key: "z", metaKey: true });
+    expect(onShortcut).toHaveBeenCalledWith("escape", expect.anything());
+    expect(onShortcut).toHaveBeenCalledWith("undo", expect.anything());
+  });
+
+  it("ignores shortcuts typed into an input (does not hijack typing)", () => {
+    const onShortcut = vi.fn();
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} onShortcut={onShortcut} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment"));
+    c._overlays.at(-1).onDrawEnd({});
+    // An input inside the chart (e.g. a symbol search) must keep its keys.
+    const input = document.createElement("input");
+    chartEl().appendChild(input);
+    fireEvent.keyDown(input, { key: "Backspace" });
+    fireEvent.keyDown(input, { key: "z", metaKey: true });
+    expect(onShortcut).not.toHaveBeenCalled();
+    expect(drawings(c).length).toBe(1); // untouched
+  });
+
+  it("does nothing when keyboard is disabled", () => {
+    const onShortcut = vi.fn();
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} keyboard={false} onShortcut={onShortcut} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment"));
+    c._overlays.at(-1).onDrawEnd({});
+    fireEvent.keyDown(chartEl(), { key: "z", metaKey: true });
+    fireEvent.keyDown(chartEl(), { key: "Delete" });
+    expect(onShortcut).not.toHaveBeenCalled();
+    expect(drawings(c).length).toBe(1);
   });
 });
 

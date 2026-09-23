@@ -7,6 +7,7 @@ import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type Compare
 import { asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
 import { USER_DRAWING_GROUP } from "./drawings";
 import { BRUSH_OVERLAY, brushStyle, isBrushTool, registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
+import { isEditableTarget, resolveShortcut, type ShortcutAction } from "./keyboard";
 import type {
   CandleStyle,
   ChartState,
@@ -68,6 +69,13 @@ export interface SonrChartProps {
   compareSeries?: CompareSpec[];
   /** How many bars to request on load. Default 500. */
   barCount?: number;
+  /** Enable built-in keyboard shortcuts when the chart is focused. (#14)
+   *  Default true. See `onShortcut` to observe/extend them. */
+  keyboard?: boolean;
+  /** Called for every recognized shortcut ("escape" | "undo" | "redo" |
+   *  "delete") while the chart is focused, even when the built-in also runs —
+   *  a host can observe or extend the behavior. (#14) */
+  onShortcut?: (action: string, e: KeyboardEvent) => void;
   onReady?: (chart: Chart) => void;
   /** Fired when resolveSymbol returns null for the requested ticker. (#8) */
   onSymbolError?: (symbol: string) => void;
@@ -297,6 +305,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     candleStyle: candleStyleProp,
     compareSeries,
     barCount = 500,
+    keyboard = true,
+    onShortcut,
     onReady,
     onSymbolError,
     className,
@@ -306,6 +316,11 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
 ) {
   const elRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<Chart | null>(null);
+  // Captured imperative handle + latest onShortcut, so the (stable) keyboard
+  // listener can drive the same operations the host uses. (#14)
+  const handleRef = useRef<SonrChartHandle | null>(null);
+  const onShortcutRef = useRef(onShortcut);
+  onShortcutRef.current = onShortcut;
   const idRef = useRef(`sonrchart-${++_seq}`);
   const overlayIds = useRef<string[]>([]);
   // Magnet mode. Prop-seeded, but a toolbar toggle can override it imperatively;
@@ -548,7 +563,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
 
   useImperativeHandle(
     ref,
-    () => ({
+    (): SonrChartHandle => (handleRef.current = {
       chart: () => chartRef.current,
       addIndicator: (i) => createIndicator(asSpec(i)),
       removeIndicator: (name) => {
@@ -672,6 +687,42 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  // Keyboard shortcuts (#14). The listener lives on the chart container, so it
+  // only fires while focus is within the chart — global typing (symbol search,
+  // settings) is never hijacked. Every recognized shortcut notifies the host
+  // via `onShortcut`; the built-in runs too (delete is gated on no armed tool).
+  useEffect(() => {
+    const el = elRef.current;
+    if (!el || !keyboard) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isEditableTarget(e.target)) return; // never hijack an input/typing
+      const action: ShortcutAction | null = resolveShortcut(e);
+      if (!action) return;
+      // Let the host observe/extend first, even when a built-in also handles it.
+      onShortcutRef.current?.(action, e);
+      const api = handleRef.current;
+      if (!api) return;
+      if (action === "escape") {
+        api.cancelDrawing();
+      } else if (action === "undo") {
+        api.undo();
+        e.preventDefault();
+      } else if (action === "redo") {
+        api.redo();
+        e.preventDefault();
+      } else if (action === "delete") {
+        // Clear only when no tool is armed — Escape cancels an armed draw, so
+        // Delete/Backspace here removes the finished user drawings.
+        if (!api.activeDrawing()) {
+          api.clearDrawings();
+          e.preventDefault();
+        }
+      }
+    };
+    el.addEventListener("keydown", onKeyDown);
+    return () => el.removeEventListener("keydown", onKeyDown);
+  }, [keyboard]);
 
   // Create the chart, wire the data loader, resolve + load the symbol.
   useEffect(() => {
@@ -932,5 +983,14 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [priceLines, orderLines]);
 
-  return <div ref={elRef} className={className} style={{ width: "100%", height: "100%", ...style }} />;
+  return (
+    <div
+      ref={elRef}
+      tabIndex={0}
+      role="application"
+      aria-label="Sonr chart"
+      className={className}
+      style={{ width: "100%", height: "100%", ...style }}
+    />
+  );
 });
