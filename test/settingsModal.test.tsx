@@ -5,7 +5,7 @@ import { createRef } from "react";
 import { SettingsModal } from "../src/SettingsModal";
 import type { SonrChartHandle } from "../src/SonrChart";
 
-function fakeChart() {
+function fakeChart(calcParamsByName: Record<string, number[]> = {}) {
   return {
     getStyles: () => ({
       candle: { bar: { upColor: "#35c98d", downColor: "#ff6a76" } },
@@ -14,6 +14,9 @@ function fakeChart() {
     }),
     setStyles: vi.fn(),
     overrideIndicator: vi.fn(),
+    getIndicators: vi.fn(({ name }: { name: string }) =>
+      calcParamsByName[name] ? [{ name, calcParams: calcParamsByName[name] }] : [],
+    ),
   };
 }
 
@@ -57,6 +60,32 @@ describe("SettingsModal (#settings)", () => {
     expect(chart.overrideIndicator).toHaveBeenCalledWith(
       expect.objectContaining({ name: "MA", styles: expect.objectContaining({ lines: expect.any(Array) }) }),
     );
+  });
+
+  it("seeds indicator inputs from calcParams and applies them via overrideIndicator", async () => {
+    const chart = fakeChart({ MACD: [12, 26, 9] });
+    render(<SettingsModal chartRef={ref(handleWith(chart, ["MACD"]))} open onClose={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Indicators" }));
+    // Three numeric inputs seeded from calcParams.
+    const first = screen.getByLabelText("MACD input 1") as HTMLInputElement;
+    const second = screen.getByLabelText("MACD input 2") as HTMLInputElement;
+    const third = screen.getByLabelText("MACD input 3") as HTMLInputElement;
+    expect(first.value).toBe("12");
+    expect(second.value).toBe("26");
+    expect(third.value).toBe("9");
+    // Editing one param applies the full array through overrideIndicator.
+    fireEvent.change(second, { target: { value: "30" } });
+    expect(chart.overrideIndicator).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "MACD", calcParams: [12, 30, 9] }),
+    );
+  });
+
+  it("shows only a color picker for indicators without calcParams", async () => {
+    const chart = fakeChart(); // getIndicators returns [] → no params
+    render(<SettingsModal chartRef={ref(handleWith(chart, ["VOL"]))} open onClose={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Indicators" }));
+    expect(screen.getByText("VOL")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/VOL input/)).toBeNull();
   });
 
   it("toggles the watermark from the Grid section when wired", async () => {
