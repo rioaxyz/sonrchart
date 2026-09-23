@@ -11,13 +11,14 @@ import { ensureDefaultStyles } from "./defaultStyles";
 // handle's raw chart() surface, so no host wiring is required — drop it in with a
 // gear button (ChartToolbar does this) or render it yourself.
 
-type Section = "candles" | "indicators" | "grid" | "drawing";
+type Section = "candles" | "indicators" | "grid" | "drawing" | "drawings";
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: "candles", label: "Candles" },
   { key: "indicators", label: "Indicators" },
   { key: "grid", label: "Grid & Crosshair" },
   { key: "drawing", label: "Drawing" },
+  { key: "drawings", label: "Drawings" },
 ];
 
 const BRUSH_TOOLS: { tool: BrushTool; label: string }[] = [
@@ -82,6 +83,11 @@ export function SettingsModal({
     brush: { color: "#e6ebe9", size: 2 },
     highlighter: { color: "rgba(245,214,66,0.35)", size: 14 },
   });
+  // Drawings management (#35): lock/hide all + named templates.
+  const [drawingsLocked, setDrawingsLocked] = useState(false);
+  const [drawingsHidden, setDrawingsHidden] = useState(false);
+  const [templates, setTemplates] = useState<string[]>([]);
+  const [templateName, setTemplateName] = useState("");
 
   // Seed from the chart's current styles each time the dialog opens.
   useEffect(() => {
@@ -120,6 +126,13 @@ export function SettingsModal({
     };
     readBrush();
     const unsubBrush = chartRef.current?.subscribeBrush?.(readBrush);
+    // Drawings management state (#35): lock/hide + template list.
+    const h = chartRef.current;
+    setDrawingsLocked(h?.getDrawingsLocked?.() ?? false);
+    setDrawingsHidden(!(h?.getDrawingsVisible?.() ?? true));
+    const readTemplates = () => setTemplates(h?.listDrawingTemplates?.() ?? []);
+    readTemplates();
+    const unsubTpl = h?.subscribeDrawingTemplates?.(readTemplates);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
@@ -128,6 +141,7 @@ export function SettingsModal({
       document.removeEventListener("keydown", onKey);
       unsubWm?.();
       unsubBrush?.();
+      unsubTpl?.();
     };
   }, [open, chartRef, onClose]);
 
@@ -359,6 +373,77 @@ export function SettingsModal({
                     </div>
                   );
                 })}
+              </>
+            )}
+            {section === "drawings" && (
+              <>
+                <p className="sonr-set-note">Manage all drawings at once, or save the current set as a reusable template.</p>
+                <Row label="Lock all drawings">
+                  <input
+                    type="checkbox"
+                    checked={drawingsLocked}
+                    onChange={(e) => {
+                      setDrawingsLocked(e.target.checked);
+                      chartRef.current?.setDrawingsLocked?.(e.target.checked);
+                    }}
+                  />
+                </Row>
+                <Row label="Hide all drawings">
+                  <input
+                    type="checkbox"
+                    checked={drawingsHidden}
+                    onChange={(e) => {
+                      setDrawingsHidden(e.target.checked);
+                      chartRef.current?.setDrawingsVisible?.(!e.target.checked);
+                    }}
+                  />
+                </Row>
+                <button type="button" className="sonr-tb-btn sonr-set-btn" onClick={() => chartRef.current?.cloneLastDrawing?.()}>
+                  Clone last drawing
+                </button>
+                <div className="sonr-set-subhead">Templates</div>
+                <div className="sonr-set-tpl-save">
+                  <input
+                    type="text"
+                    className="sonr-search-input"
+                    placeholder="Template name"
+                    aria-label="Template name"
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="sonr-tb-btn sonr-set-btn"
+                    disabled={!templateName.trim()}
+                    onClick={() => {
+                      const name = templateName.trim();
+                      if (!name) return;
+                      chartRef.current?.saveDrawingTemplate?.(name);
+                      setTemplateName("");
+                    }}
+                  >
+                    Save
+                  </button>
+                </div>
+                {templates.length === 0 && <p className="sonr-set-empty">No saved templates.</p>}
+                {templates.map((name) => (
+                  <div key={name} className="sonr-set-tpl-row">
+                    <span className="sonr-set-label">{name}</span>
+                    <span className="sonr-set-tpl-actions">
+                      <button type="button" className="sonr-tb-btn sonr-set-btn" onClick={() => chartRef.current?.applyDrawingTemplate?.(name)}>
+                        Apply
+                      </button>
+                      <button
+                        type="button"
+                        className="sonr-tb-btn sonr-set-btn"
+                        aria-label={`Delete ${name}`}
+                        onClick={() => chartRef.current?.deleteDrawingTemplate?.(name)}
+                      >
+                        Delete
+                      </button>
+                    </span>
+                  </div>
+                ))}
               </>
             )}
           </div>

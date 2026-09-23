@@ -13,6 +13,8 @@ export { ToolbarButton } from "./ToolbarButton";
 export { ensureDefaultStyles } from "./defaultStyles";
 export { DEFAULT_DRAWING_TOOLS, USER_DRAWING_GROUP } from "./drawings";
 export type { DrawingToolOption } from "./drawings";
+export { DrawingTemplateStore } from "./drawingTemplates";
+export type { DrawingSnapshot, DrawingSnapshotItem } from "./drawingTemplates";
 export { downloadSnapshot } from "./snapshot";
 export { toHeikinAshi } from "./candles";
 export { BRUSH_OVERLAY } from "./brush";

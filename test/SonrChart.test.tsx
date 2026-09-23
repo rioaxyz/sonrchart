@@ -49,6 +49,14 @@ const h = vi.hoisted(() => {
         else if (f?.id) chart._overlays = chart._overlays.filter((o: any) => o.id !== f.id);
         return true;
       }),
+      overrideOverlay: vi.fn((o: any) => {
+        const { id, groupId, name, ...rest } = o ?? {};
+        for (const ov of chart._overlays) {
+          const match = (id && ov.id === id) || (groupId && ov.groupId === groupId) || (name && ov.name === name) || (!id && !groupId && !name);
+          if (match) Object.assign(ov, rest);
+        }
+        return true;
+      }),
     };
     charts.push(chart);
     return chart;
@@ -319,6 +327,100 @@ describe("SonrChart — drawing tools & magnet (#3, #13)", () => {
     act(() => ref.current!.startDrawing("segment"));
     act(() => c._overlays.at(-1).onDrawEnd({}));
     expect(ref.current!.activeDrawing()).toBeNull();
+  });
+});
+
+describe("SonrChart — drawing management tooling (#35)", () => {
+  it("lock/hide all call overrideOverlay on the drawing group and mirror the state", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    // A placed drawing to override.
+    act(() => ref.current!.startDrawing("segment"));
+    act(() => c._overlays.at(-1).onDrawEnd({}));
+
+    expect(ref.current!.getDrawingsLocked()).toBe(false);
+    expect(ref.current!.getDrawingsVisible()).toBe(true);
+
+    act(() => ref.current!.setDrawingsLocked(true));
+    expect(ref.current!.getDrawingsLocked()).toBe(true);
+    expect(c.overrideOverlay).toHaveBeenCalledWith(expect.objectContaining({ groupId: "sonr-user-drawing", lock: true }));
+    expect(c._overlays.find((o: any) => o.name === "segment").lock).toBe(true);
+
+    act(() => ref.current!.setDrawingsVisible(false));
+    expect(ref.current!.getDrawingsVisible()).toBe(false);
+    expect(c.overrideOverlay).toHaveBeenCalledWith(expect.objectContaining({ groupId: "sonr-user-drawing", visible: false }));
+    expect(c._overlays.find((o: any) => o.name === "segment").visible).toBe(false);
+  });
+
+  it("new drawings inherit the current lock/hide state", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.setDrawingsLocked(true));
+    act(() => ref.current!.setDrawingsVisible(false));
+    act(() => ref.current!.startDrawing("segment"));
+    act(() => c._overlays.at(-1).onDrawEnd({}));
+    const seg = c._overlays.find((o: any) => o.name === "segment");
+    expect(seg.lock).toBe(true);
+    expect(seg.visible).toBe(false);
+  });
+
+  it("saves a drawing template and re-applies it, restoring the overlays", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment"));
+    c._overlays.find((o: any) => o.name === "segment").points = [{ value: 1 }, { value: 2 }];
+    act(() => c._overlays.at(-1).onDrawEnd({}));
+
+    act(() => ref.current!.saveDrawingTemplate("setup"));
+    expect(ref.current!.listDrawingTemplates()).toEqual(["setup"]);
+
+    // Clear the board, then apply the template back.
+    act(() => ref.current!.clearDrawings());
+    expect(c._overlays.filter((o: any) => o.groupId === "sonr-user-drawing").length).toBe(0);
+    act(() => ref.current!.applyDrawingTemplate("setup"));
+    const restored = c._overlays.filter((o: any) => o.groupId === "sonr-user-drawing");
+    expect(restored.length).toBe(1);
+    expect(restored[0].name).toBe("segment");
+    expect(restored[0].points).toEqual([{ value: 1 }, { value: 2 }]);
+  });
+
+  it("deletes a template and notifies subscribers", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const cb = vi.fn();
+    act(() => { ref.current!.subscribeDrawingTemplates(cb); });
+    act(() => ref.current!.saveDrawingTemplate("a"));
+    expect(cb).toHaveBeenCalled();
+    expect(ref.current!.listDrawingTemplates()).toEqual(["a"]);
+    act(() => ref.current!.deleteDrawingTemplate("a"));
+    expect(ref.current!.listDrawingTemplates()).toEqual([]);
+  });
+
+  it("cloneLastDrawing duplicates the most-recent user overlay", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment"));
+    c._overlays.find((o: any) => o.name === "segment").points = [{ value: 3 }, { value: 4 }];
+    act(() => c._overlays.at(-1).onDrawEnd({}));
+    expect(c._overlays.filter((o: any) => o.name === "segment").length).toBe(1);
+
+    act(() => ref.current!.cloneLastDrawing());
+    const segs = c._overlays.filter((o: any) => o.name === "segment");
+    expect(segs.length).toBe(2);
+    expect(segs[1].points).toEqual([{ value: 3 }, { value: 4 }]);
+    expect(segs[1].groupId).toBe("sonr-user-drawing");
+  });
+
+  it("cloneLastDrawing is a no-op with no drawings", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.cloneLastDrawing());
+    expect(c._overlays.filter((o: any) => o.groupId === "sonr-user-drawing").length).toBe(0);
   });
 });
 
