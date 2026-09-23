@@ -26,6 +26,15 @@ export interface SymbolInfo {
   volumePrecision?: number;
 }
 
+/** One hit from a symbol search (issue #37). Only `symbol` is required; the
+ *  datafeed supplies whatever else it knows to help the user disambiguate. */
+export interface SymbolSearchResult {
+  symbol: string;
+  name?: string;
+  exchange?: string;
+  type?: string;
+}
+
 /**
  * How sonrchart gets its data. This is the whole integration seam: the
  * component knows nothing about where bars come from, so any host — a REST
@@ -45,6 +54,12 @@ export interface DataSource {
    * and skips loading), or a SymbolInfo to set precision/name.
    */
   resolveSymbol?(symbol: string): Promise<SymbolInfo | null>;
+  /**
+   * Optional symbol search (issue #37). Given a partial query, return matching
+   * symbols for a search-as-you-type dialog. Omit if the datafeed can't search
+   * (the SymbolSearch component degrades gracefully).
+   */
+  searchSymbols?(query: string): Promise<SymbolSearchResult[]>;
 }
 
 /** Price-scale configuration (issue #12). */

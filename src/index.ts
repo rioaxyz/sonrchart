@@ -8,6 +8,7 @@ export type { CandleStyleOption } from "./CandleMenu";
 export { PriceScaleMenu } from "./PriceScaleMenu";
 export { SettingsModal } from "./SettingsModal";
 export { ChartToolbar } from "./ChartToolbar";
+export { SymbolSearch } from "./SymbolSearch";
 export { ToolbarButton } from "./ToolbarButton";
 export { ensureDefaultStyles } from "./defaultStyles";
 export { DEFAULT_DRAWING_TOOLS, USER_DRAWING_GROUP } from "./drawings";
@@ -40,5 +41,6 @@ export type {
   PriceScale,
   SessionTint,
   SymbolInfo,
+  SymbolSearchResult,
   Theme,
 } from "./types";

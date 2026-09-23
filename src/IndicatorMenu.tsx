@@ -19,15 +19,35 @@ export interface IndicatorOption {
 }
 
 export const DEFAULT_INDICATOR_OPTIONS: IndicatorOption[] = [
+  // Price-pane overlays.
   { name: "MA", label: "Moving Average", pane: "main" },
   { name: "EMA", label: "Exp. Moving Average", pane: "main" },
+  { name: "SMA", label: "Smoothed Moving Average", pane: "main" },
+  { name: "BBI", label: "Bull & Bear Index", pane: "main" },
   { name: "BOLL", label: "Bollinger Bands", pane: "main" },
-  { name: "VWAP", label: "Volume Weighted Avg Price", pane: "main" },
   { name: "SAR", label: "Parabolic SAR", pane: "main" },
+  { name: "DMA", label: "Difference of MA", pane: "main" },
+  { name: "VWAP", label: "Volume Weighted Avg Price", pane: "main" },
+  // Sub-pane oscillators & volume studies.
   { name: "VOL", label: "Volume", pane: "new" },
   { name: "MACD", label: "MACD", pane: "new" },
-  { name: "RSI", label: "RSI", pane: "new" },
-  { name: "KDJ", label: "KDJ", pane: "new" },
+  { name: "RSI", label: "Relative Strength Index", pane: "new" },
+  { name: "KDJ", label: "KDJ Stochastic", pane: "new" },
+  { name: "BIAS", label: "Bias", pane: "new" },
+  { name: "BRAR", label: "BRAR", pane: "new" },
+  { name: "CCI", label: "Commodity Channel Index", pane: "new" },
+  { name: "DMI", label: "Directional Movement Index", pane: "new" },
+  { name: "CR", label: "CR Energy", pane: "new" },
+  { name: "PSY", label: "Psychological Line", pane: "new" },
+  { name: "TRIX", label: "TRIX", pane: "new" },
+  { name: "OBV", label: "On-Balance Volume", pane: "new" },
+  { name: "VR", label: "Volume Ratio", pane: "new" },
+  { name: "WR", label: "Williams %R", pane: "new" },
+  { name: "MTM", label: "Momentum", pane: "new" },
+  { name: "EMV", label: "Ease of Movement", pane: "new" },
+  { name: "ROC", label: "Rate of Change", pane: "new" },
+  { name: "PVT", label: "Price Volume Trend", pane: "new" },
+  { name: "AO", label: "Awesome Oscillator", pane: "new" },
 ];
 
 export function IndicatorMenu({
