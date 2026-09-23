@@ -31,6 +31,44 @@ export function brushStyle(tool: BrushTool, theme: Theme): BrushStyle {
   return { color: theme === "dark" ? "#e6ebe9" : "#1a1f29", size: 2 };
 }
 
+type XY = { x: number; y: number };
+
+// Resample a captured stroke into a smooth curve. Continuous capture can leave
+// sparse/jittery points, so we de-jitter (drop points <2px apart) then run a
+// Catmull-Rom spline through the survivors (~8 samples/segment). The spline
+// passes through the original points, so the stroke stays faithful but reads as
+// a smooth TradingView-style curve instead of straight segments. Runs in screen
+// space each frame, so it re-smooths correctly on pan/zoom.
+function catmull(p0: XY, p1: XY, p2: XY, p3: XY, t: number): XY {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return {
+    x: 0.5 * (2 * p1.x + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+    y: 0.5 * (2 * p1.y + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3),
+  };
+}
+export function smoothStroke(pts: XY[]): XY[] {
+  if (pts.length < 3) return pts;
+  const p: XY[] = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const a = p[p.length - 1];
+    const b = pts[i];
+    if ((b.x - a.x) ** 2 + (b.y - a.y) ** 2 >= 4) p.push(b);
+  }
+  if (p.length < 3) return p;
+  const out: XY[] = [];
+  const SAMPLES = 8;
+  for (let i = 0; i < p.length - 1; i++) {
+    const p0 = p[i - 1] ?? p[i];
+    const p1 = p[i];
+    const p2 = p[i + 1];
+    const p3 = p[i + 2] ?? p[i + 1];
+    for (let s = 0; s < SAMPLES; s++) out.push(catmull(p0, p1, p2, p3, s / SAMPLES));
+  }
+  out.push(p[p.length - 1]);
+  return out;
+}
+
 let _registered = false;
 
 export function registerBrushOverlay(): void {
@@ -50,8 +88,10 @@ export function registerBrushOverlay(): void {
       return [
         {
           type: "line",
-          attrs: { coordinates },
-          styles: { style: "solid", smooth: true, color: ext.color, size: ext.size },
+          attrs: { coordinates: smoothStroke(coordinates) },
+          // smooth beziers the path; round caps/joins remove the sharp,
+          // pixelated corners so it reads like a TradingView brush.
+          styles: { style: "solid", smooth: true, lineCap: "round", lineJoin: "round", color: ext.color, size: ext.size },
         },
       ];
     },
