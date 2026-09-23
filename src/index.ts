@@ -15,6 +15,7 @@ export { DEFAULT_DRAWING_TOOLS, USER_DRAWING_GROUP } from "./drawings";
 export type { DrawingToolOption } from "./drawings";
 export { downloadSnapshot } from "./snapshot";
 export { toHeikinAshi } from "./candles";
+export { BRUSH_OVERLAY } from "./brush";
 export { themeStyles, PALETTE } from "./theme";
 export {
   registerSonrIndicators,

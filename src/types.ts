@@ -110,13 +110,16 @@ export type DrawingTool =
   | "parallelStraightLine"
   | "fibonacciLine"
   | "simpleAnnotation"
-  | "simpleTag";
+  | "simpleTag"
+  // Freehand tools (custom continuous-draw overlay).
+  | "brush"
+  | "highlighter";
 
 /** Serialized chart state for save/load (issue #15). Opaque JSON the host
  *  persists and hands back to `importState`. */
 export interface ChartState {
   version: 1;
-  drawings: Array<{ name: string; points: unknown[]; styles?: unknown; mode?: string }>;
+  drawings: Array<{ name: string; points: unknown[]; styles?: unknown; mode?: string; extendData?: unknown }>;
   indicators: Array<{ name: string; paneId?: string }>;
   priceScale?: PriceScale;
 }

@@ -64,6 +64,7 @@ vi.mock("klinecharts", () => ({
   }),
   dispose: vi.fn(),
   registerIndicator: vi.fn(),
+  registerOverlay: vi.fn(),
   utils: {
     formatDate: vi.fn(() => "2026-09-21 19:39"),
     formatPrecision: vi.fn((v: number) => String(v)),
@@ -262,6 +263,23 @@ describe("SonrChart — drawing tools & magnet (#3, #13)", () => {
     rerender(<SonrChart ref={ref} symbol="A" dataSource={source()} magnet={false} />);
     act(() => ref.current!.startDrawing("segment"));
     expect(lastChart()._overlays.at(-1)).toMatchObject({ mode: "normal" });
+  });
+
+  it("brush/highlighter map to the sonrBrush overlay with a preset style, ignoring magnet (#34)", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} theme="dark" magnet="strong" />);
+    act(() => ref.current!.startDrawing("brush"));
+    const brush = lastChart()._overlays.at(-1);
+    expect(brush).toMatchObject({ name: "sonrBrush", mode: "normal", groupId: "sonr-user-drawing" });
+    expect(brush.extendData).toMatchObject({ color: "#e6ebe9", size: 2 });
+    // The toolbar highlights by the tool id ("brush"), not the overlay name.
+    expect(ref.current!.activeDrawing()).toBe("brush");
+
+    act(() => ref.current!.startDrawing("highlighter"));
+    const hl = lastChart()._overlays.at(-1);
+    expect(hl).toMatchObject({ name: "sonrBrush", mode: "normal" });
+    expect(hl.extendData.size).toBe(14);
+    expect(hl.extendData.color).toContain("rgba");
   });
 });
 

@@ -20,6 +20,8 @@ export const DEFAULT_DRAWING_TOOLS: DrawingToolOption[] = [
   { tool: "fibonacciLine", label: "Fibonacci" },
   { tool: "simpleAnnotation", label: "Note" },
   { tool: "simpleTag", label: "Tag" },
+  { tool: "brush", label: "Brush" },
+  { tool: "highlighter", label: "Highlighter" },
 ];
 
 // Every user-started drawing is tagged with this group id so clearDrawings()
