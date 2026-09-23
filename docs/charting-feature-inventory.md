@@ -31,12 +31,12 @@ that (plus everything sonrchart has since built) and the full surface.
 
 ## Chart types / series styles
 
-Shipped: Candles, Bars (OHLC), Hollow Candles, Heikin Ashi, Area. Still open:
+Shipped: Candles, Bars (OHLC), Hollow Candles, Heikin Ashi, Area, plus the
+custom-drawn **Line, Step Line, Baseline, Column, HLC bars, and High-Low** series
+(#33 — rendered over hidden native candles). Still open:
 
-- Additional price-line types: **Line**, **Line with Markers** (`LineWithMarkers`),
-  **Step Line** (`Stepline`), **HLC Area** (`HLCArea`), **HLC Bars** (`HLCBars`),
-  **Baseline** (two-color around a reference level), **Column** (histogram-style),
-  **High-Low** (`HiLo`) — with High-Low's own last-price line/axis-label toggles
+- The remaining price-line variants: **Line with Markers** (`LineWithMarkers`) and
+  **HLC Area** (`HLCArea`), plus High-Low's own last-price line/axis-label toggles
   (`chart_style_hilo`, `chart_style_hilo_last_price`).
 - Alternative/aggregation charts that recompute bars independently of time:
   **Renko**, **Kagi**, **Point & Figure** (`PnF`), **Line Break** (`LineBreak`),
@@ -227,7 +227,7 @@ exist, sonrchart would assemble/extend them · **Build** = not in the base.
 
 | Category | KLineChart base | remaining work |
 |---|---|---|
-| Line / step / baseline / HLC / column / high-low styles | **Free / Partial** | expose the remaining series types |
+| Line-with-markers / HLC-Area series | **Free / Partial** | the two remaining price-line variants |
 | Renko / Kagi / PnF / Line Break / Range | **Build** | precompute + custom render |
 | Exotic drawing families (Gann / Elliott / harmonic / pitchfork / measurement) | **Build** | add if wanted; long tail of the 118-tool catalog |
 | Drawing templates / clone / z-order / copy-paste / lock-hide | **Build** | tooling around the shipped drawing set |
