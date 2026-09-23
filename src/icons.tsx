@@ -29,6 +29,12 @@ const dot = (cx: number, cy: number) => <circle cx={cx} cy={cy} r="1.3" fill="cu
 /** Icon for a drawing tool; falls back to a plain segment for unknown tools. */
 export function DrawIcon({ tool }: { tool: DrawingTool }) {
   switch (tool) {
+    case "brush":
+      // A pen/brush drawing a squiggle.
+      return <Svg><path d="M2 14l1-3 7.5-7.5 2 2L5 13z" /><path d="M9.5 4l2 2" /></Svg>;
+    case "highlighter":
+      // A marker tip over an underline.
+      return <Svg><path d="M3 13.5h6.5" /><path d="M6 11l5-5 2 2-5 5H6z" /><path d="M9.5 3.5l2 2" /></Svg>;
     case "segment":
       return <Svg><line x1="4" y1="12" x2="12" y2="4" />{dot(4, 12)}{dot(12, 4)}</Svg>;
     case "rayLine":

@@ -6,6 +6,7 @@ import { CANDLE_TYPE, HaTransformer, isCustomSeries, isHeikinAshi, toHeikinAshi 
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
 import { asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
 import { USER_DRAWING_GROUP } from "./drawings";
+import { BRUSH_OVERLAY, brushStyle, isBrushTool, registerBrushOverlay } from "./brush";
 import type {
   CandleStyle,
   ChartState,
@@ -25,6 +26,7 @@ import type {
 
 registerSonrIndicators();
 registerCompareIndicator();
+registerBrushOverlay();
 
 const CANDLE_PANE = "candle_pane";
 
@@ -324,7 +326,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   const haRef = useRef(new HaTransformer());
   // Drawing undo/redo history (#16). stack[ptr] is the current drawing set;
   // `restoring` suppresses history capture while we recreate overlays.
-  type Snap = Array<{ name: string; points: unknown[]; styles?: unknown; mode?: string }>;
+  type Snap = Array<{ name: string; points: unknown[]; styles?: unknown; mode?: string; extendData?: unknown }>;
   const historyRef = useRef<{ stack: Snap[]; ptr: number }>({ stack: [[]], ptr: 0 });
   const restoringRef = useRef(false);
 
@@ -345,6 +347,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       points: o.points as unknown[],
       styles: o.styles,
       mode: o.mode,
+      // Brush/highlighter carry their colour+width here — keep it through
+      // undo/redo and export/import.
+      extendData: o.extendData,
     }));
 
   const HISTORY_CAP = 100;
@@ -359,11 +364,15 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     notifyHistory();
   };
 
-  const beginDrawing = (name: string) => {
+  const beginDrawing = (tool: string) => {
+    // Brush/highlighter are one continuous-draw overlay (`sonrBrush`) styled by
+    // extendData; magnet snapping is meaningless for freehand, so force normal.
+    const brush = isBrushTool(tool);
     const id = chartRef.current?.createOverlay({
-      name,
+      name: brush ? BRUSH_OVERLAY : tool,
       groupId: USER_DRAWING_GROUP,
-      mode: magnetMode(magnetRef.current),
+      mode: brush ? "normal" : magnetMode(magnetRef.current),
+      ...(brush ? { extendData: brushStyle(tool, themeRef.current) } : {}),
       onDrawEnd: () => {
         // Drawing placed: the overlay is now a finished drawing, not in progress.
         progressIdRef.current = null;
@@ -377,7 +386,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       },
     });
     progressIdRef.current = typeof id === "string" ? id : Array.isArray(id) ? (id[0] ?? null) : null;
-    setActiveTool(name as DrawingTool);
+    setActiveTool(tool as DrawingTool);
   };
 
   // Cancel an armed-but-unplaced drawing (toggling the tool off). Removes only
@@ -404,6 +413,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         points: d.points as never,
         styles: d.styles as never,
         mode: d.mode as never,
+        extendData: d.extendData as never,
         groupId: USER_DRAWING_GROUP,
         onDrawEnd: () => {
           pushHistory();
@@ -509,6 +519,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
           points: o.points as unknown[],
           styles: o.styles,
           mode: o.mode,
+          extendData: o.extendData,
         }));
         const inds = (chart?.getIndicators() ?? [])
           .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR && i.name !== SERIES_INDICATOR)
