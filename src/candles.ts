@@ -7,6 +7,9 @@ import type { Bar, CandleStyle } from "./types";
 
 // Friendly style -> KLineChart candle.type. "heikin_ashi" renders as solid
 // candles over transformed data (see HaTransformer), so it maps to solid too.
+// The custom series (line/step/baseline/column/hlc/high_low) aren't native
+// KLineChart types — they map to a hidden "area" base while SONR_SERIES draws
+// the actual rendering on top (see CUSTOM_SERIES / indicators.ts).
 export const CANDLE_TYPE: Record<CandleStyle, CandleType> = {
   candle: "candle_solid",
   hollow: "candle_stroke",
@@ -14,7 +17,23 @@ export const CANDLE_TYPE: Record<CandleStyle, CandleType> = {
   ohlc: "ohlc",
   area: "area",
   heikin_ashi: "candle_solid",
+  // Custom series use solid candles with transparent bars (fully hidden) so
+  // SONR_SERIES can draw the real rendering; the type here is just the base.
+  line: "candle_solid",
+  step: "candle_solid",
+  baseline: "candle_solid",
+  column: "candle_solid",
+  hlc: "candle_solid",
+  high_low: "candle_solid",
 };
+
+// Styles drawn by the SONR_SERIES custom indicator over hidden native candles.
+export const CUSTOM_SERIES = ["line", "step", "baseline", "column", "hlc", "high_low"] as const;
+export type CustomSeriesStyle = (typeof CUSTOM_SERIES)[number];
+
+export function isCustomSeries(style?: CandleStyle): style is CustomSeriesStyle {
+  return !!style && (CUSTOM_SERIES as readonly string[]).includes(style);
+}
 
 export function isHeikinAshi(style?: CandleStyle): boolean {
   return style === "heikin_ashi";

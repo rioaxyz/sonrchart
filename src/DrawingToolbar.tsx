@@ -3,7 +3,7 @@ import type { SonrChartHandle } from "./SonrChart";
 import type { DrawingTool, Magnet } from "./types";
 import { DEFAULT_DRAWING_TOOLS, type DrawingToolOption } from "./drawings";
 import { ensureDefaultStyles } from "./defaultStyles";
-import { DrawIcon, ClearIcon } from "./icons";
+import { DrawIcon, ClearIcon, UndoIcon, RedoIcon } from "./icons";
 
 // Drop-in drawing chrome (issues #3, #13, #16): a tool palette, a magnet-mode
 // toggle, undo/redo, and a Clear button — all driving one chart ref. Each tool
@@ -117,23 +117,23 @@ export function DrawingToolbar({
         <>
           <button
             type="button"
-            className="sonr-draw-btn"
+            className="sonr-draw-btn sonr-icon-btn"
             title="Undo"
             aria-label="Undo"
             disabled={!canUndo}
             onClick={() => chartRef.current?.undo()}
           >
-            ↶
+            <UndoIcon />
           </button>
           <button
             type="button"
-            className="sonr-draw-btn"
+            className="sonr-draw-btn sonr-icon-btn"
             title="Redo"
             aria-label="Redo"
             disabled={!canRedo}
             onClick={() => chartRef.current?.redo()}
           >
-            ↷
+            <RedoIcon />
           </button>
         </>
       )}

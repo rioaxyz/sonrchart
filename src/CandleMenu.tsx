@@ -19,8 +19,14 @@ export const DEFAULT_CANDLE_STYLES: CandleStyleOption[] = [
   { style: "candle", label: "Candles" },
   { style: "hollow", label: "Hollow candles" },
   { style: "ohlc", label: "Bars (OHLC)" },
-  { style: "area", label: "Area" },
+  { style: "hlc", label: "HLC bars" },
+  { style: "high_low", label: "High-Low" },
   { style: "heikin_ashi", label: "Heikin Ashi" },
+  { style: "line", label: "Line" },
+  { style: "step", label: "Step line" },
+  { style: "area", label: "Area" },
+  { style: "baseline", label: "Baseline" },
+  { style: "column", label: "Column" },
 ];
 
 export function CandleMenu({

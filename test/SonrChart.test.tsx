@@ -73,7 +73,7 @@ vi.mock("klinecharts", () => ({
 }));
 
 import { SonrChart, type SonrChartHandle } from "../src/SonrChart";
-import { SESSION_INDICATOR, PATTERN_INDICATOR, DEFAULT_SESSION_COLORS } from "../src/indicators";
+import { SESSION_INDICATOR, PATTERN_INDICATOR, SERIES_INDICATOR, DEFAULT_SESSION_COLORS } from "../src/indicators";
 import type { DataSource } from "../src/types";
 
 const bars = [
@@ -173,6 +173,22 @@ describe("SonrChart — session tinting (#10)", () => {
     rerender(<SonrChart symbol="A" dataSource={source()} sessions={{ premarket: "#abcdef" }} />);
     const override = c.overrideIndicator.mock.calls.filter((call: any[]) => call[0]?.name === SESSION_INDICATOR).at(-1);
     expect(override![0].extendData.premarket).toBe("#abcdef");
+  });
+});
+
+describe("SonrChart — custom series styles (#33)", () => {
+  it("draws SONR_SERIES with hidden bars for a custom style, and removes it when switching back", () => {
+    const { rerender } = render(<SonrChart symbol="A" dataSource={source()} candleStyle="line" />);
+    const c = lastChart();
+    const create = c.createIndicator.mock.calls.find((call: any[]) => call[0]?.name === SERIES_INDICATOR);
+    expect(create[0]).toMatchObject({ name: SERIES_INDICATOR, paneId: "candle_pane" });
+    expect(create[0].extendData.style).toBe("line");
+    // Native bars are hidden (fully transparent) while a custom series is active.
+    const hid = c.setStyles.mock.calls.find((x: any[]) => x[0]?.candle?.bar?.upColor === "rgba(0,0,0,0)");
+    expect(hid).toBeTruthy();
+
+    rerender(<SonrChart symbol="A" dataSource={source()} candleStyle="candle" />);
+    expect(c.removeIndicator).toHaveBeenCalledWith({ name: SERIES_INDICATOR });
   });
 });
 

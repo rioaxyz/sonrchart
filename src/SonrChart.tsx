@@ -1,8 +1,8 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { dispose, init, utils, type Chart, type DeepPartial, type KLineData, type Nullable, type Styles } from "klinecharts";
 import { themeStyles, PALETTE } from "./theme";
-import { PATTERN_INDICATOR, SESSION_INDICATOR, WATERMARK_INDICATOR, registerSonrIndicators, type WatermarkData } from "./indicators";
-import { CANDLE_TYPE, HaTransformer, isHeikinAshi, toHeikinAshi } from "./candles";
+import { PATTERN_INDICATOR, SERIES_INDICATOR, SESSION_INDICATOR, WATERMARK_INDICATOR, registerSonrIndicators, type SeriesData, type WatermarkData } from "./indicators";
+import { CANDLE_TYPE, HaTransformer, isCustomSeries, isHeikinAshi, toHeikinAshi } from "./candles";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
 import { asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
 import { USER_DRAWING_GROUP } from "./drawings";
@@ -175,6 +175,47 @@ function watermarkColor(theme: Theme): string {
 }
 function buildWatermark(symbol: string, interval: string, theme: Theme): WatermarkData {
   return { title: bareTicker(symbol).toUpperCase(), subtitle: intervalLabel(interval), color: watermarkColor(theme) };
+}
+
+// --- custom series styles (#33) ----------------------------------------------
+const SERIES_TRANSPARENT = "rgba(0,0,0,0)";
+// Fully transparent candle bars — hides the native series so SONR_SERIES can
+// draw line/step/baseline/column/hlc/high_low on top.
+const HIDDEN_BAR = {
+  upColor: SERIES_TRANSPARENT,
+  downColor: SERIES_TRANSPARENT,
+  noChangeColor: SERIES_TRANSPARENT,
+  upBorderColor: SERIES_TRANSPARENT,
+  downBorderColor: SERIES_TRANSPARENT,
+  noChangeBorderColor: SERIES_TRANSPARENT,
+  upWickColor: SERIES_TRANSPARENT,
+  downWickColor: SERIES_TRANSPARENT,
+  noChangeWickColor: SERIES_TRANSPARENT,
+};
+function seriesConfig(style: CandleStyle, theme: Theme): SeriesData {
+  return {
+    style: style as SeriesData["style"],
+    up: PALETTE.GREEN,
+    down: PALETTE.RED,
+    neutral: theme === "dark" ? "#cbd5e1" : "#334155",
+  };
+}
+// Apply a candle style to the chart: for a custom series style, hide the native
+// bars and draw/refresh SONR_SERIES; otherwise restore the theme bar colors and
+// drop the series indicator. Safe to call on every candle-style/theme change.
+function applyCandleStyle(chart: Chart, style: CandleStyle | undefined, theme: Theme): void {
+  const s = style ?? "candle";
+  const custom = isCustomSeries(s);
+  const bar = custom ? HIDDEN_BAR : (themeStyles(theme).candle as { bar?: unknown } | undefined)?.bar;
+  chart.setStyles({ candle: { type: CANDLE_TYPE[s], ...(bar ? { bar } : {}) } } as DeepPartial<Styles>);
+  const present = chart.getIndicators({ name: SERIES_INDICATOR }).length > 0;
+  if (custom) {
+    const ext = seriesConfig(s, theme);
+    if (present) chart.overrideIndicator({ name: SERIES_INDICATOR, extendData: ext });
+    else chart.createIndicator({ name: SERIES_INDICATOR, paneId: CANDLE_PANE, extendData: ext }, false);
+  } else if (present) {
+    chart.removeIndicator({ name: SERIES_INDICATOR });
+  }
 }
 
 // The candle pane's y-axis config for a price scale. KLineChart fixes the scale
@@ -444,7 +485,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       listIndicators: () =>
         (chartRef.current?.getIndicators() ?? [])
           .map((ind) => ind.name)
-          .filter((n) => n !== SESSION_INDICATOR && n !== PATTERN_INDICATOR && n !== COMPARE_INDICATOR && n !== WATERMARK_INDICATOR),
+          .filter((n) => n !== SESSION_INDICATOR && n !== PATTERN_INDICATOR && n !== COMPARE_INDICATOR && n !== WATERMARK_INDICATOR && n !== SERIES_INDICATOR),
       startDrawing: (tool: DrawingTool) => beginDrawing(tool),
       cancelDrawing: () => cancelDrawing(),
       activeDrawing: () => activeToolRef.current,
@@ -470,7 +511,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
           mode: o.mode,
         }));
         const inds = (chart?.getIndicators() ?? [])
-          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR)
+          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR && i.name !== SERIES_INDICATOR)
           .map((i) => ({ name: i.name, paneId: i.paneId }));
         return { version: 1, drawings, indicators: inds, priceScale };
       },
@@ -490,13 +531,13 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       },
       getIndicatorSet: (): IndicatorSpec[] =>
         (chartRef.current?.getIndicators() ?? [])
-          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR)
+          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR && i.name !== SERIES_INDICATOR)
           .map((i) => ({ name: i.name, pane: i.paneId === CANDLE_PANE ? "main" : "new" })),
       applyIndicatorSet: (specs) => {
         const chart = chartRef.current;
         if (!chart) return;
         for (const i of chart.getIndicators()) {
-          if (i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR) {
+          if (i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR && i.name !== SERIES_INDICATOR) {
             chart.removeIndicator({ name: i.name });
           }
         }
@@ -560,7 +601,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     chartRef.current = chart;
     chart.setStyles(mergeStyles(themeStyles(theme), styles));
     // Candle rendering style (#1).
-    chart.setStyles({ candle: { type: CANDLE_TYPE[candleStyleRef.current ?? "candle"] } });
+    applyCandleStyle(chart, candleStyleRef.current, theme);
     // The crosshair x-axis pill should show the full date + time (like TV), even
     // on intraday where the axis ticks only show time. Prepend the date for the
     // crosshair context only; leave the x-axis ticks and tooltip untouched.
@@ -683,8 +724,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   // Candle style (#1): a pure setStyles for non-HA swaps (no rebuild). HA
   // transitions are handled by the create effect's haKey dependency.
   useEffect(() => {
-    chartRef.current?.setStyles({ candle: { type: CANDLE_TYPE[candleStyle ?? "candle"] } });
-  }, [candleStyle]);
+    const chart = chartRef.current;
+    if (chart) applyCandleStyle(chart, candleStyle, theme);
+  }, [candleStyle, theme]);
 
   // Compare / multi-symbol overlays (#9).
   useEffect(() => {

@@ -76,7 +76,21 @@ export interface PriceScale {
 export type Magnet = boolean | "weak" | "strong";
 
 /** Candle rendering style (issue #1). "heikin_ashi" transforms the data. */
-export type CandleStyle = "candle" | "hollow" | "hollow_up" | "ohlc" | "area" | "heikin_ashi";
+export type CandleStyle =
+  // Native KLineChart candle types.
+  | "candle"
+  | "hollow"
+  | "hollow_up"
+  | "ohlc"
+  | "area"
+  | "heikin_ashi"
+  // Custom series renderers (drawn by SONR_SERIES over hidden candles).
+  | "line"
+  | "step"
+  | "baseline"
+  | "column"
+  | "hlc"
+  | "high_low";
 
 /** A comparison symbol overlaid on the main pane (issue #9). */
 export interface CompareSpec {
