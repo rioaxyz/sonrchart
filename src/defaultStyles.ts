@@ -45,6 +45,7 @@ const CSS = `
 :where(.sonr-set-label){color:#000;}
 :where(.sonr-set-empty){color:#555;font-size:12px;margin:0;}
 :where(.sonr-set-note){color:#555;font-size:11px;line-height:1.4;margin:0 0 2px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;}
+:where(.sonr-set-subhead){font-weight:700;font-size:12px;margin:4px 0 2px;}
 :where(.sonr-set-ind){display:flex;flex-direction:column;gap:6px;padding:8px 0;border-bottom:1px solid #e6e6e6;}
 :where(.sonr-set-inputs){display:flex;align-items:center;flex-wrap:wrap;gap:6px;}
 :where(.sonr-set-inputs-label){color:#555;font-size:11px;}
