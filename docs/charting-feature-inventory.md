@@ -3,8 +3,9 @@
 > **How to read this:** this is the *remaining* target surface for `sonrchart` —
 > the features from the original full-charting inventory that are **not yet
 > built**. Anything already shipped (candle styles, the curated drawing set with
-> magnet + undo/redo, the indicator dropdown + custom indicators + templates,
-> compare, sessions/timezone, price-scale modes, crosshair + date/time readout,
+> magnet + undo/redo, the full indicator library + inputs editor + custom
+> indicators + templates, symbol search + spread operators, compare,
+> sessions/timezone, price-scale modes, crosshair + date/time readout,
 > export/import persistence, the toolbar/settings/legend chrome, theming, on-chart
 > trade lines, snapshot, and the symbol/interval watermark) has been removed from
 > the lists below. It stays a roadmap, not a commitment: most of what's left is
@@ -79,31 +80,25 @@ note, tag) plus magnet snapping, undo/redo, and clear-all. The long tail of the
 
 ## Technical indicators / studies
 
-Shipped: a dropdown config UI over a curated set (VOL/MA/EMA/BOLL/SAR/MACD/RSI/KDJ
-+ custom VWAP/session/pattern/watermark), custom-indicator registration,
-per-indicator color override, multi-pane sub-panes, and named indicator-set
-templates (`getIndicatorSet` / `applyIndicatorSet`). Still open:
+Shipped: a dropdown config UI over the **full KLineChart built-in library** (28
+indicators — MA/EMA/SMA/BBI/BOLL/SAR/DMA overlays + VOL/MACD/RSI/KDJ/BIAS/BRAR/
+CCI/DMI/CR/PSY/TRIX/OBV/VR/WR/MTM/EMV/ROC/PVT/AO in sub-panes + custom
+VWAP/session/pattern/watermark), custom-indicator registration, per-indicator
+color override **and a per-study inputs editor** (edit each indicator's
+`calcParams`), multi-pane sub-panes, and named indicator-set templates
+(`getIndicatorSet` / `applyIndicatorSet`). Still open:
 
-- **Surface more of the base library** — KLineChart ships ~50+ indicators; only a
-  curated subset is exposed today. The full ceiling is 100+ (Ichimoku, pivots,
-  volume profile, etc.).
-- **Per-study inputs UI**: editing an indicator's calculation parameters/inputs
-  (not just its color), i.e. `getStudyInputs` / `getStudyStyles` equivalents.
 - Study status-line / legend display options for symbol, resolution, inputs, and
   n/a handling (`study_symbol_ticker_description`, `dont_show_boolean_study_arguments`,
   `hide_last_na_study_output`, etc.).
 
 ## Symbol & data
 
-Shipped: DataSource seam (history + live) with symbol resolution, compare /
-multi-symbol overlay, seconds resolutions, ET timezone, and pre/post-market
-session tinting. Still open:
+Shipped: DataSource seam (history + live) with symbol resolution, a **symbol-search
+dialog** (`searchSymbols` on the DataSource) with **spread/expression pass-through**
+(`AAPL/MSFT`, `1/x`), compare / multi-symbol overlay, seconds resolutions, ET
+timezone, and pre/post-market session tinting. Still open:
 
-- **Symbol search** dialog backed by a datafeed `searchSymbols`
-  (`SearchSymbolResultItem`), with a configurable request delay, hotkey search
-  (`symbol_search_hot_key`), arbitrary input, and a `symbol_search_complete` hook.
-- **Spread / expression operators** in search (e.g. `AAPL/MSFT`, `1/x`, `^`) —
-  toggleable for symbol, compare, and study search (`show_spread_operators`).
 - **Tick** resolution (`tick_resolution`) and arbitrary **custom resolutions**
   (`custom_resolutions`) beyond the current interval set.
 - **Configurable time zones** beyond the baked-in ET: a timezone menu, custom
@@ -236,8 +231,7 @@ exist, sonrchart would assemble/extend them · **Build** = not in the base.
 | Renko / Kagi / PnF / Line Break / Range | **Build** | precompute + custom render |
 | Exotic drawing families (Gann / Elliott / harmonic / pitchfork / measurement) | **Build** | add if wanted; long tail of the 118-tool catalog |
 | Drawing templates / clone / z-order / copy-paste / lock-hide | **Build** | tooling around the shipped drawing set |
-| Wider indicator library + per-study inputs UI | **Free** (~50+ built in) | surface more; add an inputs editor |
-| Symbol search UI + spread operators | **Build** | host-provided search dialog |
+| Indicator status-line / legend display options | **Free** | display flags (library + inputs editor shipped) |
 | Tick resolution / custom resolutions / timezone menu | **Partial** | beyond the current interval set + ET |
 | Symbol metadata / logos / currency-unit axis | **Build** | info dialog + axis units |
 | Multi-chart layouts (grids) + cross-chart sync | **Build** | host owns the grid today |
@@ -254,10 +248,11 @@ exist, sonrchart would assemble/extend them · **Build** = not in the base.
 
 A full charting product is an *application*, not just a renderer. `sonrchart` has
 now shipped the core surface — candles + styles, a curated drawing set with
-magnet/undo/redo, the indicator dropdown with custom studies and templates,
-compare, sessions/timezone, price-scale modes, the crosshair readout, export/
-import persistence, the toolbar/settings/legend chrome, theming, on-chart trade
-lines, snapshot, and the watermark.
+magnet/undo/redo, the full indicator library with an inputs editor, custom
+studies and templates, symbol search with spread operators, compare,
+sessions/timezone, price-scale modes, the crosshair readout, export/import
+persistence, the toolbar/settings/legend chrome, theming, on-chart trade lines,
+snapshot, and the watermark.
 
 What's left above is either genuinely optional (Renko/Kagi/PnF, the exotic drawing
 families, multi-chart grids, broker actions) or incremental depth on surfaces that
