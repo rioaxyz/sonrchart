@@ -1,13 +1,14 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { dispose, init, utils, type Chart, type DeepPartial, type KLineData, type Nullable, type Styles } from "klinecharts";
+import { dispose, init, utils, type Chart, type DeepPartial, type KLineData, type Layout, type Nullable, type Options, type Styles } from "klinecharts";
 import { resolveThemeStyles, PALETTE } from "./theme";
-import { PATTERN_INDICATOR, SERIES_INDICATOR, SESSION_INDICATOR, WATERMARK_INDICATOR, registerSonrIndicators, type SeriesData, type WatermarkData } from "./indicators";
-import { CANDLE_TYPE, HaTransformer, isCustomSeries, isHeikinAshi, toHeikinAshi } from "./candles";
+import { PATTERN_INDICATOR, SERIES_INDICATOR, SESSION_INDICATOR, WATERMARK_INDICATOR, registerSonrIndicators } from "./indicators";
+import { HaTransformer, isHeikinAshi, toHeikinAshi } from "./candles";
+import { applyCandleStyle } from "./candleStyle";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
-import { asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
-import { USER_DRAWING_GROUP } from "./drawings";
-import { DrawingTemplateStore, type DrawingSnapshot } from "./drawingTemplates";
-import { BRUSH_OVERLAY, brushStyle, isBrushTool, registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
+import { CANDLE_PANE, asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
+import { buildWatermark, mergeWatermark, normalizeWatermark } from "./watermark";
+import { registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
+import { useDrawings } from "./useDrawings";
 import { isEditableTarget, resolveShortcut, type ShortcutAction } from "./keyboard";
 import { registerShapeOverlays } from "./shapes";
 import type {
@@ -32,8 +33,6 @@ registerSonrIndicators();
 registerCompareIndicator();
 registerBrushOverlay();
 registerShapeOverlays();
-
-const CANDLE_PANE = "candle_pane";
 
 function magnetMode(m: Magnet | undefined): "normal" | "weak_magnet" | "strong_magnet" {
   if (m === true || m === "weak") return "weak_magnet";
@@ -215,108 +214,20 @@ function useControllable<T>(prop: T | undefined, fallback: T) {
   return { value, set, subscribe };
 }
 
-// --- watermark helpers -------------------------------------------------------
-// Bare ticker for the watermark (drop any "EXCHANGE:" prefix).
-function bareTicker(symbol: string): string {
-  return symbol.includes(":") ? symbol.split(":").pop() ?? symbol : symbol;
-}
-// Human interval label for the watermark subtitle.
-function intervalLabel(iv: string): string {
-  const m: Record<string, string> = { "10S": "10s", "30S": "30s", "1": "1m", "5": "5m", "15": "15m", "30": "30m", "60": "1h", D: "1D", "1D": "1D", "1440": "1D" };
-  return m[iv] ?? iv;
-}
-// Default faint watermark ink hex for the theme (candles read cleanly over it).
-function watermarkInk(theme: Theme): string {
-  return theme === "dark" ? "#e6ebe9" : "#1a1f29";
-}
-function defaultWatermark(theme: Theme): WatermarkOptions {
-  return { symbol: false, interval: false, color: watermarkInk(theme), opacity: 0.06 };
-}
-// Coerce the `watermark` prop (boolean | partial) into a full options object.
-// `true` shows both; a partial object shows whatever it doesn't turn off.
-function normalizeWatermark(prop: boolean | Partial<WatermarkOptions> | undefined, theme: Theme): WatermarkOptions {
-  const base = defaultWatermark(theme);
-  if (prop === undefined || prop === false) return base;
-  if (prop === true) return { ...base, symbol: true, interval: true };
-  return {
-    symbol: prop.symbol ?? true,
-    interval: prop.interval ?? true,
-    color: prop.color ?? base.color,
-    opacity: prop.opacity ?? base.opacity,
-  };
-}
-// Fold a change (boolean master or partial options) into the current config.
-function mergeWatermark(cur: WatermarkOptions, next: boolean | Partial<WatermarkOptions>): WatermarkOptions {
-  if (typeof next === "boolean") return { ...cur, symbol: next, interval: next };
-  return { ...cur, ...next };
-}
-// #rrggbb + opacity -> rgba() for the canvas fill.
-function composeRgba(color: string, opacity: number): string {
-  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
-  if (!m) return color;
-  return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${opacity})`;
-}
-function buildWatermark(symbol: string, interval: string, opts: WatermarkOptions): WatermarkData {
-  return {
-    title: opts.symbol ? bareTicker(symbol).toUpperCase() : "",
-    subtitle: opts.interval ? intervalLabel(interval) : "",
-    color: composeRgba(opts.color, opts.opacity),
-  };
-}
-
-// --- custom series styles (#33) ----------------------------------------------
-const SERIES_TRANSPARENT = "rgba(0,0,0,0)";
-// Fully transparent candle bars — hides the native series so SONR_SERIES can
-// draw line/step/baseline/column/hlc/high_low on top.
-const HIDDEN_BAR = {
-  upColor: SERIES_TRANSPARENT,
-  downColor: SERIES_TRANSPARENT,
-  noChangeColor: SERIES_TRANSPARENT,
-  upBorderColor: SERIES_TRANSPARENT,
-  downBorderColor: SERIES_TRANSPARENT,
-  noChangeBorderColor: SERIES_TRANSPARENT,
-  upWickColor: SERIES_TRANSPARENT,
-  downWickColor: SERIES_TRANSPARENT,
-  noChangeWickColor: SERIES_TRANSPARENT,
-};
-function seriesConfig(style: CandleStyle, theme: Theme): SeriesData {
-  return {
-    style: style as SeriesData["style"],
-    up: PALETTE.GREEN,
-    down: PALETTE.RED,
-    neutral: theme === "dark" ? "#cbd5e1" : "#334155",
-  };
-}
-// Apply a candle style to the chart: for a custom series style, hide the native
-// bars and draw/refresh SONR_SERIES; otherwise restore the theme bar colors and
-// drop the series indicator. Safe to call on every candle-style/theme change.
-function applyCandleStyle(chart: Chart, style: CandleStyle | undefined, styleObj: DeepPartial<Styles>, baseTheme: Theme): void {
-  const s = style ?? "candle";
-  const custom = isCustomSeries(s);
-  const bar = custom ? HIDDEN_BAR : (styleObj.candle as { bar?: unknown } | undefined)?.bar;
-  chart.setStyles({ candle: { type: CANDLE_TYPE[s], ...(bar ? { bar } : {}) } } as DeepPartial<Styles>);
-  const present = chart.getIndicators({ name: SERIES_INDICATOR }).length > 0;
-  if (custom) {
-    const ext = seriesConfig(s, baseTheme);
-    if (present) chart.overrideIndicator({ name: SERIES_INDICATOR, extendData: ext });
-    else chart.createIndicator({ name: SERIES_INDICATOR, paneId: CANDLE_PANE, extendData: ext }, false);
-  } else if (present) {
-    chart.removeIndicator({ name: SERIES_INDICATOR });
-  }
-}
-
 // The candle pane's y-axis config for a price scale. KLineChart fixes the scale
 // TYPE (normal/percentage/logarithm) and inversion at pane creation, so this is
 // applied at chart init — the component rebuilds when `priceScale` changes.
-function yAxisLayout(ps?: PriceScale) {
+function yAxisLayout(ps?: PriceScale): DeepPartial<Layout> | undefined {
   if (!ps) return undefined;
+  // `name` selects the scale type at init but is omitted from KLineChart's
+  // Layout.yAxis type, so the narrow cast is confined here.
   return {
     yAxis: {
       ...(ps.type ? { name: ps.type } : {}),
       reverse: ps.invert ?? false,
       inside: ps.inside ?? false,
     },
-  };
+  } as DeepPartial<Layout>;
 }
 
 // Stable key so a priceScale change re-inits the chart.
@@ -378,9 +289,6 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     magnetRef.current = m;
     magnetSubs.current.forEach((cb) => cb(m));
   };
-  // History-change subscribers (the toolbar's undo/redo enablement).
-  const historySubs = useRef(new Set<() => void>());
-  const notifyHistory = () => historySubs.current.forEach((cb) => cb());
   // Signature of the current line overlays' *visual* fields; lets the reconcile
   // skip a full remove+recreate when a parent re-render changes only array/
   // callback identity, not content (avoids overlay thrash and drag fighting).
@@ -445,136 +353,10 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   priceFormatterRef.current = priceFormatter;
   // Heikin Ashi live transformer (rebuilt per data load in the create effect).
   const haRef = useRef(new HaTransformer());
-  // Drawing undo/redo history (#16). stack[ptr] is the current drawing set;
-  // `restoring` suppresses history capture while we recreate overlays.
-  type Snap = Array<{ name: string; points: unknown[]; styles?: unknown; mode?: string; extendData?: unknown }>;
-  const historyRef = useRef<{ stack: Snap[]; ptr: number }>({ stack: [[]], ptr: 0 });
-  const restoringRef = useRef(false);
-
-  // Armed-drawing state (#3): which tool is mid-draw, the id of its in-progress
-  // overlay (so it can be cancelled), and subscribers (the toolbar) that want to
-  // reflect the armed tool as an active/highlighted button.
-  const activeToolRef = useRef<DrawingTool | null>(null);
-  const progressIdRef = useRef<string | null>(null);
-  const drawingSubs = useRef(new Set<(tool: DrawingTool | null) => void>());
-  const setActiveTool = (tool: DrawingTool | null) => {
-    activeToolRef.current = tool;
-    drawingSubs.current.forEach((cb) => cb(tool));
-  };
-  // Brush/highlighter stroke styles (color + width), configurable from settings.
-  // Seeded from the theme presets; each new stroke reads the current value.
-  const brushStylesRef = useRef<Record<BrushTool, BrushStyle>>({
-    brush: brushStyle("brush", baseTheme),
-    highlighter: brushStyle("highlighter", baseTheme),
-  });
-  const brushSubs = useRef(new Set<() => void>());
-  const notifyBrush = () => brushSubs.current.forEach((cb) => cb());
-
-  // Drawing management tooling (#35): lock/hide state (mirrored for getters, and
-  // inherited by drawings created after a toggle), plus a named-template store.
-  const lockedRef = useRef(false);
-  const hiddenRef = useRef(false);
-  const templatesRef = useRef(new DrawingTemplateStore());
-  // Push the current lock/visible state onto every user drawing. Also called
-  // after creating overlays so fresh drawings inherit the state.
-  const applyDrawingFlags = () => {
-    chartRef.current?.overrideOverlay({ groupId: USER_DRAWING_GROUP, lock: lockedRef.current, visible: !hiddenRef.current } as never);
-  };
-
-  const snapshotDrawings = (): Snap =>
-    (chartRef.current?.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? []).map((o) => ({
-      name: o.name,
-      points: o.points as unknown[],
-      styles: o.styles,
-      mode: o.mode,
-      // Brush/highlighter carry their colour+width here — keep it through
-      // undo/redo and export/import.
-      extendData: o.extendData,
-    }));
-
-  const HISTORY_CAP = 100;
-  const pushHistory = () => {
-    if (restoringRef.current) return;
-    const h = historyRef.current;
-    h.stack = h.stack.slice(0, h.ptr + 1);
-    h.stack.push(snapshotDrawings());
-    // Bound memory: drop the oldest entries past the cap.
-    if (h.stack.length > HISTORY_CAP) h.stack = h.stack.slice(h.stack.length - HISTORY_CAP);
-    h.ptr = h.stack.length - 1;
-    notifyHistory();
-  };
-
-  const beginDrawing = (tool: string) => {
-    // Brush/highlighter are one continuous-draw overlay (`sonrBrush`) styled by
-    // extendData; magnet snapping is meaningless for freehand, so force normal.
-    const brush = isBrushTool(tool);
-    const id = chartRef.current?.createOverlay({
-      name: brush ? BRUSH_OVERLAY : tool,
-      groupId: USER_DRAWING_GROUP,
-      mode: brush ? "normal" : magnetMode(magnetRef.current),
-      ...(brush ? { extendData: { ...brushStylesRef.current[tool as BrushTool] } } : {}),
-      onDrawEnd: () => {
-        // Drawing placed: the overlay is now a finished drawing, not in progress.
-        progressIdRef.current = null;
-        pushHistory();
-        // A freshly placed drawing inherits the current lock/hide state.
-        applyDrawingFlags();
-        // Brush/highlighter are "sticky": stay armed and immediately re-arm for
-        // the next stroke, so you can draw repeatedly without re-clicking the
-        // toolbar. The tool stays active until toggled off (cancelDrawing).
-        if (brush) beginDrawing(tool);
-        else setActiveTool(null);
-        return false;
-      },
-      onRemoved: () => {
-        pushHistory();
-        return false;
-      },
-    });
-    progressIdRef.current = typeof id === "string" ? id : Array.isArray(id) ? (id[0] ?? null) : null;
-    setActiveTool(tool as DrawingTool);
-  };
-
-  // Cancel an armed-but-unplaced drawing (toggling the tool off). Removes only
-  // the in-progress overlay, leaving finished drawings untouched.
-  const cancelDrawing = () => {
-    const id = progressIdRef.current;
-    progressIdRef.current = null;
-    setActiveTool(null);
-    if (id) {
-      restoringRef.current = true; // a cancelled draw isn't a history step
-      chartRef.current?.removeOverlay({ id });
-      restoringRef.current = false;
-    }
-  };
-
-  const restoreDrawings = (snap: Snap) => {
-    const chart = chartRef.current;
-    if (!chart) return;
-    restoringRef.current = true;
-    chart.removeOverlay({ groupId: USER_DRAWING_GROUP });
-    for (const d of snap) {
-      chart.createOverlay({
-        name: d.name,
-        points: d.points as never,
-        styles: d.styles as never,
-        mode: d.mode as never,
-        extendData: d.extendData as never,
-        groupId: USER_DRAWING_GROUP,
-        onDrawEnd: () => {
-          pushHistory();
-          return false;
-        },
-        onRemoved: () => {
-          pushHistory();
-          return false;
-        },
-      });
-    }
-    restoringRef.current = false;
-    // Restored drawings inherit the current lock/hide state.
-    applyDrawingFlags();
-  };
+  // User-drawing subsystem (#3/#16/#35): armed tool, undo/redo history, lock/hide
+  // flags, named templates, and brush styles. Owns its own refs; reads the live
+  // magnet mode via the getter and touches only the shared chart ref.
+  const drawings = useDrawings(chartRef, () => magnetMode(magnetRef.current), baseTheme);
 
   // Fetch each comparison symbol, align to the main bars, and (re)build the
   // compare overlay indicator (#9). Removes it when there are none.
@@ -663,17 +445,11 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         (chartRef.current?.getIndicators() ?? [])
           .map((ind) => ind.name)
           .filter((n) => n !== SESSION_INDICATOR && n !== PATTERN_INDICATOR && n !== COMPARE_INDICATOR && n !== WATERMARK_INDICATOR && n !== SERIES_INDICATOR),
-      startDrawing: (tool: DrawingTool) => beginDrawing(tool),
-      cancelDrawing: () => cancelDrawing(),
-      activeDrawing: () => activeToolRef.current,
-      subscribeDrawing: (cb) => {
-        drawingSubs.current.add(cb);
-        return () => drawingSubs.current.delete(cb);
-      },
-      clearDrawings: () => {
-        chartRef.current?.removeOverlay({ groupId: USER_DRAWING_GROUP });
-        pushHistory();
-      },
+      startDrawing: (tool: DrawingTool) => drawings.beginDrawing(tool),
+      cancelDrawing: () => drawings.cancelDrawing(),
+      activeDrawing: () => drawings.activeDrawing(),
+      subscribeDrawing: (cb) => drawings.subscribeDrawing(cb),
+      clearDrawings: () => drawings.clearDrawings(),
       snapshot: (opts) => {
         const chart = chartRef.current;
         if (!chart) return null;
@@ -681,29 +457,22 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       },
       exportState: (): ChartState => {
         const chart = chartRef.current;
-        const drawings = (chart?.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? []).map((o) => ({
-          name: o.name,
-          points: o.points as unknown[],
-          styles: o.styles,
-          mode: o.mode,
-          extendData: o.extendData,
-        }));
         const inds = (chart?.getIndicators() ?? [])
           .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR && i.name !== SERIES_INDICATOR)
           .map((i) => ({ name: i.name, paneId: i.paneId }));
-        return { version: 1, drawings, indicators: inds, priceScale };
+        return { version: 1, drawings: drawings.snapshotDrawings(), indicators: inds, priceScale };
       },
       importState: (state: ChartState) => {
         const chart = chartRef.current;
         if (!chart || state?.version !== 1) return;
-        restoreDrawings((state.drawings ?? []) as Snap);
+        drawings.restoreDrawings(state.drawings ?? []);
         for (const ind of state.indicators ?? []) {
           if (!chart.getIndicators({ name: ind.name }).length) {
             chart.createIndicator({ name: ind.name, ...(ind.paneId === CANDLE_PANE ? { paneId: CANDLE_PANE } : {}) }, false);
           }
         }
         // Reset the undo history to the imported drawing set.
-        historyRef.current = { stack: [snapshotDrawings()], ptr: 0 };
+        drawings.resetHistoryToCurrent();
         // priceScale in the state is informational; the host re-applies it via
         // the `priceScale` prop (scale type is fixed at chart init).
       },
@@ -722,26 +491,11 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         for (const s of specs) createIndicator(asSpec(s));
         applyPaneHeights();
       },
-      undo: () => {
-        const h = historyRef.current;
-        if (h.ptr <= 0) return;
-        h.ptr -= 1;
-        restoreDrawings(h.stack[h.ptr]);
-        notifyHistory();
-      },
-      redo: () => {
-        const h = historyRef.current;
-        if (h.ptr >= h.stack.length - 1) return;
-        h.ptr += 1;
-        restoreDrawings(h.stack[h.ptr]);
-        notifyHistory();
-      },
-      canUndo: () => historyRef.current.ptr > 0,
-      canRedo: () => historyRef.current.ptr < historyRef.current.stack.length - 1,
-      subscribeHistory: (cb) => {
-        historySubs.current.add(cb);
-        return () => historySubs.current.delete(cb);
-      },
+      undo: () => drawings.undo(),
+      redo: () => drawings.redo(),
+      canUndo: () => drawings.canUndo(),
+      canRedo: () => drawings.canRedo(),
+      subscribeHistory: (cb) => drawings.subscribeHistory(cb),
       getMagnet: () => magnetRef.current,
       setMagnet: (m) => setMagnet(m),
       subscribeMagnet: (cb) => {
@@ -766,67 +520,20 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         wmSubs.current.add(cb);
         return () => wmSubs.current.delete(cb);
       },
-      getBrushStyle: (tool) => ({ ...brushStylesRef.current[tool] }),
-      setBrushStyle: (tool, style) => {
-        brushStylesRef.current[tool] = { ...style };
-        notifyBrush();
-      },
-      subscribeBrush: (cb) => {
-        brushSubs.current.add(cb);
-        return () => brushSubs.current.delete(cb);
-      },
+      getBrushStyle: (tool) => drawings.getBrushStyle(tool),
+      setBrushStyle: (tool, style) => drawings.setBrushStyle(tool, style),
+      subscribeBrush: (cb) => drawings.subscribeBrush(cb),
       // Drawing management tooling (#35) -----------------------------------
-      setDrawingsLocked: (locked) => {
-        lockedRef.current = locked;
-        applyDrawingFlags();
-      },
-      getDrawingsLocked: () => lockedRef.current,
-      setDrawingsVisible: (visible) => {
-        hiddenRef.current = !visible;
-        applyDrawingFlags();
-      },
-      getDrawingsVisible: () => !hiddenRef.current,
-      saveDrawingTemplate: (name) => {
-        templatesRef.current.save(name, snapshotDrawings() as DrawingSnapshot);
-      },
-      applyDrawingTemplate: (name) => {
-        const snap = templatesRef.current.get(name);
-        if (!snap) return;
-        restoreDrawings(snap as Snap);
-        // Reset the undo history to the applied drawing set (like importState).
-        historyRef.current = { stack: [snapshotDrawings()], ptr: 0 };
-        notifyHistory();
-      },
-      listDrawingTemplates: () => templatesRef.current.list(),
-      deleteDrawingTemplate: (name) => templatesRef.current.delete(name),
-      subscribeDrawingTemplates: (cb) => templatesRef.current.subscribe(cb),
-      cloneLastDrawing: () => {
-        const chart = chartRef.current;
-        if (!chart) return;
-        const drawings = chart.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? [];
-        const last = drawings[drawings.length - 1];
-        if (!last) return;
-        restoringRef.current = true;
-        chart.createOverlay({
-          name: last.name,
-          points: last.points as never,
-          styles: last.styles as never,
-          mode: last.mode as never,
-          extendData: last.extendData as never,
-          groupId: USER_DRAWING_GROUP,
-          onDrawEnd: () => {
-            pushHistory();
-            return false;
-          },
-          onRemoved: () => {
-            pushHistory();
-            return false;
-          },
-        });
-        restoringRef.current = false;
-        applyDrawingFlags();
-        pushHistory();
-      },
+      setDrawingsLocked: (locked) => drawings.setDrawingsLocked(locked),
+      getDrawingsLocked: () => drawings.getDrawingsLocked(),
+      setDrawingsVisible: (visible) => drawings.setDrawingsVisible(visible),
+      getDrawingsVisible: () => drawings.getDrawingsVisible(),
+      saveDrawingTemplate: (name) => drawings.saveDrawingTemplate(name),
+      applyDrawingTemplate: (name) => drawings.applyDrawingTemplate(name),
+      listDrawingTemplates: () => drawings.listDrawingTemplates(),
+      deleteDrawingTemplate: (name) => drawings.deleteDrawingTemplate(name),
+      subscribeDrawingTemplates: (cb) => drawings.subscribeDrawingTemplates(cb),
+      cloneLastDrawing: () => drawings.cloneLastDrawing(),
     }),
     // paneHeights/priceScale captured by closure; recreated per render is fine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -875,10 +582,12 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     if (!el) return;
     el.id = idRef.current;
 
-    const chart = init(el, {
+    const options: Options = {
       timezone: "America/New_York",
       layout: yAxisLayout(priceScale),
-    } as never) as Chart;
+    };
+    const chart = init(el, options);
+    if (!chart) return;
     chartRef.current = chart;
     chart.setStyles(mergeStyles(themeStyleObj, styles));
     // Candle rendering style (#1).
@@ -915,7 +624,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     } as DeepPartial<Styles>);
     // Fresh Heikin Ashi transformer + fresh undo history for this chart.
     haRef.current = new HaTransformer();
-    historyRef.current = { stack: [[]], ptr: 0 };
+    drawings.initHistory();
 
     let unsub = () => {};
     chart.setDataLoader({

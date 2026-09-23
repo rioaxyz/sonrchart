@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useMemo, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import type { SonrChartHandle } from "./SonrChart";
 import type { DrawingTool, Magnet } from "./types";
@@ -43,7 +43,7 @@ export function DrawingToolbar({
   labels?: Partial<Labels>;
 }) {
   useEffect(ensureDefaultStyles, []);
-  const L = mergeLabels(labels);
+  const L = useMemo(() => mergeLabels(labels), [labels]);
   // A tool's label override (if any) wins over the option's built-in label.
   const labelFor = (t: DrawingToolOption) => L.drawingToolLabels[t.tool] ?? t.label;
 

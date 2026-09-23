@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import type { PriceScale } from "./types";
 import { ensureDefaultStyles } from "./defaultStyles";
@@ -27,7 +27,7 @@ export function PriceScaleMenu({
 }) {
   useEffect(ensureDefaultStyles, []);
 
-  const L = mergeLabels(labels);
+  const L = useMemo(() => mergeLabels(labels), [labels]);
   const { open, setOpen, toggle: toggleOpen, pos, triggerRef, panelRef } = useDropdown();
   const type = (value?.type ?? "normal") as ScaleType;
 

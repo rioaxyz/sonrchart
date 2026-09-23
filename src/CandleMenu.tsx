@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import type { CandleStyle } from "./types";
 import { ensureDefaultStyles } from "./defaultStyles";
@@ -45,7 +45,7 @@ export function CandleMenu({
 }) {
   useEffect(ensureDefaultStyles, []);
 
-  const L = mergeLabels(labels);
+  const L = useMemo(() => mergeLabels(labels), [labels]);
   // Prefer an explicit label override for a style; else the option's own label.
   const labelFor = (opt: CandleStyleOption) => L.candleStyles[opt.style] ?? opt.label;
   const { open, setOpen, toggle: toggleOpen, pos, triggerRef, panelRef } = useDropdown();

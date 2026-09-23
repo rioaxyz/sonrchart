@@ -3,13 +3,17 @@
 // snapshotDrawings/restoreDrawings and ChartState.drawings use), saved under a
 // name so a UI can re-apply a whole drawing set later. Storage is in-memory
 // only — a host that wants persistence exports the snapshots itself.
+import type { DeepPartial, Nullable, OverlayMode, OverlayStyle, Point } from "klinecharts";
 
-/** One saved overlay in a drawing template (matches ChartState.drawings). */
+/** One saved overlay in a drawing template — the canonical serialized shape of
+ *  a user drawing, shared by ChartState.drawings and SonrChart's snapshot/
+ *  restore. Field types mirror KLineChart's `Overlay`, so a snapshot round-trips
+ *  straight back into `createOverlay` with no casts. */
 export interface DrawingSnapshotItem {
   name: string;
-  points: unknown[];
-  styles?: unknown;
-  mode?: string;
+  points: Array<Partial<Point>>;
+  styles?: Nullable<DeepPartial<OverlayStyle>>;
+  mode?: OverlayMode;
   extendData?: unknown;
 }
 

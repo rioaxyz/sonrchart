@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useMemo, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import type { SonrChartHandle } from "./SonrChart";
 import type { BrushStyle, BrushTool } from "./brush";
@@ -65,7 +65,7 @@ export function SettingsModal({
   labels?: Partial<Labels>;
 }) {
   useEffect(ensureDefaultStyles, []);
-  const L = mergeLabels(labels);
+  const L = useMemo(() => mergeLabels(labels), [labels]);
 
   const [section, setSection] = useState<Section>("candles");
   const [candleUp, setCandleUp] = useState("#35c98d");

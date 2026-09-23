@@ -30,16 +30,18 @@ export function registerCompareIndicator(): void {
 
       ctx.save();
       ctx.lineWidth = 1.5;
+      // Compare points are 1:1 with the main bars (in order), so the visible
+      // data range indexes straight into them — convert only what's on screen
+      // (+1 bar of margin so line segments reach the edges). The range is the
+      // same for every line, so read it once per frame, not once per line.
+      const range = chart.getVisibleRange();
+      const from = Math.max(0, (range?.from ?? 0) - 1);
+      const rangeTo = (range?.to ?? Number.MAX_SAFE_INTEGER) + 1;
       for (const line of lines) {
         const pts = line.points;
         const n = pts.length;
         if (n === 0) continue;
-        // Compare points are 1:1 with the main bars (in order), so the visible
-        // data range indexes straight into them — convert only what's on screen
-        // (+1 bar of margin so line segments reach the edges).
-        const range = chart.getVisibleRange();
-        const from = Math.max(0, (range?.from ?? 0) - 1);
-        const to = Math.min(n - 1, (range?.to ?? n - 1) + 1);
+        const to = Math.min(n - 1, rangeTo);
         ctx.strokeStyle = line.color;
         ctx.beginPath();
         let started = false;

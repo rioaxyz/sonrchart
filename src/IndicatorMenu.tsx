@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useMemo, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import type { SonrChartHandle } from "./SonrChart";
 import { ensureDefaultStyles } from "./defaultStyles";
@@ -63,7 +63,7 @@ export function IndicatorMenu({
   labels?: Partial<Labels>;
 }) {
   useEffect(ensureDefaultStyles, []);
-  const L = mergeLabels(labels);
+  const L = useMemo(() => mergeLabels(labels), [labels]);
 
   const [active, setActive] = useState<string[]>([]);
   const { open, toggle: toggleOpen, pos, triggerRef, panelRef } = useDropdown();

@@ -69,6 +69,25 @@ export function smoothStroke(pts: XY[]): XY[] {
   return out;
 }
 
+// Per-overlay memo of the last smoothed polyline. `createPointFigures` runs on
+// every redraw — including every crosshair mousemove, where the screen
+// coordinates are unchanged — so re-splining the whole stroke each time is pure
+// waste. Keyed by overlay id + a cheap signature (point count + first/last
+// coordinate); a hit returns the cached curve, so the spline only recomputes
+// when the coordinates actually shift (pan/zoom). One entry per overlay.
+const _smoothCache = new Map<string, { sig: string; out: XY[] }>();
+function smoothStrokeCached(id: string, coordinates: XY[]): XY[] {
+  const n = coordinates.length;
+  const f = coordinates[0];
+  const l = coordinates[n - 1];
+  const sig = `${n}:${f.x},${f.y}:${l.x},${l.y}`;
+  const hit = _smoothCache.get(id);
+  if (hit && hit.sig === sig) return hit.out;
+  const out = smoothStroke(coordinates);
+  _smoothCache.set(id, { sig, out });
+  return out;
+}
+
 let _registered = false;
 
 export function registerBrushOverlay(): void {
@@ -88,7 +107,7 @@ export function registerBrushOverlay(): void {
       return [
         {
           type: "line",
-          attrs: { coordinates: smoothStroke(coordinates) },
+          attrs: { coordinates: smoothStrokeCached(overlay.id, coordinates) },
           // smooth beziers the path; round caps/joins remove the sharp,
           // pixelated corners so it reads like a TradingView brush.
           styles: { style: "solid", smooth: true, lineCap: "round", lineJoin: "round", color: ext.color, size: ext.size },
