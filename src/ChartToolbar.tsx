@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { SonrChartHandle } from "./SonrChart";
-import type { Interval } from "./types";
+import type { Interval, DataSource } from "./types";
 import type { CandleStyle, PriceScale } from "./types";
+import { SymbolSearch } from "./SymbolSearch";
 import { IndicatorMenu, type IndicatorOption } from "./IndicatorMenu";
 import { CandleMenu, type CandleStyleOption } from "./CandleMenu";
 import { PriceScaleMenu } from "./PriceScaleMenu";
@@ -43,6 +44,9 @@ export function ChartToolbar({
   showSnapshot = true,
   showSettings = true,
   snapshotName = "chart.png",
+  dataSource,
+  onSymbolSelect,
+  spreadOperators,
   className,
   children,
 }: {
@@ -68,6 +72,13 @@ export function ChartToolbar({
   showSnapshot?: boolean;
   showSettings?: boolean;
   snapshotName?: string;
+  /** DataSource used to power the optional symbol-search box (issue #37). */
+  dataSource?: DataSource;
+  /** When provided (with `dataSource`), a SymbolSearch renders at the toolbar's
+   *  left; picking a result fires this. Omit for the pre-#37 toolbar. */
+  onSymbolSelect?: (symbol: string) => void;
+  /** Forwarded to SymbolSearch — allow spread/expression pass-through. */
+  spreadOperators?: boolean;
   className?: string;
   children?: ReactNode;
 }) {
@@ -159,6 +170,13 @@ export function ChartToolbar({
         aria-label="Chart toolbar"
         onScroll={update}
       >
+        {onSymbolSelect && dataSource && (
+          <SymbolSearch
+            dataSource={dataSource}
+            onSelect={onSymbolSelect}
+            spreadOperators={spreadOperators}
+          />
+        )}
         {intervals && intervals.length > 0 && (
           <div className="sonr-interval-group" role="group" aria-label="Interval">
             {intervals.map((iv) => (
