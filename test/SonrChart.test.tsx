@@ -281,6 +281,22 @@ describe("SonrChart — drawing tools & magnet (#3, #13)", () => {
     expect(hl.extendData.size).toBe(14);
     expect(hl.extendData.color).toContain("rgba");
   });
+
+  it("brush stays armed (sticky) after each stroke; a point tool deactivates (#34)", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("brush"));
+    const before = c._overlays.length;
+    act(() => c._overlays.at(-1).onDrawEnd({})); // finish a stroke
+    expect(ref.current!.activeDrawing()).toBe("brush"); // still armed
+    expect(c._overlays.length).toBeGreaterThan(before); // re-armed a fresh overlay
+
+    // A point tool deactivates after placing one drawing.
+    act(() => ref.current!.startDrawing("segment"));
+    act(() => c._overlays.at(-1).onDrawEnd({}));
+    expect(ref.current!.activeDrawing()).toBeNull();
+  });
 });
 
 describe("SonrChart — pane heights (#7)", () => {
