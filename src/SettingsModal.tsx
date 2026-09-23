@@ -2,6 +2,7 @@ import { useEffect, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import type { SonrChartHandle } from "./SonrChart";
 import type { BrushStyle, BrushTool } from "./brush";
+import type { WatermarkOptions } from "./types";
 import { ensureDefaultStyles } from "./defaultStyles";
 
 // A self-contained chart settings dialog (one modal, sections mirroring the
@@ -60,15 +61,10 @@ export function SettingsModal({
   chartRef,
   open,
   onClose,
-  watermark,
-  onWatermarkChange,
 }: {
   chartRef: RefObject<SonrChartHandle>;
   open: boolean;
   onClose: () => void;
-  /** Underlaid ticker+interval watermark toggle (shown in Grid & Crosshair). */
-  watermark?: boolean;
-  onWatermarkChange?: (on: boolean) => void;
 }) {
   useEffect(ensureDefaultStyles, []);
 
@@ -81,7 +77,7 @@ export function SettingsModal({
   const [indicators, setIndicators] = useState<string[]>([]);
   const [indColors, setIndColors] = useState<Record<string, string>>({});
   const [indParams, setIndParams] = useState<Record<string, number[]>>({});
-  const [uncWatermark, setUncWatermark] = useState(false);
+  const [watermark, setWatermark] = useState<WatermarkOptions>({ symbol: true, interval: true, color: "#e6ebe9", opacity: 0.06 });
   const [brushStyles, setBrushStyles] = useState<Record<BrushTool, BrushStyle>>({
     brush: { color: "#e6ebe9", size: 2 },
     highlighter: { color: "rgba(245,214,66,0.35)", size: 14 },
@@ -112,8 +108,12 @@ export function SettingsModal({
       }
     }
     setIndParams(params);
-    setUncWatermark(!!chartRef.current?.getWatermark?.());
-    const unsubWm = chartRef.current?.subscribeWatermark?.((v) => setUncWatermark(!!v));
+    const readWm = () => {
+      const w = chartRef.current?.getWatermark?.();
+      if (w) setWatermark(w);
+    };
+    readWm();
+    const unsubWm = chartRef.current?.subscribeWatermark?.(readWm);
     const readBrush = () => {
       const h = chartRef.current;
       if (h?.getBrushStyle) setBrushStyles({ brush: h.getBrushStyle("brush"), highlighter: h.getBrushStyle("highlighter") });
@@ -135,10 +135,11 @@ export function SettingsModal({
 
   const chart = () => chartRef.current?.chart?.() ?? null;
 
-  // Watermark: controlled by the host if it passed onWatermarkChange, otherwise
-  // driven straight through the chart handle (works with no host wiring).
-  const wmValue = onWatermarkChange ? !!watermark : uncWatermark;
-  const wmChange = onWatermarkChange ?? ((on: boolean) => chartRef.current?.setWatermark(on));
+  // Watermark config is driven through the chart handle (no host wiring).
+  const applyWm = (partial: Partial<WatermarkOptions>) => {
+    chartRef.current?.setWatermark?.(partial);
+    setWatermark((cur) => ({ ...cur, ...partial }));
+  };
 
   const applyCandles = (up: string, down: string) => {
     chart()?.setStyles({
@@ -271,9 +272,27 @@ export function SettingsModal({
             )}
             {section === "grid" && (
               <>
-                <Row label="Watermark (symbol + interval)">
-                  <input type="checkbox" checked={wmValue} onChange={(e) => wmChange(e.target.checked)} />
+                <div className="sonr-set-subhead">Watermark</div>
+                <Row label="Show symbol">
+                  <input type="checkbox" checked={watermark.symbol} onChange={(e) => applyWm({ symbol: e.target.checked })} />
                 </Row>
+                <Row label="Show interval">
+                  <input type="checkbox" checked={watermark.interval} onChange={(e) => applyWm({ interval: e.target.checked })} />
+                </Row>
+                <Row label="Watermark color">
+                  <input type="color" value={hex(watermark.color, "#e6ebe9")} onChange={(e) => applyWm({ color: e.target.value })} />
+                </Row>
+                <Row label={`Watermark opacity (${Math.round(watermark.opacity * 100)}%)`}>
+                  <input
+                    type="range"
+                    min="0.02"
+                    max="0.5"
+                    step="0.01"
+                    value={watermark.opacity}
+                    onChange={(e) => applyWm({ opacity: Number(e.target.value) })}
+                  />
+                </Row>
+                <div className="sonr-set-subhead">Grid &amp; Crosshair</div>
                 <Row label="Show grid">
                   <input
                     type="checkbox"

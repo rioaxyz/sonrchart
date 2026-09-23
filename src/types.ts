@@ -190,3 +190,14 @@ export type SessionTint =
     };
 
 export type Theme = "dark" | "light";
+
+/** Watermark configuration (issue: watermark controls). Show the symbol and/or
+ *  the interval, with a configurable color and opacity. */
+export interface WatermarkOptions {
+  symbol: boolean;
+  interval: boolean;
+  /** #rrggbb ink color (opacity applied separately). */
+  color: string;
+  /** 0..1. */
+  opacity: number;
+}

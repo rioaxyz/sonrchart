@@ -74,7 +74,7 @@ vi.mock("klinecharts", () => ({
 }));
 
 import { SonrChart, type SonrChartHandle } from "../src/SonrChart";
-import { SESSION_INDICATOR, PATTERN_INDICATOR, SERIES_INDICATOR, DEFAULT_SESSION_COLORS } from "../src/indicators";
+import { SESSION_INDICATOR, PATTERN_INDICATOR, SERIES_INDICATOR, WATERMARK_INDICATOR, DEFAULT_SESSION_COLORS } from "../src/indicators";
 import type { DataSource } from "../src/types";
 
 const bars = [
@@ -190,6 +190,20 @@ describe("SonrChart — custom series styles (#33)", () => {
 
     rerender(<SonrChart symbol="A" dataSource={source()} candleStyle="candle" />);
     expect(c.removeIndicator).toHaveBeenCalledWith({ name: SERIES_INDICATOR });
+  });
+});
+
+describe("SonrChart — watermark config", () => {
+  it("draws only the chosen parts with the configured color+opacity, and removes when both off", () => {
+    const { rerender } = render(
+      <SonrChart symbol="AAPL" interval="5" dataSource={source()} watermark={{ symbol: true, interval: false, color: "#ff0000", opacity: 0.2 }} />,
+    );
+    const c = lastChart();
+    const create = c.createIndicator.mock.calls.find((call: any[]) => call[0]?.name === WATERMARK_INDICATOR);
+    expect(create[0].extendData).toMatchObject({ title: "AAPL", subtitle: "", color: "rgba(255,0,0,0.2)" });
+
+    rerender(<SonrChart symbol="AAPL" interval="5" dataSource={source()} watermark={false} />);
+    expect(c.removeIndicator).toHaveBeenCalledWith({ name: WATERMARK_INDICATOR });
   });
 });
 
