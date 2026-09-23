@@ -6,7 +6,7 @@ import { CANDLE_TYPE, HaTransformer, isCustomSeries, isHeikinAshi, toHeikinAshi 
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
 import { asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
 import { USER_DRAWING_GROUP } from "./drawings";
-import { BRUSH_OVERLAY, brushStyle, isBrushTool, registerBrushOverlay } from "./brush";
+import { BRUSH_OVERLAY, brushStyle, isBrushTool, registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
 import type {
   CandleStyle,
   ChartState,
@@ -129,6 +129,12 @@ export interface SonrChartHandle {
   getWatermark(): boolean;
   setWatermark(on: boolean): void;
   subscribeWatermark(cb: (on: boolean) => void): () => void;
+  /** Current brush/highlighter stroke style (color + width). */
+  getBrushStyle(tool: BrushTool): BrushStyle;
+  /** Set the brush/highlighter stroke style — applies to subsequent strokes. */
+  setBrushStyle(tool: BrushTool, style: BrushStyle): void;
+  /** Subscribe to brush-style changes (for a settings UI). Returns unsubscribe. */
+  subscribeBrush(cb: () => void): () => void;
 }
 
 let _seq = 0;
@@ -340,6 +346,14 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     activeToolRef.current = tool;
     drawingSubs.current.forEach((cb) => cb(tool));
   };
+  // Brush/highlighter stroke styles (color + width), configurable from settings.
+  // Seeded from the theme presets; each new stroke reads the current value.
+  const brushStylesRef = useRef<Record<BrushTool, BrushStyle>>({
+    brush: brushStyle("brush", theme),
+    highlighter: brushStyle("highlighter", theme),
+  });
+  const brushSubs = useRef(new Set<() => void>());
+  const notifyBrush = () => brushSubs.current.forEach((cb) => cb());
 
   const snapshotDrawings = (): Snap =>
     (chartRef.current?.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? []).map((o) => ({
@@ -372,7 +386,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       name: brush ? BRUSH_OVERLAY : tool,
       groupId: USER_DRAWING_GROUP,
       mode: brush ? "normal" : magnetMode(magnetRef.current),
-      ...(brush ? { extendData: brushStyle(tool, themeRef.current) } : {}),
+      ...(brush ? { extendData: { ...brushStylesRef.current[tool as BrushTool] } } : {}),
       onDrawEnd: () => {
         // Drawing placed: the overlay is now a finished drawing, not in progress.
         progressIdRef.current = null;
@@ -597,6 +611,15 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       getWatermark: () => watermarkRef.current,
       setWatermark: (on) => wm.set(on),
       subscribeWatermark: (cb) => wm.subscribe(cb),
+      getBrushStyle: (tool) => ({ ...brushStylesRef.current[tool] }),
+      setBrushStyle: (tool, style) => {
+        brushStylesRef.current[tool] = { ...style };
+        notifyBrush();
+      },
+      subscribeBrush: (cb) => {
+        brushSubs.current.add(cb);
+        return () => brushSubs.current.delete(cb);
+      },
     }),
     // paneHeights/priceScale captured by closure; recreated per render is fine.
     // eslint-disable-next-line react-hooks/exhaustive-deps

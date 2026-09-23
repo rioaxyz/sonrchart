@@ -282,6 +282,15 @@ describe("SonrChart — drawing tools & magnet (#3, #13)", () => {
     expect(hl.extendData.color).toContain("rgba");
   });
 
+  it("uses the configurable brush style for new strokes (get/set)", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} theme="dark" />);
+    expect(ref.current!.getBrushStyle("brush")).toEqual({ color: "#e6ebe9", size: 2 });
+    act(() => ref.current!.setBrushStyle("brush", { color: "#ff0000", size: 6 }));
+    act(() => ref.current!.startDrawing("brush"));
+    expect(lastChart()._overlays.at(-1).extendData).toEqual({ color: "#ff0000", size: 6 });
+  });
+
   it("brush stays armed (sticky) after each stroke; a point tool deactivates (#34)", () => {
     const ref = createRef<SonrChartHandle>();
     render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);

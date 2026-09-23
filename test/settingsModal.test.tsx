@@ -21,9 +21,15 @@ function fakeChart(calcParamsByName: Record<string, number[]> = {}) {
 }
 
 function handleWith(chart: any, indicators: string[] = []): SonrChartHandle {
+  const brush: any = { brush: { color: "#e6ebe9", size: 2 }, highlighter: { color: "rgba(245,214,66,0.35)", size: 14 } };
   return {
     chart: () => chart,
     listIndicators: () => indicators,
+    getBrushStyle: (t: string) => brush[t],
+    setBrushStyle: vi.fn((t: string, s: any) => {
+      brush[t] = s;
+    }),
+    subscribeBrush: () => () => {},
   } as unknown as SonrChartHandle;
 }
 
@@ -96,6 +102,18 @@ describe("SettingsModal (#settings)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Grid & Crosshair" }));
     await userEvent.click(screen.getByRole("checkbox", { name: /Watermark/ }));
     expect(onWatermarkChange).toHaveBeenCalledWith(true);
+  });
+
+  it("edits brush width in the Drawing section via setBrushStyle", async () => {
+    const h = handleWith(fakeChart());
+    render(<SettingsModal chartRef={ref(h)} open onClose={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Drawing" }));
+    expect(screen.getByText("Brush")).toBeInTheDocument();
+    expect(screen.getByText("Highlighter")).toBeInTheDocument();
+    // The brush width input (spinbutton) seeded to 2 → bump it.
+    const widths = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    fireEvent.input(widths[0], { target: { value: "8" } });
+    expect(h.setBrushStyle).toHaveBeenCalledWith("brush", expect.objectContaining({ size: 8 }));
   });
 
   it("closes on the ✕ button", async () => {
