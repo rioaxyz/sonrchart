@@ -33,8 +33,6 @@ export function ChartToolbar({
   onPriceScaleChange,
   sessions,
   onSessionsChange,
-  watermark,
-  onWatermarkChange,
   indicatorOptions,
   drawingTools,
   showCandle = true,
@@ -61,8 +59,6 @@ export function ChartToolbar({
   onPriceScaleChange?: (scale: PriceScale) => void;
   sessions?: boolean;
   onSessionsChange?: (on: boolean) => void;
-  watermark?: boolean;
-  onWatermarkChange?: (on: boolean) => void;
   indicatorOptions?: IndicatorOption[];
   drawingTools?: DrawingToolOption[];
   showCandle?: boolean;
@@ -240,8 +236,6 @@ export function ChartToolbar({
           chartRef={chartRef}
           open={settingsOpen}
           onClose={() => setSettingsOpen(false)}
-          watermark={watermark}
-          onWatermarkChange={onWatermarkChange}
         />
       )}
       {canLeft && (

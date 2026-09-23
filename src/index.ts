@@ -46,4 +46,5 @@ export type {
   SymbolInfo,
   SymbolSearchResult,
   Theme,
+  WatermarkOptions,
 } from "./types";

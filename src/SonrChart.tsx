@@ -22,6 +22,7 @@ import type {
   PriceScale,
   SessionTint,
   Theme,
+  WatermarkOptions,
 } from "./types";
 
 registerSonrIndicators();
@@ -48,8 +49,9 @@ export interface SonrChartProps {
   paneHeights?: Record<string, number>;
   /** Session background tinting for pre/after-hours. (#10) */
   sessions?: SessionTint;
-  /** Underlaid ticker + interval watermark behind the candles. */
-  watermark?: boolean;
+  /** Underlaid symbol + interval watermark behind the candles. `true` shows both;
+   *  pass options to toggle each and set color/opacity. */
+  watermark?: boolean | Partial<WatermarkOptions>;
   /** Pattern-context markers on the price pane. (#5) */
   patterns?: PatternMarker[];
   /** Static reference lines (entry / stop / target). */
@@ -126,9 +128,9 @@ export interface SonrChartHandle {
   getSessions(): SessionTint | undefined;
   setSessions(on: SessionTint): void;
   subscribeSessions(cb: (on: SessionTint) => void): () => void;
-  getWatermark(): boolean;
-  setWatermark(on: boolean): void;
-  subscribeWatermark(cb: (on: boolean) => void): () => void;
+  getWatermark(): WatermarkOptions;
+  setWatermark(opts: boolean | Partial<WatermarkOptions>): void;
+  subscribeWatermark(cb: () => void): () => void;
   /** Current brush/highlighter stroke style (color + width). */
   getBrushStyle(tool: BrushTool): BrushStyle;
   /** Set the brush/highlighter stroke style — applies to subsequent strokes. */
@@ -177,12 +179,43 @@ function intervalLabel(iv: string): string {
   const m: Record<string, string> = { "10S": "10s", "30S": "30s", "1": "1m", "5": "5m", "15": "15m", "30": "30m", "60": "1h", D: "1D", "1D": "1D", "1440": "1D" };
   return m[iv] ?? iv;
 }
-// Faint watermark ink for the theme (candles read cleanly over it).
-function watermarkColor(theme: Theme): string {
-  return theme === "dark" ? "rgba(230,235,233,0.055)" : "rgba(26,31,41,0.06)";
+// Default faint watermark ink hex for the theme (candles read cleanly over it).
+function watermarkInk(theme: Theme): string {
+  return theme === "dark" ? "#e6ebe9" : "#1a1f29";
 }
-function buildWatermark(symbol: string, interval: string, theme: Theme): WatermarkData {
-  return { title: bareTicker(symbol).toUpperCase(), subtitle: intervalLabel(interval), color: watermarkColor(theme) };
+function defaultWatermark(theme: Theme): WatermarkOptions {
+  return { symbol: false, interval: false, color: watermarkInk(theme), opacity: 0.06 };
+}
+// Coerce the `watermark` prop (boolean | partial) into a full options object.
+// `true` shows both; a partial object shows whatever it doesn't turn off.
+function normalizeWatermark(prop: boolean | Partial<WatermarkOptions> | undefined, theme: Theme): WatermarkOptions {
+  const base = defaultWatermark(theme);
+  if (prop === undefined || prop === false) return base;
+  if (prop === true) return { ...base, symbol: true, interval: true };
+  return {
+    symbol: prop.symbol ?? true,
+    interval: prop.interval ?? true,
+    color: prop.color ?? base.color,
+    opacity: prop.opacity ?? base.opacity,
+  };
+}
+// Fold a change (boolean master or partial options) into the current config.
+function mergeWatermark(cur: WatermarkOptions, next: boolean | Partial<WatermarkOptions>): WatermarkOptions {
+  if (typeof next === "boolean") return { ...cur, symbol: next, interval: next };
+  return { ...cur, ...next };
+}
+// #rrggbb + opacity -> rgba() for the canvas fill.
+function composeRgba(color: string, opacity: number): string {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
+  if (!m) return color;
+  return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${opacity})`;
+}
+function buildWatermark(symbol: string, interval: string, opts: WatermarkOptions): WatermarkData {
+  return {
+    title: opts.symbol ? bareTicker(symbol).toUpperCase() : "",
+    subtitle: opts.interval ? intervalLabel(interval) : "",
+    color: composeRgba(opts.color, opts.opacity),
+  };
 }
 
 // --- custom series styles (#33) ----------------------------------------------
@@ -305,11 +338,22 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   const candle = useControllable<CandleStyle>(candleStyleProp, "candle");
   const scale = useControllable<PriceScale>(priceScaleProp, { type: "normal" });
   const sess = useControllable<SessionTint>(sessionsProp, false);
-  const wm = useControllable<boolean>(watermarkProp, false);
   const candleStyle = candle.value;
   const priceScale = scale.value;
   const sessions = sess.value;
-  const watermark = wm.value;
+  // Watermark is a merge-able config (symbol/interval/color/opacity), so it uses
+  // its own controllable-ish state rather than the scalar useControllable helper.
+  const [watermark, setWatermarkState] = useState<WatermarkOptions>(() => normalizeWatermark(watermarkProp, theme));
+  const wmPropRef = useRef(watermarkProp);
+  if (watermarkProp !== wmPropRef.current) {
+    wmPropRef.current = watermarkProp;
+    if (watermarkProp !== undefined) setWatermarkState(normalizeWatermark(watermarkProp, theme));
+  }
+  const wmSubs = useRef(new Set<() => void>());
+  const setWatermark = (next: boolean | Partial<WatermarkOptions>) => setWatermarkState((cur) => mergeWatermark(cur, next));
+  useEffect(() => {
+    wmSubs.current.forEach((cb) => cb());
+  }, [watermark]);
   const candleStyleRef = useRef(candleStyle);
   candleStyleRef.current = candleStyle;
   // Live mirrors so the (stable, []-deps) imperative handle's getters read the
@@ -608,9 +652,12 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       getSessions: () => sessionsRef.current,
       setSessions: (s) => sess.set(s),
       subscribeSessions: (cb) => sess.subscribe(cb),
-      getWatermark: () => watermarkRef.current,
-      setWatermark: (on) => wm.set(on),
-      subscribeWatermark: (cb) => wm.subscribe(cb),
+      getWatermark: () => ({ ...watermarkRef.current }),
+      setWatermark: (opts) => setWatermark(opts),
+      subscribeWatermark: (cb) => {
+        wmSubs.current.add(cb);
+        return () => wmSubs.current.delete(cb);
+      },
       getBrushStyle: (tool) => ({ ...brushStylesRef.current[tool] }),
       setBrushStyle: (tool, style) => {
         brushStylesRef.current[tool] = { ...style };
@@ -725,9 +772,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       pricePrecRef.current = info.pricePrecision ?? 2;
       chart.setPeriod(toPeriod(interval));
       // Watermark first so it sits at the very back (behind session tint + candles).
-      if (watermark) {
+      if (watermark.symbol || watermark.interval) {
         chart.createIndicator(
-          { name: WATERMARK_INDICATOR, paneId: CANDLE_PANE, extendData: buildWatermark(info.ticker ?? symbol, interval, theme) },
+          { name: WATERMARK_INDICATOR, paneId: CANDLE_PANE, extendData: buildWatermark(info.ticker ?? symbol, interval, watermark) },
           false,
         );
       }
@@ -798,11 +845,13 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     const chart = chartRef.current;
     if (!chart) return;
     const present = chart.getIndicators({ name: WATERMARK_INDICATOR }).length > 0;
-    if (watermark && !present) {
-      chart.createIndicator({ name: WATERMARK_INDICATOR, paneId: CANDLE_PANE, extendData: buildWatermark(symbol, interval, theme) }, false);
-    } else if (watermark && present) {
-      chart.overrideIndicator({ name: WATERMARK_INDICATOR, extendData: buildWatermark(symbol, interval, theme) });
-    } else if (!watermark && present) {
+    const active = watermark.symbol || watermark.interval;
+    const ext = buildWatermark(symbol, interval, watermark);
+    if (active && !present) {
+      chart.createIndicator({ name: WATERMARK_INDICATOR, paneId: CANDLE_PANE, extendData: ext }, false);
+    } else if (active && present) {
+      chart.overrideIndicator({ name: WATERMARK_INDICATOR, extendData: ext });
+    } else if (!active && present) {
       chart.removeIndicator({ name: WATERMARK_INDICATOR });
     }
   }, [watermark, symbol, interval, theme]);

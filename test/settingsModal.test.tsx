@@ -30,6 +30,9 @@ function handleWith(chart: any, indicators: string[] = []): SonrChartHandle {
       brush[t] = s;
     }),
     subscribeBrush: () => () => {},
+    getWatermark: () => ({ symbol: true, interval: true, color: "#e6ebe9", opacity: 0.06 }),
+    setWatermark: vi.fn(),
+    subscribeWatermark: () => () => {},
   } as unknown as SonrChartHandle;
 }
 
@@ -94,14 +97,16 @@ describe("SettingsModal (#settings)", () => {
     expect(screen.queryByLabelText(/VOL input/)).toBeNull();
   });
 
-  it("toggles the watermark from the Grid section when wired", async () => {
-    const onWatermarkChange = vi.fn();
-    render(
-      <SettingsModal chartRef={ref(handleWith(fakeChart()))} open onClose={vi.fn()} watermark={false} onWatermarkChange={onWatermarkChange} />,
-    );
+  it("configures the watermark (symbol/interval/color/opacity) via the handle", async () => {
+    const h = handleWith(fakeChart());
+    render(<SettingsModal chartRef={ref(h)} open onClose={vi.fn()} />);
     await userEvent.click(screen.getByRole("button", { name: "Grid & Crosshair" }));
-    await userEvent.click(screen.getByRole("checkbox", { name: /Watermark/ }));
-    expect(onWatermarkChange).toHaveBeenCalledWith(true);
+    // Toggle the symbol off, then bump opacity.
+    await userEvent.click(screen.getByRole("checkbox", { name: "Show symbol" }));
+    expect(h.setWatermark).toHaveBeenCalledWith({ symbol: false });
+    const opacity = screen.getByRole("slider");
+    fireEvent.input(opacity, { target: { value: "0.3" } });
+    expect(h.setWatermark).toHaveBeenCalledWith({ opacity: 0.3 });
   });
 
   it("edits brush width in the Drawing section via setBrushStyle", async () => {

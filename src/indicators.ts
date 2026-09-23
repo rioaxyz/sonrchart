@@ -219,7 +219,9 @@ export function registerSonrIndicators(): void {
     calc: (dataList) => dataList.map(() => ({})),
     draw: ({ ctx, bounding, indicator }) => {
       const wm = indicator.extendData as WatermarkData | undefined;
-      if (!wm || !wm.title) return false;
+      // The title is the primary line; if only the interval is shown it becomes
+      // the primary (drawn large), so support title-only / subtitle-only / both.
+      if (!wm || (!wm.title && !wm.subtitle)) return false;
       const top = bounding.top ?? 0;
       const h = bounding.height;
       const w = bounding.width;
@@ -227,17 +229,18 @@ export function registerSonrIndicators(): void {
       const cx = w / 2;
       const cy = top + h / 2;
       const titleSize = Math.max(20, Math.min(96, Math.min(w * 0.16, h * 0.28)));
-      const hasSub = !!wm.subtitle;
+      const primary = wm.title || (wm.subtitle as string);
+      const secondary = wm.title ? wm.subtitle : "";
       ctx.save();
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = wm.color;
       ctx.font = `700 ${titleSize}px ui-sans-serif, -apple-system, "Segoe UI", sans-serif`;
-      ctx.fillText(wm.title, cx, hasSub ? cy - titleSize * 0.34 : cy);
-      if (hasSub) {
+      ctx.fillText(primary, cx, secondary ? cy - titleSize * 0.34 : cy);
+      if (secondary) {
         const subSize = titleSize * 0.48;
         ctx.font = `600 ${subSize}px ui-sans-serif, -apple-system, "Segoe UI", sans-serif`;
-        ctx.fillText(wm.subtitle as string, cx, cy + subSize * 0.7);
+        ctx.fillText(secondary, cx, cy + subSize * 0.7);
       }
       ctx.restore();
       return false;
