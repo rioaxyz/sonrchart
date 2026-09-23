@@ -1,5 +1,7 @@
 export { SonrChart } from "./SonrChart";
 export type { SonrChartProps, SonrChartHandle } from "./SonrChart";
+export { resolveShortcut, isEditableTarget } from "./keyboard";
+export type { ShortcutAction } from "./keyboard";
 export { IndicatorMenu, DEFAULT_INDICATOR_OPTIONS } from "./IndicatorMenu";
 export type { IndicatorOption } from "./IndicatorMenu";
 export { DrawingToolbar } from "./DrawingToolbar";
