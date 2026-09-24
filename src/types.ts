@@ -1,4 +1,5 @@
 // Public types for sonrchart.
+import type { DrawingSnapshotItem } from "./drawingTemplates";
 
 /** One OHLC(V) bar. `time` is milliseconds since the Unix epoch. */
 export interface Bar {
@@ -125,7 +126,7 @@ export type DrawingTool =
  *  persists and hands back to `importState`. */
 export interface ChartState {
   version: 1;
-  drawings: Array<{ name: string; points: unknown[]; styles?: unknown; mode?: string; extendData?: unknown }>;
+  drawings: DrawingSnapshotItem[];
   indicators: Array<{ name: string; paneId?: string }>;
   priceScale?: PriceScale;
 }

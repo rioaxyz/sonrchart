@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { SonrChartHandle } from "./SonrChart";
 import type { Interval, DataSource } from "./types";
 import type { CandleStyle, PriceScale } from "./types";
@@ -84,7 +84,7 @@ export function ChartToolbar({
   children?: ReactNode;
 }) {
   useEffect(ensureDefaultStyles, []);
-  const L = mergeLabels(labels);
+  const L = useMemo(() => mergeLabels(labels), [labels]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 

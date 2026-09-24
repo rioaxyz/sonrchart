@@ -60,6 +60,15 @@ export function rectangleFigures({ coordinates }: Params): OverlayFigure[] {
   ];
 }
 
+// Unit-circle cos/sin table, computed once. The ellipse polygon has a fixed
+// vertex count, so the trig never changes frame-to-frame — only the center and
+// radii do. Hoisting it out drops 96 trig calls per redraw to zero.
+const ELLIPSE_STEPS = 48;
+const UNIT_CIRCLE: ReadonlyArray<{ cos: number; sin: number }> = Array.from({ length: ELLIPSE_STEPS }, (_, i) => {
+  const t = (i / ELLIPSE_STEPS) * Math.PI * 2;
+  return { cos: Math.cos(t), sin: Math.sin(t) };
+});
+
 /** Ellipse — a 2-point ellipse inscribed in the box the points bound. Drawn as
  *  a polygon approximation, since KLineChart's circle/arc take a single radius. */
 export function ellipseFigures({ coordinates }: Params): OverlayFigure[] {
@@ -69,12 +78,7 @@ export function ellipseFigures({ coordinates }: Params): OverlayFigure[] {
   const cy = (a.y + b.y) / 2;
   const rx = Math.abs(b.x - a.x) / 2;
   const ry = Math.abs(b.y - a.y) / 2;
-  const STEPS = 48;
-  const pts: Array<{ x: number; y: number }> = [];
-  for (let i = 0; i < STEPS; i++) {
-    const t = (i / STEPS) * Math.PI * 2;
-    pts.push({ x: cx + rx * Math.cos(t), y: cy + ry * Math.sin(t) });
-  }
+  const pts = UNIT_CIRCLE.map((u) => ({ x: cx + rx * u.cos, y: cy + ry * u.sin }));
   return [
     {
       type: "polygon",

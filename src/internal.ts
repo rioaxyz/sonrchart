@@ -5,6 +5,10 @@ import type { DeepPartial, KLineData, PeriodType, Styles } from "klinecharts";
 import { DEFAULT_SESSION_COLORS, type SessionColors } from "./indicators";
 import type { Bar, IndicatorSpec, Interval, SessionTint } from "./types";
 
+/** KLineChart's id for the main price pane — where the candles, watermark,
+ *  session tint, pattern markers, compare series, and "main" indicators live. */
+export const CANDLE_PANE = "candle_pane";
+
 export function toKLine(b: Bar): KLineData {
   return { timestamp: b.time, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume ?? 0 };
 }
