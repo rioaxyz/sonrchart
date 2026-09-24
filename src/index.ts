@@ -8,6 +8,7 @@ export { DrawingToolbar } from "./DrawingToolbar";
 export { ConfirmDialog } from "./ConfirmDialog";
 export { DataWindow } from "./DataWindow";
 export { ObjectTree } from "./ObjectTree";
+export { TimeframeBar } from "./TimeframeBar";
 export { drawingLabel } from "./drawings";
 export { CandleMenu, DEFAULT_CANDLE_STYLES } from "./CandleMenu";
 export type { CandleStyleOption } from "./CandleMenu";

@@ -99,6 +99,13 @@ const CSS = `
 :where(.sonr-panel-btn){display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;background:none;border:none;border-radius:3px;color:#555;cursor:pointer;}
 :where(.sonr-panel-btn:hover){background:rgba(0,0,0,0.1);color:#000;}
 :where(.sonr-panel-btn[aria-pressed="true"]){color:#000;}
+:where(.sonr-timeframe-bar){display:flex;align-items:center;gap:8px;padding:3px 8px;background:#fff;color:#000;border-top:1px solid #000;font-family:inherit;}
+:where(.sonr-timeframe-list){display:flex;align-items:center;gap:2px;flex:1 1 auto;overflow-x:auto;scrollbar-width:none;}
+:where(.sonr-timeframe-list::-webkit-scrollbar){height:0;width:0;display:none;}
+:where(.sonr-timeframe-btn){appearance:none;background:none;border:none;border-radius:3px;color:#555;cursor:pointer;font:inherit;font-size:11px;font-weight:600;line-height:20px;padding:0 8px;white-space:nowrap;}
+:where(.sonr-timeframe-btn:hover){background:#e6e6e6;color:#000;}
+:where(.sonr-timeframe-btn.on){background:#000;color:#fff;}
+:where(.sonr-timeframe-slot){display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;}
 `;
 
 /** Inject the default toolbar stylesheet once. No-op on the server, when already
