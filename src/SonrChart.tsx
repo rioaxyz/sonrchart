@@ -715,7 +715,10 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
 
     const options: Options = {
       timezone: "America/New_York",
-      layout: yAxisLayout(priceScale),
+      // Widen KLineChart's default bar-space limits (min 1 / max 50). The 50-px
+      // cap silently no-ops setBarSpace, so a short lookback (e.g. "1D" with few
+      // bars over a wide plot) could never zoom in far enough to apply.
+      layout: { ...(yAxisLayout(priceScale) ?? {}), barSpaceLimit: { min: 0.3, max: 1000 } },
     };
     const chart = init(el, options);
     if (!chart) return;
