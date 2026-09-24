@@ -218,6 +218,15 @@ export interface SonrChartHandle {
   /** Zoom the visible window to the most recent `ms` of loaded data at the
    *  current resolution (clamped to what's loaded). `Infinity` fits all data. */
   setVisibleDuration(ms: number): void;
+  // Navigation (#45) --------------------------------------------------------
+  /** Scroll the visible window to the bar at (or nearest before) this epoch-ms. */
+  scrollToTimestamp(timestamp: number): void;
+  /** Jump the visible window to the latest (realtime) bar. */
+  scrollToRealTime(): void;
+  /** Zoom the visible range in one step (toward more detail). */
+  zoomIn(): void;
+  /** Zoom the visible range out one step (toward more history). */
+  zoomOut(): void;
 }
 
 let _seq = 0;
@@ -665,6 +674,11 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         chart.setBarSpace(plotWidth / targetBars);
         chart.scrollToRealTime();
       },
+      // Navigation (#45) ----------------------------------------------------
+      scrollToTimestamp: (ts) => chartRef.current?.scrollToTimestamp(ts),
+      scrollToRealTime: () => chartRef.current?.scrollToRealTime(),
+      zoomIn: () => chartRef.current?.zoomAtCoordinate(1.5),
+      zoomOut: () => chartRef.current?.zoomAtCoordinate(0.6667),
     }),
     // paneHeights/priceScale captured by closure; recreated per render is fine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
