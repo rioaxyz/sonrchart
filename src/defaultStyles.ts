@@ -158,6 +158,13 @@ const CSS = `
 :where(.sonr-hd-v){color:#555;}
 :where(.sonr-hd-up){color:#22a06b;}
 :where(.sonr-hd-down){color:#d23c3c;}
+:where(.sonr-brand){position:absolute;z-index:3;pointer-events:none;font-family:inherit;font-weight:700;font-size:13px;letter-spacing:0.02em;color:#000;user-select:none;line-height:1;}
+:where(.sonr-brand-img){display:block;}
+:where(.sonr-brand-link){pointer-events:auto;color:inherit;text-decoration:none;}
+:where(.sonr-brand-top-left){top:6px;left:8px;}
+:where(.sonr-brand-top-right){top:6px;right:8px;}
+:where(.sonr-brand-bottom-left){bottom:6px;left:8px;}
+:where(.sonr-brand-bottom-right){bottom:6px;right:8px;}
 /* --- SaveLoadDialog --- */
 :where(.sonr-sl-overlay){position:fixed;inset:0;z-index:2147483001;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);}
 :where(.sonr-sl-panel){display:flex;flex-direction:column;width:520px;max-width:92vw;max-height:82vh;background:#fff;color:#000;border:1px solid #000;border-radius:8px;overflow:hidden;font-family:inherit;}

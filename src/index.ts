@@ -20,6 +20,8 @@ export { MarketStatus, marketStatus } from "./MarketStatus";
 export type { MarketPhase, MarketStatusProps } from "./MarketStatus";
 export { ChartHeader } from "./ChartHeader";
 export type { ChartHeaderProps } from "./ChartHeader";
+export { BrandMark } from "./BrandMark";
+export type { BrandMarkProps, BrandCorner } from "./BrandMark";
 export { drawingLabel } from "./drawings";
 export { CandleMenu, DEFAULT_CANDLE_STYLES } from "./CandleMenu";
 export type { CandleStyleOption } from "./CandleMenu";
