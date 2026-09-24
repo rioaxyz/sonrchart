@@ -104,6 +104,28 @@ export function ClearIcon() {
   );
 }
 
+/** Eye — drawings visible. */
+export function EyeIcon() {
+  return (
+    <Svg>
+      <path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z" />
+      <circle cx="8" cy="8" r="1.9" />
+    </Svg>
+  );
+}
+
+/** Eye with a slash — drawings hidden. */
+export function EyeOffIcon() {
+  return (
+    <Svg>
+      <path d="M6.3 3.7A6.9 6.9 0 0 1 8 3.5c4.1 0 6.5 4.5 6.5 4.5a11.7 11.7 0 0 1-1.9 2.4" />
+      <path d="M3.4 4.6A11.6 11.6 0 0 0 1.5 8S3.9 12.5 8 12.5a6.7 6.7 0 0 0 2.4-.4" />
+      <path d="M6.6 6.6a2 2 0 0 0 2.8 2.8" />
+      <path d="M2.5 2.5l11 11" />
+    </Svg>
+  );
+}
+
 /** Undo — curved arrow. Heavier stroke than the old ↶ glyph so it stays legible
  *  at a muted color on a dark theme. */
 export function UndoIcon() {

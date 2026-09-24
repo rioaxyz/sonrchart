@@ -128,6 +128,7 @@ export function SettingsModal({
     const h = chartRef.current;
     setDrawingsLocked(h?.getDrawingsLocked?.() ?? false);
     setDrawingsHidden(!(h?.getDrawingsVisible?.() ?? true));
+    const unsubVis = h?.subscribeDrawingsVisible?.((visible) => setDrawingsHidden(!visible));
     const readTemplates = () => setTemplates(h?.listDrawingTemplates?.() ?? []);
     readTemplates();
     const unsubTpl = h?.subscribeDrawingTemplates?.(readTemplates);
@@ -139,6 +140,7 @@ export function SettingsModal({
       document.removeEventListener("keydown", onKey);
       unsubWm?.();
       unsubBrush?.();
+      unsubVis?.();
       unsubTpl?.();
     };
   }, [open, chartRef, onClose]);

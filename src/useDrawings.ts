@@ -42,6 +42,9 @@ export interface DrawingsApi {
   getDrawingsLocked(): boolean;
   setDrawingsVisible(visible: boolean): void;
   getDrawingsVisible(): boolean;
+  /** Subscribe to hide/show-all changes (keeps a toolbar toggle and the
+   *  settings panel in sync). Returns unsubscribe. */
+  subscribeDrawingsVisible(cb: (visible: boolean) => void): () => void;
   saveDrawingTemplate(name: string): void;
   applyDrawingTemplate(name: string): void;
   listDrawingTemplates(): string[];
@@ -80,6 +83,7 @@ export function useDrawings(chartRef: MutableRefObject<Chart | null>, getMode: (
   // created after a toggle, plus the named-template store.
   const lockedRef = useRef(false);
   const hiddenRef = useRef(false);
+  const visibleSubs = useRef(new Set<(visible: boolean) => void>());
   const templatesRef = useRef(new DrawingTemplateStore());
 
   // Brush/highlighter stroke styles (color + width), seeded from theme presets;
@@ -252,8 +256,13 @@ export function useDrawings(chartRef: MutableRefObject<Chart | null>, getMode: (
       setDrawingsVisible: (visible) => {
         hiddenRef.current = !visible;
         applyDrawingFlags();
+        visibleSubs.current.forEach((cb) => cb(visible));
       },
       getDrawingsVisible: () => !hiddenRef.current,
+      subscribeDrawingsVisible: (cb) => {
+        visibleSubs.current.add(cb);
+        return () => visibleSubs.current.delete(cb);
+      },
       saveDrawingTemplate: (name) => {
         templatesRef.current.save(name, snapshotDrawings());
       },

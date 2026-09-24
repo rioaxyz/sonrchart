@@ -23,6 +23,8 @@ function fakeHandle(): SonrChartHandle {
   const histSubs = new Set<() => void>();
   let undoable = false;
   let redoable = false;
+  let visible = true;
+  const visSubs = new Set<(v: boolean) => void>();
   return {
     chart: () => null,
     addIndicator: vi.fn(),
@@ -55,6 +57,16 @@ function fakeHandle(): SonrChartHandle {
     subscribeHistory: (cb: () => void) => {
       histSubs.add(cb);
       return () => histSubs.delete(cb);
+    },
+    // Hide/show-all drawings (#35) with a live subscription.
+    getDrawingsVisible: () => visible,
+    setDrawingsVisible: vi.fn((v: boolean) => {
+      visible = v;
+      visSubs.forEach((cb) => cb(v));
+    }),
+    subscribeDrawingsVisible: (cb: (v: boolean) => void) => {
+      visSubs.add(cb);
+      return () => visSubs.delete(cb);
     },
     // Handle-driven (uncontrolled) display settings.
     getCandleStyle: () => "candle",
@@ -93,9 +105,37 @@ describe("DrawingToolbar (#3)", () => {
     await openTools();
     await userEvent.click(screen.getByRole("menuitemradio", { name: "Trend line" }));
     expect(h.startDrawing).toHaveBeenCalledWith("segment");
-    // Clear stays a direct button.
+    // Clear now asks for confirmation before wiping the drawings.
     await userEvent.click(screen.getByRole("button", { name: /Clear/ }));
+    expect(h.clearDrawings).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent(/delete all drawings/i);
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(h.clearDrawings).toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("cancels the clear-drawings confirmation without wiping", async () => {
+    const h = fakeHandle();
+    render(<DrawingToolbar chartRef={ref(h)} tools={[]} showMagnet={false} showHistory={false} />);
+    await userEvent.click(screen.getByRole("button", { name: /Clear/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(h.clearDrawings).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("toggles hide-all drawings through the ref and reflects visibility state", async () => {
+    const h = fakeHandle();
+    render(<DrawingToolbar chartRef={ref(h)} tools={[]} showClear={false} showMagnet={false} showHistory={false} />);
+    const btn = screen.getByRole("button", { name: "Hide drawings" });
+    expect(btn).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(btn); // visible → hidden
+    expect(h.setDrawingsVisible).toHaveBeenLastCalledWith(false);
+    // The subscription flips the button to "Show drawings" (pressed).
+    const shown = screen.getByRole("button", { name: "Show drawings" });
+    expect(shown).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(shown); // hidden → visible
+    expect(h.setDrawingsVisible).toHaveBeenLastCalledWith(true);
   });
 
   it("highlights the armed tool and toggles it off on a second selection", async () => {

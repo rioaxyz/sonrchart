@@ -5,6 +5,7 @@ export type { ShortcutAction } from "./keyboard";
 export { IndicatorMenu, DEFAULT_INDICATOR_OPTIONS } from "./IndicatorMenu";
 export type { IndicatorOption } from "./IndicatorMenu";
 export { DrawingToolbar } from "./DrawingToolbar";
+export { ConfirmDialog } from "./ConfirmDialog";
 export { CandleMenu, DEFAULT_CANDLE_STYLES } from "./CandleMenu";
 export type { CandleStyleOption } from "./CandleMenu";
 export { PriceScaleMenu } from "./PriceScaleMenu";

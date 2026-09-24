@@ -78,6 +78,14 @@ const CSS = `
 :where(.sonr-search-name){color:#555;font-size:11px;overflow:hidden;text-overflow:ellipsis;}
 :where(.sonr-search-ex){color:#888;font-size:10px;margin-left:auto;}
 :where(.sonr-search-msg){color:#555;font-size:12px;padding:4px 8px;}
+:where(.sonr-confirm-overlay){position:fixed;inset:0;z-index:2147483001;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.35);}
+:where(.sonr-confirm){display:flex;gap:14px;align-items:flex-start;max-width:520px;margin:0 16px;padding:22px 24px;background:#fff;color:#000;border:1px solid #000;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,0.3);}
+:where(.sonr-confirm-icon){flex:0 0 32px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid #000;font-weight:700;font-size:16px;}
+:where(.sonr-confirm-body){display:flex;flex-direction:column;gap:16px;}
+:where(.sonr-confirm-msg){margin:0;font-size:15px;line-height:1.4;}
+:where(.sonr-confirm-actions){display:flex;gap:10px;justify-content:flex-end;}
+:where(.sonr-confirm-btn){appearance:none;font:inherit;font-size:13px;font-weight:600;padding:8px 18px;border-radius:8px;cursor:pointer;border:1px solid #000;background:#fff;color:#000;}
+:where(.sonr-confirm-ok){background:#000;color:#fff;}
 `;
 
 /** Inject the default toolbar stylesheet once. No-op on the server, when already

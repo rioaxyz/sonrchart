@@ -170,6 +170,8 @@ export interface SonrChartHandle {
   setDrawingsVisible(visible: boolean): void;
   /** Whether user drawings are currently visible. */
   getDrawingsVisible(): boolean;
+  /** Subscribe to hide/show-all changes (#35). Returns unsubscribe. */
+  subscribeDrawingsVisible(cb: (visible: boolean) => void): () => void;
   /** Save the current user drawings as a named template (in-memory). */
   saveDrawingTemplate(name: string): void;
   /** Replace the current user drawings with a saved template's set. */
@@ -528,6 +530,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       getDrawingsLocked: () => drawings.getDrawingsLocked(),
       setDrawingsVisible: (visible) => drawings.setDrawingsVisible(visible),
       getDrawingsVisible: () => drawings.getDrawingsVisible(),
+      subscribeDrawingsVisible: (cb) => drawings.subscribeDrawingsVisible(cb),
       saveDrawingTemplate: (name) => drawings.saveDrawingTemplate(name),
       applyDrawingTemplate: (name) => drawings.applyDrawingTemplate(name),
       listDrawingTemplates: () => drawings.listDrawingTemplates(),
