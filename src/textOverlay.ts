@@ -42,10 +42,12 @@ export function textFigures({ coordinates, overlay }: OverlayCreateFiguresCallba
       type: "text",
       attrs: { x, y, text, align: "left", baseline: "middle" },
       // A subtle box in the label's ink, matching the toolbar's other overlays.
+      // NB: no `family` override — a canvas font string like "20px inherit" is
+      // invalid and canvas silently ignores the whole assignment (dropping the
+      // size with it), so we let KLineChart's valid default family apply.
       styles: {
         color,
         size,
-        family: "inherit",
         weight: "normal",
         paddingLeft: 4,
         paddingRight: 4,
