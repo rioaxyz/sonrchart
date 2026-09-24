@@ -37,6 +37,7 @@ function fakeHandle(initial: DrawingRow[]) {
       rows = rows.filter((r) => r.id !== id);
       notify();
     }),
+    locateDrawing: vi.fn(),
     subscribeHistory: (cb: () => void) => {
       subs.add(cb);
       return () => subs.delete(cb);
@@ -77,5 +78,12 @@ describe("ObjectTree (#45)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Remove: Trend line" }));
     expect(h.removeDrawing).toHaveBeenCalledWith("d1");
     expect(screen.queryByText("Trend line")).toBeNull();
+  });
+
+  it("locates a drawing when its label is clicked", async () => {
+    const h = fakeHandle([{ id: "d1", name: "segment", label: "Trend line", visible: true, locked: false }]);
+    render(<ObjectTree chartRef={ref(h)} />);
+    await userEvent.click(await screen.findByText("Trend line"));
+    expect(h.locateDrawing).toHaveBeenCalledWith("d1");
   });
 });

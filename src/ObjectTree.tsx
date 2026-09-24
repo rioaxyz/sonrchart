@@ -59,9 +59,14 @@ export function ObjectTree({
         <ul className="sonr-panel-list">
           {rows.map((row) => (
             <li key={row.id} className={`sonr-panel-row${row.visible ? "" : " off"}`}>
-              <span className="sonr-panel-label" title={row.label}>
+              <button
+                type="button"
+                className="sonr-panel-label sonr-panel-locate"
+                title={row.label}
+                onClick={() => chartRef.current?.locateDrawing?.(row.id)}
+              >
                 {row.label}
-              </span>
+              </button>
               <span className="sonr-panel-actions">
                 <button
                   type="button"

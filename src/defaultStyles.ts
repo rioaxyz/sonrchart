@@ -95,6 +95,7 @@ const CSS = `
 :where(.sonr-panel-row:hover){background:rgba(0,0,0,0.05);}
 :where(.sonr-panel-row.off .sonr-panel-label){opacity:0.45;}
 :where(.sonr-panel-label){flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+:where(.sonr-panel-locate){appearance:none;background:none;border:none;margin:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:left;}
 :where(.sonr-panel-actions){display:inline-flex;align-items:center;gap:2px;flex:0 0 auto;}
 :where(.sonr-panel-btn){display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;background:none;border:none;border-radius:3px;color:#555;cursor:pointer;}
 :where(.sonr-panel-btn:hover){background:rgba(0,0,0,0.1);color:#000;}

@@ -214,6 +214,8 @@ export interface SonrChartHandle {
   setDrawingLocked(id: string, locked: boolean): void;
   /** Remove one drawing by id. */
   removeDrawing(id: string): void;
+  /** Scroll the chart so the drawing with this id is in view (#45). */
+  locateDrawing(id: string): void;
   // Range bar — visible-window control (#45) --------------------------------
   /** Zoom the visible window to the most recent `ms` of loaded data at the
    *  current resolution (clamped to what's loaded). `Infinity` fits all data. */
@@ -649,6 +651,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       setDrawingVisible: (id, visible) => drawings.setDrawingVisible(id, visible),
       setDrawingLocked: (id, locked) => drawings.setDrawingLocked(id, locked),
       removeDrawing: (id) => drawings.removeDrawing(id),
+      locateDrawing: (id) => drawings.locateDrawing(id),
       // Range bar — zoom the window to the last `ms` of data (#45) -----------
       setVisibleDuration: (ms) => {
         const chart = chartRef.current;

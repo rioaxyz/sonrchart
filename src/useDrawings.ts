@@ -71,6 +71,8 @@ export interface DrawingsApi {
   setDrawingLocked(id: string, locked: boolean): void;
   /** Remove one drawing by id (records a history step). */
   removeDrawing(id: string): void;
+  /** Scroll the chart so the drawing with this id is in view. */
+  locateDrawing(id: string): void;
 }
 
 type Snap = DrawingSnapshot;
@@ -376,6 +378,12 @@ export function useDrawings(
       removeDrawing: (id) => {
         // removeOverlay fires the overlay's onRemoved → records a history step.
         chartRef.current?.removeOverlay({ id });
+      },
+      locateDrawing: (id) => {
+        const chart = chartRef.current;
+        if (!chart) return;
+        const ts = chart.getOverlays({ id })[0]?.points?.[0]?.timestamp;
+        if (typeof ts === "number") chart.scrollToTimestamp(ts);
       },
     };
   }
