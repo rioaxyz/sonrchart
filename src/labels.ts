@@ -40,6 +40,16 @@ export interface Labels {
   clearConfirm: string;
   clearConfirmOk: string;
   cancel: string;
+  /** Data-window / object-tree panel chrome (#45). */
+  dataWindow: string;
+  objectTree: string;
+  hide: string;
+  show: string;
+  lock: string;
+  unlock: string;
+  remove: string;
+  noIndicators: string;
+  noDrawings: string;
   /** Settings dialog section (nav) titles. */
   settingsSections: Record<"candles" | "indicators" | "grid" | "drawing" | "drawings", string>;
   /** Optional per-style overrides for the candle menu; falls back to the
@@ -72,6 +82,15 @@ export const DEFAULT_LABELS: Labels = {
   clearConfirm: "Are you sure you want to delete all drawings in this chart?",
   clearConfirmOk: "Delete",
   cancel: "Cancel",
+  dataWindow: "Indicators",
+  objectTree: "Objects",
+  hide: "Hide",
+  show: "Show",
+  lock: "Lock",
+  unlock: "Unlock",
+  remove: "Remove",
+  noIndicators: "No indicators",
+  noDrawings: "No drawings yet",
   settingsSections: {
     candles: "Candles",
     indicators: "Indicators",

@@ -87,6 +87,18 @@ const CSS = `
 :where(.sonr-confirm-btn){appearance:none;font:inherit;font-size:13px;font-weight:600;padding:8px 18px;border-radius:8px;cursor:pointer;border:1px solid #000;background:#fff;color:#000;}
 :where(.sonr-confirm-ok){background:#000;color:#fff;}
 :where(.sonr-text-input){appearance:none;-webkit-appearance:none;transform:translateY(-50%);min-width:80px;background:#fff;color:#2962ff;border:1px solid #2962ff;border-radius:3px;font:inherit;font-size:12px;line-height:18px;padding:1px 4px;outline:none;box-shadow:0 2px 8px rgba(0,0,0,0.25);}
+:where(.sonr-panel){display:flex;flex-direction:column;min-width:180px;font-size:12px;color:#000;}
+:where(.sonr-panel-title){font-weight:700;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;color:#555;padding:6px 8px 4px;}
+:where(.sonr-panel-empty){color:#888;padding:4px 8px 8px;font-style:italic;}
+:where(.sonr-panel-list){list-style:none;margin:0;padding:0;display:flex;flex-direction:column;}
+:where(.sonr-panel-row){display:flex;align-items:center;gap:6px;padding:2px 8px;min-height:24px;}
+:where(.sonr-panel-row:hover){background:rgba(0,0,0,0.05);}
+:where(.sonr-panel-row.off .sonr-panel-label){opacity:0.45;}
+:where(.sonr-panel-label){flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+:where(.sonr-panel-actions){display:inline-flex;align-items:center;gap:2px;flex:0 0 auto;}
+:where(.sonr-panel-btn){display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;background:none;border:none;border-radius:3px;color:#555;cursor:pointer;}
+:where(.sonr-panel-btn:hover){background:rgba(0,0,0,0.1);color:#000;}
+:where(.sonr-panel-btn[aria-pressed="true"]){color:#000;}
 `;
 
 /** Inject the default toolbar stylesheet once. No-op on the server, when already

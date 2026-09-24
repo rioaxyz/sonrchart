@@ -7,11 +7,11 @@
 // `getMode`, so it stays decoupled from the rest of the component's concerns.
 import { useRef, type MutableRefObject } from "react";
 import type { Chart, OverlayMode, Point } from "klinecharts";
-import { USER_DRAWING_GROUP } from "./drawings";
+import { USER_DRAWING_GROUP, drawingLabel } from "./drawings";
 import { TEXT_OVERLAY, DEFAULT_TEXT_STYLE, type TextStyle } from "./textOverlay";
 import { DrawingTemplateStore, type DrawingSnapshot } from "./drawingTemplates";
 import { BRUSH_OVERLAY, brushStyle, isBrushTool, type BrushStyle, type BrushTool } from "./brush";
-import type { DrawingTool, Theme } from "./types";
+import type { DrawingRow, DrawingTool, Theme } from "./types";
 
 export interface DrawingsApi {
   /** Start interactive drawing of a tool; honors the current magnet mode. */
@@ -62,6 +62,15 @@ export interface DrawingsApi {
   getTextStyle(): TextStyle;
   setTextStyle(style: TextStyle): void;
   subscribeTextStyle(cb: () => void): () => void;
+  // Object tree — per-drawing operations (#45) --------------------------------
+  /** Snapshot of every user drawing as object-tree rows (id/label/flags). */
+  listDrawings(): DrawingRow[];
+  /** Show/hide one drawing by id. */
+  setDrawingVisible(id: string, visible: boolean): void;
+  /** Lock/unlock one drawing by id. */
+  setDrawingLocked(id: string, locked: boolean): void;
+  /** Remove one drawing by id (records a history step). */
+  removeDrawing(id: string): void;
 }
 
 type Snap = DrawingSnapshot;
@@ -349,6 +358,24 @@ export function useDrawings(
       subscribeTextStyle: (cb) => {
         textStyleSubs.current.add(cb);
         return () => textStyleSubs.current.delete(cb);
+      },
+      listDrawings: () =>
+        (chartRef.current?.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? []).map((o) => ({
+          id: o.id,
+          name: o.name,
+          label: drawingLabel(o.name, o.extendData),
+          visible: o.visible,
+          locked: o.lock,
+        })),
+      setDrawingVisible: (id, visible) => {
+        chartRef.current?.overrideOverlay({ id, visible });
+      },
+      setDrawingLocked: (id, locked) => {
+        chartRef.current?.overrideOverlay({ id, lock: locked });
+      },
+      removeDrawing: (id) => {
+        // removeOverlay fires the overlay's onRemoved → records a history step.
+        chartRef.current?.removeOverlay({ id });
       },
     };
   }

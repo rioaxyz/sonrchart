@@ -117,6 +117,26 @@ export function EyeIcon() {
   );
 }
 
+/** Padlock, closed — a locked object. */
+export function LockIcon() {
+  return (
+    <Svg>
+      <rect x="3.5" y="7" width="9" height="6.5" rx="1" />
+      <path d="M5.2 7V5.2a2.8 2.8 0 0 1 5.6 0V7" />
+    </Svg>
+  );
+}
+
+/** Padlock, open — an unlocked object. */
+export function UnlockIcon() {
+  return (
+    <Svg>
+      <rect x="3.5" y="7" width="9" height="6.5" rx="1" />
+      <path d="M5.2 7V5.2a2.8 2.8 0 0 1 5.4-0.9" />
+    </Svg>
+  );
+}
+
 /** Eye with a slash — drawings hidden. */
 export function EyeOffIcon() {
   return (

@@ -6,6 +6,9 @@ export { IndicatorMenu, DEFAULT_INDICATOR_OPTIONS } from "./IndicatorMenu";
 export type { IndicatorOption } from "./IndicatorMenu";
 export { DrawingToolbar } from "./DrawingToolbar";
 export { ConfirmDialog } from "./ConfirmDialog";
+export { DataWindow } from "./DataWindow";
+export { ObjectTree } from "./ObjectTree";
+export { drawingLabel } from "./drawings";
 export { CandleMenu, DEFAULT_CANDLE_STYLES } from "./CandleMenu";
 export type { CandleStyleOption } from "./CandleMenu";
 export { PriceScaleMenu } from "./PriceScaleMenu";
@@ -55,8 +58,10 @@ export type {
   ChartState,
   CompareSpec,
   DataSource,
+  DrawingRow,
   DrawingTool,
   Interval,
+  IndicatorRow,
   IndicatorSpec,
   Magnet,
   OrderLine,

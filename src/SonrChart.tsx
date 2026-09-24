@@ -18,7 +18,9 @@ import type {
   ChartState,
   CompareSpec,
   DataSource,
+  DrawingRow,
   DrawingTool,
+  IndicatorRow,
   IndicatorSpec,
   Interval,
   Magnet,
@@ -36,6 +38,11 @@ registerCompareIndicator();
 registerBrushOverlay();
 registerShapeOverlays();
 registerTextOverlay();
+
+// Library-managed indicators the user never sees as "their" studies — excluded
+// from listIndicators / the data window / export / study templates.
+const INTERNAL_INDICATORS = new Set<string>([SESSION_INDICATOR, PATTERN_INDICATOR, COMPARE_INDICATOR, WATERMARK_INDICATOR, SERIES_INDICATOR]);
+const isUserIndicator = (name: string): boolean => !INTERNAL_INDICATORS.has(name);
 
 function magnetMode(m: Magnet | undefined): "normal" | "weak_magnet" | "strong_magnet" {
   if (m === true || m === "weak") return "weak_magnet";
@@ -191,6 +198,22 @@ export interface SonrChartHandle {
   subscribeDrawingTemplates(cb: () => void): () => void;
   /** Duplicate the most-recently-added user drawing (same points/style). */
   cloneLastDrawing(): void;
+  // Data window — per-indicator rows (#45) ----------------------------------
+  /** Active user indicators as data-window rows (excludes internal overlays). */
+  listIndicatorRows(): IndicatorRow[];
+  /** Show/hide one indicator by name. */
+  setIndicatorVisible(name: string, visible: boolean): void;
+  /** Subscribe to indicator add/remove/visibility changes. Returns unsubscribe. */
+  subscribeIndicators(cb: () => void): () => void;
+  // Object tree — per-drawing rows (#45) ------------------------------------
+  /** Every user drawing as object-tree rows (id/label/visible/locked). */
+  listDrawings(): DrawingRow[];
+  /** Show/hide one drawing by id. */
+  setDrawingVisible(id: string, visible: boolean): void;
+  /** Lock/unlock one drawing by id. */
+  setDrawingLocked(id: string, locked: boolean): void;
+  /** Remove one drawing by id. */
+  removeDrawing(id: string): void;
 }
 
 let _seq = 0;
@@ -284,6 +307,10 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   onShortcutRef.current = onShortcut;
   const idRef = useRef(`sonrchart-${++_seq}`);
   const overlayIds = useRef<string[]>([]);
+  // Data-window subscribers (indicator add/remove/visibility). Notified from the
+  // handle's indicator mutations so the panel refreshes without polling. (#45)
+  const indicatorSubs = useRef(new Set<() => void>());
+  const notifyIndicators = () => indicatorSubs.current.forEach((cb) => cb());
   // Magnet mode. Prop-seeded, but a toolbar toggle can override it imperatively;
   // a *changed* prop still wins (so the host stays authoritative when it drives
   // magnet), while an unchanged prop won't clobber a toolbar-set value.
@@ -489,14 +516,16 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     ref,
     (): SonrChartHandle => (handleRef.current = {
       chart: () => chartRef.current,
-      addIndicator: (i) => createIndicator(asSpec(i)),
+      addIndicator: (i) => {
+        createIndicator(asSpec(i));
+        notifyIndicators();
+      },
       removeIndicator: (name) => {
         chartRef.current?.removeIndicator({ name });
+        notifyIndicators();
       },
       listIndicators: () =>
-        (chartRef.current?.getIndicators() ?? [])
-          .map((ind) => ind.name)
-          .filter((n) => n !== SESSION_INDICATOR && n !== PATTERN_INDICATOR && n !== COMPARE_INDICATOR && n !== WATERMARK_INDICATOR && n !== SERIES_INDICATOR),
+        (chartRef.current?.getIndicators() ?? []).map((ind) => ind.name).filter(isUserIndicator),
       startDrawing: (tool: DrawingTool) => drawings.beginDrawing(tool),
       cancelDrawing: () => drawings.cancelDrawing(),
       activeDrawing: () => drawings.activeDrawing(),
@@ -510,7 +539,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       exportState: (): ChartState => {
         const chart = chartRef.current;
         const inds = (chart?.getIndicators() ?? [])
-          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR && i.name !== SERIES_INDICATOR)
+          .filter((i) => isUserIndicator(i.name))
           .map((i) => ({ name: i.name, paneId: i.paneId }));
         return { version: 1, drawings: drawings.snapshotDrawings(), indicators: inds, priceScale };
       },
@@ -530,18 +559,17 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       },
       getIndicatorSet: (): IndicatorSpec[] =>
         (chartRef.current?.getIndicators() ?? [])
-          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR && i.name !== SERIES_INDICATOR)
+          .filter((i) => isUserIndicator(i.name))
           .map((i) => ({ name: i.name, pane: i.paneId === CANDLE_PANE ? "main" : "new" })),
       applyIndicatorSet: (specs) => {
         const chart = chartRef.current;
         if (!chart) return;
         for (const i of chart.getIndicators()) {
-          if (i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR && i.name !== SERIES_INDICATOR) {
-            chart.removeIndicator({ name: i.name });
-          }
+          if (isUserIndicator(i.name)) chart.removeIndicator({ name: i.name });
         }
         for (const s of specs) createIndicator(asSpec(s));
         applyPaneHeights();
+        notifyIndicators();
       },
       undo: () => drawings.undo(),
       redo: () => drawings.redo(),
@@ -590,6 +618,24 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       deleteDrawingTemplate: (name) => drawings.deleteDrawingTemplate(name),
       subscribeDrawingTemplates: (cb) => drawings.subscribeDrawingTemplates(cb),
       cloneLastDrawing: () => drawings.cloneLastDrawing(),
+      // Data window — per-indicator rows (#45) ------------------------------
+      listIndicatorRows: (): IndicatorRow[] =>
+        (chartRef.current?.getIndicators() ?? [])
+          .filter((i) => isUserIndicator(i.name))
+          .map((i) => ({ name: i.name, visible: i.visible })),
+      setIndicatorVisible: (name, visible) => {
+        chartRef.current?.overrideIndicator({ name, visible });
+        notifyIndicators();
+      },
+      subscribeIndicators: (cb) => {
+        indicatorSubs.current.add(cb);
+        return () => indicatorSubs.current.delete(cb);
+      },
+      // Object tree — per-drawing rows (#45) --------------------------------
+      listDrawings: () => drawings.listDrawings(),
+      setDrawingVisible: (id, visible) => drawings.setDrawingVisible(id, visible),
+      setDrawingLocked: (id, locked) => drawings.setDrawingLocked(id, locked),
+      removeDrawing: (id) => drawings.removeDrawing(id),
     }),
     // paneHeights/priceScale captured by closure; recreated per render is fine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
