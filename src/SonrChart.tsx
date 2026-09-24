@@ -7,7 +7,7 @@ import { HaTransformer, isHeikinAshi, toHeikinAshi } from "./candles";
 import { applyCandleStyle } from "./candleStyle";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
 import { CANDLE_PANE, asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
-import { buildWatermark, mergeWatermark, normalizeWatermark } from "./watermark";
+import { bareTicker, buildWatermark, intervalLabel, mergeWatermark, normalizeWatermark } from "./watermark";
 import { registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
 import { useDrawings } from "./useDrawings";
 import { isEditableTarget, resolveShortcut, type ShortcutAction } from "./keyboard";
@@ -96,6 +96,9 @@ export interface SonrChartProps {
   priceFormatter?: (value: number) => string;
   /** Override the crosshair date template, e.g. "YYYY-MM-DD HH:mm". (#46) */
   dateFormat?: string;
+  /** Data-source label shown in the candle legend header (e.g. "Alpaca"),
+   *  after `symbol · interval`, TradingView-style. */
+  source?: string;
   onReady?: (chart: Chart) => void;
   /** Fired when resolveSymbol returns null for the requested ticker. (#8) */
   onSymbolError?: (symbol: string) => void;
@@ -306,6 +309,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     onShortcut,
     priceFormatter,
     dateFormat,
+    source,
     onReady,
     onSymbolError,
     className,
@@ -402,6 +406,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   dateFormatRef.current = dateFormat;
   const priceFormatterRef = useRef(priceFormatter);
   priceFormatterRef.current = priceFormatter;
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
   // Heikin Ashi live transformer (rebuilt per data load in the create effect).
   const haRef = useRef(new HaTransformer());
 
@@ -752,22 +758,38 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       candle: {
         tooltip: {
           legend: {
-            template: (data: { current: Nullable<KLineData> }): { title: Tip; value: Tip }[] => {
+            // Single-line TradingView-style header: `TICKER · interval · source`
+            // then O/H/L/C colored by the bar direction, the change vs the prior
+            // bar's close (value + %), and volume.
+            template: (data: { current: Nullable<KLineData>; prev: Nullable<KLineData> }): { title: Tip; value: Tip }[] => {
               const k = data.current;
               if (!k) return [];
-              const label = (themeRef.current === "dark" ? PALETTE.DARK : PALETTE.LIGHT).muted;
+              const pal = themeRef.current === "dark" ? PALETTE.DARK : PALETTE.LIGHT;
+              const label = pal.muted;
               const dir = (k.close ?? 0) >= (k.open ?? 0) ? PALETTE.GREEN : PALETTE.RED;
               const price = (v?: number) =>
                 priceFormatterRef.current
                   ? priceFormatterRef.current(v ?? 0)
                   : utils.formatThousands(utils.formatPrecision(v ?? 0, pricePrecRef.current), ",");
-              return [
+              const head = `${bareTicker(symbol).toUpperCase()} · ${intervalLabel(interval)}${sourceRef.current ? ` · ${sourceRef.current}` : ""}`;
+              const rows: { title: Tip; value: Tip }[] = [
+                { title: { text: head, color: pal.text }, value: { text: "", color: pal.text } },
                 { title: { text: "O", color: label }, value: { text: price(k.open), color: dir } },
                 { title: { text: "H", color: label }, value: { text: price(k.high), color: dir } },
                 { title: { text: "L", color: label }, value: { text: price(k.low), color: dir } },
                 { title: { text: "C", color: label }, value: { text: price(k.close), color: dir } },
-                { title: { text: "V", color: label }, value: { text: utils.formatBigNumber(k.volume ?? 0), color: label } },
               ];
+              // Change vs the previous bar's close (skipped on the first bar).
+              const pc = data.prev?.close;
+              if (typeof pc === "number" && pc !== 0 && typeof k.close === "number") {
+                const chg = k.close - pc;
+                const up = chg >= 0;
+                const s = up ? "+" : "−";
+                const chgTxt = `${s}${price(Math.abs(chg))} (${s}${(Math.abs(chg / pc) * 100).toFixed(2)}%)`;
+                rows.push({ title: { text: "", color: label }, value: { text: chgTxt, color: up ? PALETTE.GREEN : PALETTE.RED } });
+              }
+              rows.push({ title: { text: "V", color: label }, value: { text: utils.formatBigNumber(k.volume ?? 0), color: label } });
+              return rows;
             },
           },
         },
