@@ -8,7 +8,7 @@
 import { useRef, type MutableRefObject } from "react";
 import type { Chart, OverlayMode, Point } from "klinecharts";
 import { USER_DRAWING_GROUP } from "./drawings";
-import { TEXT_OVERLAY } from "./textOverlay";
+import { TEXT_OVERLAY, DEFAULT_TEXT_STYLE, type TextStyle } from "./textOverlay";
 import { DrawingTemplateStore, type DrawingSnapshot } from "./drawingTemplates";
 import { BRUSH_OVERLAY, brushStyle, isBrushTool, type BrushStyle, type BrushTool } from "./brush";
 import type { DrawingTool, Theme } from "./types";
@@ -58,6 +58,10 @@ export interface DrawingsApi {
   getBrushStyle(tool: BrushTool): BrushStyle;
   setBrushStyle(tool: BrushTool, style: BrushStyle): void;
   subscribeBrush(cb: () => void): () => void;
+  /** Default color/size applied to new text labels. */
+  getTextStyle(): TextStyle;
+  setTextStyle(style: TextStyle): void;
+  subscribeTextStyle(cb: () => void): () => void;
 }
 
 type Snap = DrawingSnapshot;
@@ -102,6 +106,10 @@ export function useDrawings(
     highlighter: brushStyle("highlighter", baseTheme),
   });
   const brushSubs = useRef(new Set<() => void>());
+
+  // Default text-label style (color + size), applied to each new text overlay.
+  const textStyleRef = useRef<TextStyle>({ ...DEFAULT_TEXT_STYLE });
+  const textStyleSubs = useRef(new Set<() => void>());
 
   // Live mirror of the text-placed callback so the once-built API never calls a
   // stale closure.
@@ -157,7 +165,7 @@ export function useDrawings(
         groupId: USER_DRAWING_GROUP,
         mode: brush ? "normal" : getMode(),
         ...(brush ? { extendData: { ...brushStylesRef.current[tool as BrushTool] } } : {}),
-        ...(isText ? { extendData: { text: "" } } : {}),
+        ...(isText ? { extendData: { text: "", ...textStyleRef.current } } : {}),
         onDrawEnd: (e) => {
           // Drawing placed: the overlay is now a finished drawing, not in progress.
           progressIdRef.current = null;
@@ -332,6 +340,15 @@ export function useDrawings(
       subscribeBrush: (cb) => {
         brushSubs.current.add(cb);
         return () => brushSubs.current.delete(cb);
+      },
+      getTextStyle: () => ({ ...textStyleRef.current }),
+      setTextStyle: (style) => {
+        textStyleRef.current = { ...style };
+        textStyleSubs.current.forEach((cb) => cb());
+      },
+      subscribeTextStyle: (cb) => {
+        textStyleSubs.current.add(cb);
+        return () => textStyleSubs.current.delete(cb);
       },
     };
   }

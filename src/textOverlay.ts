@@ -10,12 +10,20 @@ import type { OverlayCreateFiguresCallbackParams, OverlayFigure } from "klinecha
 
 export const TEXT_OVERLAY = "text";
 
-/** Shape of a text overlay's extendData. */
-export interface TextData {
+/** Styling for a text label (defaults for new labels live on the chart handle). */
+export interface TextStyle {
+  color: string;
+  size: number;
+}
+
+/** Shape of a text overlay's extendData: the label plus its per-label style. */
+export interface TextData extends Partial<TextStyle> {
   text: string;
 }
 
-const INK = "#2962ff";
+/** Default text label style. */
+export const DEFAULT_TEXT_STYLE: TextStyle = { color: "#2962ff", size: 12 };
+
 const PLACEHOLDER = "Text";
 
 /** Build the text figure(s) for a placed text overlay. Shows a muted
@@ -27,24 +35,26 @@ export function textFigures({ coordinates, overlay }: OverlayCreateFiguresCallba
   const ext = overlay.extendData as TextData | undefined;
   const raw = ext?.text ?? "";
   const text = raw.length > 0 ? raw : PLACEHOLDER;
+  const color = ext?.color ?? DEFAULT_TEXT_STYLE.color;
+  const size = ext?.size ?? DEFAULT_TEXT_STYLE.size;
   return [
     {
       type: "text",
       attrs: { x, y, text, align: "left", baseline: "middle" },
-      // A subtle box in the accent ink, matching the toolbar's other overlays.
+      // A subtle box in the label's ink, matching the toolbar's other overlays.
       styles: {
-        color: INK,
-        size: 12,
+        color,
+        size,
         family: "inherit",
         weight: "normal",
         paddingLeft: 4,
         paddingRight: 4,
         paddingTop: 2,
         paddingBottom: 2,
-        borderColor: INK,
+        borderColor: color,
         borderSize: 1,
         borderRadius: 2,
-        backgroundColor: "rgba(41,98,255,0.06)",
+        backgroundColor: "transparent",
       },
     },
   ];

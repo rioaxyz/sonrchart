@@ -12,7 +12,7 @@ import { registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
 import { useDrawings } from "./useDrawings";
 import { isEditableTarget, resolveShortcut, type ShortcutAction } from "./keyboard";
 import { registerShapeOverlays } from "./shapes";
-import { registerTextOverlay } from "./textOverlay";
+import { registerTextOverlay, type TextStyle } from "./textOverlay";
 import type {
   CandleStyle,
   ChartState,
@@ -163,6 +163,10 @@ export interface SonrChartHandle {
   setBrushStyle(tool: BrushTool, style: BrushStyle): void;
   /** Subscribe to brush-style changes (for a settings UI). Returns unsubscribe. */
   subscribeBrush(cb: () => void): () => void;
+  /** Default color/size applied to new text labels. */
+  getTextStyle(): TextStyle;
+  setTextStyle(style: TextStyle): void;
+  subscribeTextStyle(cb: () => void): () => void;
   // Drawing management tooling (#35) ---------------------------------------
   /** Lock every user drawing (non-interactive) or unlock them. New drawings
    *  inherit the current lock state. */
@@ -365,9 +369,13 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   // Stable: the once-built drawings API captures this, so it reads live refs only.
   const onTextPlaced = useCallback((id: string, point: Partial<Point>) => {
     const chart = chartRef.current;
-    if (!chart) return;
-    const px = chart.convertToPixel(point, { paneId: CANDLE_PANE, absolute: true }) as Partial<Coordinate>;
-    setTextEdit({ id, left: px?.x ?? 0, top: px?.y ?? 0, value: "" });
+    const el = elRef.current;
+    if (!chart || !el) return;
+    // Chart-relative pixel of the anchor + the container's page offset → the
+    // fixed-position input lands right on the placed label, not at the page top.
+    const px = chart.convertToPixel(point, { paneId: CANDLE_PANE }) as Partial<Coordinate>;
+    const rect = el.getBoundingClientRect();
+    setTextEdit({ id, left: rect.left + (px?.x ?? rect.width / 2), top: rect.top + (px?.y ?? rect.height / 2), value: "" });
   }, []);
 
   // User-drawing subsystem (#3/#16/#35): armed tool, undo/redo history, lock/hide
@@ -565,6 +573,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       getBrushStyle: (tool) => drawings.getBrushStyle(tool),
       setBrushStyle: (tool, style) => drawings.setBrushStyle(tool, style),
       subscribeBrush: (cb) => drawings.subscribeBrush(cb),
+      getTextStyle: () => drawings.getTextStyle(),
+      setTextStyle: (style) => drawings.setTextStyle(style),
+      subscribeTextStyle: (cb) => drawings.subscribeTextStyle(cb),
       // Drawing management tooling (#35) -----------------------------------
       setDrawingsLocked: (locked) => drawings.setDrawingsLocked(locked),
       getDrawingsLocked: () => drawings.getDrawingsLocked(),
