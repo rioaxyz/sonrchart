@@ -392,7 +392,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       const text = cur.value.trim();
       if (chart) {
         if (text) {
-          chart.overrideOverlay({ id: cur.id, extendData: { text } });
+          // Preserve the label's seeded style (color/size) — only swap the text.
+          const prev = (chart.getOverlays({ id: cur.id })[0]?.extendData ?? {}) as Record<string, unknown>;
+          chart.overrideOverlay({ id: cur.id, extendData: { ...prev, text } });
           drawings.recordHistory();
         } else {
           chart.removeOverlay({ id: cur.id }); // onRemoved records the discard
