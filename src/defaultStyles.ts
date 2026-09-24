@@ -86,6 +86,7 @@ const CSS = `
 :where(.sonr-confirm-actions){display:flex;gap:10px;justify-content:flex-end;}
 :where(.sonr-confirm-btn){appearance:none;font:inherit;font-size:13px;font-weight:600;padding:8px 18px;border-radius:8px;cursor:pointer;border:1px solid #000;background:#fff;color:#000;}
 :where(.sonr-confirm-ok){background:#000;color:#fff;}
+:where(.sonr-text-input){appearance:none;-webkit-appearance:none;transform:translateY(-50%);min-width:80px;background:#fff;color:#2962ff;border:1px solid #2962ff;border-radius:3px;font:inherit;font-size:12px;line-height:18px;padding:1px 4px;outline:none;box-shadow:0 2px 8px rgba(0,0,0,0.25);}
 `;
 
 /** Inject the default toolbar stylesheet once. No-op on the server, when already

@@ -6,8 +6,9 @@
 // chart only through the `chartRef` it is given and the current magnet mode via
 // `getMode`, so it stays decoupled from the rest of the component's concerns.
 import { useRef, type MutableRefObject } from "react";
-import type { Chart, OverlayMode } from "klinecharts";
+import type { Chart, OverlayMode, Point } from "klinecharts";
 import { USER_DRAWING_GROUP } from "./drawings";
+import { TEXT_OVERLAY } from "./textOverlay";
 import { DrawingTemplateStore, type DrawingSnapshot } from "./drawingTemplates";
 import { BRUSH_OVERLAY, brushStyle, isBrushTool, type BrushStyle, type BrushTool } from "./brush";
 import type { DrawingTool, Theme } from "./types";
@@ -38,6 +39,9 @@ export interface DrawingsApi {
   /** Reset history to the current drawings as the baseline (no notify) — after
    *  an import where the host re-seeds from a saved state. */
   resetHistoryToCurrent(): void;
+  /** Record the current drawings as a new undo step. Used after an out-of-band
+   *  edit (e.g. committing typed text into a placed label). */
+  recordHistory(): void;
   setDrawingsLocked(locked: boolean): void;
   getDrawingsLocked(): boolean;
   setDrawingsVisible(visible: boolean): void;
@@ -66,7 +70,12 @@ const HISTORY_CAP = 100;
  *                  — reads the component's current magnet mode.
  * @param baseTheme dark/light base used to seed the initial brush styles.
  */
-export function useDrawings(chartRef: MutableRefObject<Chart | null>, getMode: () => OverlayMode, baseTheme: Theme): DrawingsApi {
+export function useDrawings(
+  chartRef: MutableRefObject<Chart | null>,
+  getMode: () => OverlayMode,
+  baseTheme: Theme,
+  onTextPlaced?: (id: string, point: Partial<Point>) => void,
+): DrawingsApi {
   // Undo/redo history (#16). stack[ptr] is the current drawing set; `restoring`
   // suppresses history capture while overlays are recreated.
   const historyRef = useRef<{ stack: Snap[]; ptr: number }>({ stack: [[]], ptr: 0 });
@@ -93,6 +102,11 @@ export function useDrawings(chartRef: MutableRefObject<Chart | null>, getMode: (
     highlighter: brushStyle("highlighter", baseTheme),
   });
   const brushSubs = useRef(new Set<() => void>());
+
+  // Live mirror of the text-placed callback so the once-built API never calls a
+  // stale closure.
+  const onTextPlacedRef = useRef(onTextPlaced);
+  onTextPlacedRef.current = onTextPlaced;
 
   // Build the API once; every method reads refs, so a single stable object stays
   // correct across renders (the component's []-deps handle can capture it).
@@ -137,12 +151,14 @@ export function useDrawings(chartRef: MutableRefObject<Chart | null>, getMode: (
       // Brush/highlighter are one continuous-draw overlay (`sonrBrush`) styled by
       // extendData; magnet snapping is meaningless for freehand, so force normal.
       const brush = isBrushTool(tool);
+      const isText = tool === TEXT_OVERLAY;
       const id = chartRef.current?.createOverlay({
         name: brush ? BRUSH_OVERLAY : tool,
         groupId: USER_DRAWING_GROUP,
         mode: brush ? "normal" : getMode(),
         ...(brush ? { extendData: { ...brushStylesRef.current[tool as BrushTool] } } : {}),
-        onDrawEnd: () => {
+        ...(isText ? { extendData: { text: "" } } : {}),
+        onDrawEnd: (e) => {
           // Drawing placed: the overlay is now a finished drawing, not in progress.
           progressIdRef.current = null;
           pushHistory();
@@ -153,6 +169,9 @@ export function useDrawings(chartRef: MutableRefObject<Chart | null>, getMode: (
           // toolbar. The tool stays active until toggled off (cancelDrawing).
           if (brush) beginDrawing(tool);
           else setActiveTool(null);
+          // Text: hand the placed anchor to the host so it can show an inline
+          // input and store the typed string in the overlay's extendData.
+          if (isText && e?.overlay) onTextPlacedRef.current?.(e.overlay.id, e.overlay.points?.[0] ?? {});
           return false;
         },
         onRemoved: () => {
@@ -248,6 +267,7 @@ export function useDrawings(chartRef: MutableRefObject<Chart | null>, getMode: (
       },
       initHistory,
       resetHistoryToCurrent,
+      recordHistory: pushHistory,
       setDrawingsLocked: (locked) => {
         lockedRef.current = locked;
         applyDrawingFlags();

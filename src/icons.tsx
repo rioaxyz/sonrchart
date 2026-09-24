@@ -60,6 +60,9 @@ export function DrawIcon({ tool }: { tool: DrawingTool }) {
           <line x1="2" y1="13.5" x2="14" y2="13.5" />
         </Svg>
       );
+    case "text":
+      // A capital "T" — the text-label tool.
+      return <Svg><line x1="3.5" y1="4" x2="12.5" y2="4" /><line x1="8" y1="4" x2="8" y2="13" /></Svg>;
     case "simpleAnnotation":
       return <Svg><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z" /></Svg>;
     case "simpleTag":
