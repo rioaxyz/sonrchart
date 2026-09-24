@@ -90,6 +90,7 @@ export interface Labels {
   marketOpen: string;
   marketAfter: string;
   marketClosed: string;
+  marketTimezone: string;
   /** Settings dialog section (nav) titles. */
   settingsSections: Record<"candles" | "indicators" | "grid" | "drawing" | "drawings", string>;
   /** Optional per-style overrides for the candle menu; falls back to the
@@ -165,6 +166,7 @@ export const DEFAULT_LABELS: Labels = {
   marketOpen: "Open",
   marketAfter: "After-hours",
   marketClosed: "Closed",
+  marketTimezone: "Exchange timezone",
   settingsSections: {
     candles: "Candles",
     indicators: "Indicators",

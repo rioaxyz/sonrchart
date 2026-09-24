@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
-import { MarketStatus, marketStatus } from "../src/MarketStatus";
+import userEvent from "@testing-library/user-event";
+import { MarketStatus, marketStatus, minutesToNextBoundary, formatDuration, sessionProgress } from "../src/MarketStatus";
 
 // Build UTC instants for known ET wall-clock moments. Winter is EST (UTC-5),
 // summer is EDT (UTC-4) — proving the phase tracks the ET calendar, not a fixed
@@ -63,42 +64,76 @@ describe("marketStatus() pure helper", () => {
   });
 });
 
+describe("market countdown helpers", () => {
+  it("minutesToNextBoundary counts to the phase's next edge", () => {
+    // 13:00 ET open → 16:00 close is 180 min away.
+    expect(minutesToNextBoundary(utc(2026, 0, 5, 18, 0))).toBe(180);
+    // 08:00 ET pre → 09:30 open is 90 min away.
+    expect(minutesToNextBoundary(utc(2026, 0, 5, 13, 0))).toBe(90);
+    // 17:00 ET after → 20:00 close is 180 min away.
+    expect(minutesToNextBoundary(utc(2026, 0, 5, 22, 0))).toBe(180);
+  });
+
+  it("closed on Friday night counts to Monday's open (skips the weekend)", () => {
+    // 2026-01-09 is a Friday; 21:00 ET (02:00 UTC Sat) is closed. Next open is
+    // Monday 2026-01-12 09:30 ET → Sat + Sun full days + to Monday 09:30.
+    const mins = minutesToNextBoundary(utc(2026, 0, 10, 2, 0));
+    // 3h to Sat midnight + 48h (Sat+Sun) + 9.5h = 60.5h = 3630 min.
+    expect(mins).toBe(3630);
+  });
+
+  it("formatDuration reads naturally", () => {
+    expect(formatDuration(356)).toBe("5 hours and 56 minutes");
+    expect(formatDuration(56)).toBe("56 minutes");
+    expect(formatDuration(60)).toBe("1 hour");
+    expect(formatDuration(61)).toBe("1 hour and 1 minute");
+    expect(formatDuration(0)).toBe("0 minutes");
+    expect(formatDuration(1500)).toBe("1 day and 1 hour");
+  });
+
+  it("sessionProgress spans 04:00–20:00 ET", () => {
+    expect(sessionProgress(4 * 60)).toBe(0);
+    expect(sessionProgress(20 * 60)).toBe(1);
+    expect(sessionProgress(12 * 60)).toBeCloseTo(0.5, 5);
+    expect(sessionProgress(0)).toBe(0); // before 04:00 clamps
+  });
+});
+
 describe("<MarketStatus> component", () => {
   afterEach(() => vi.useRealTimers());
 
   it("renders the phase label + status class for a fixed instant", () => {
-    // 18:00 UTC on 2026-01-05 = 13:00 ET → open.
     render(<MarketStatus now={utc(2026, 0, 5, 18, 0)} />);
-    const badge = screen.getByRole("status");
+    const badge = screen.getByRole("button", { name: "Open" });
     expect(badge).toHaveTextContent("Open");
     expect(badge.className).toContain("sonr-mkt-open");
   });
 
   it("honors label overrides and a custom className", () => {
-    render(
-      <MarketStatus
-        now={utc(2026, 0, 5, 13, 0)}
-        labels={{ marketPre: "Pré-marché" }}
-        className="host-badge"
-      />,
-    );
-    const badge = screen.getByRole("status");
-    expect(badge).toHaveTextContent("Pré-marché");
+    render(<MarketStatus now={utc(2026, 0, 5, 13, 0)} labels={{ marketPre: "Pré-marché" }} className="host-badge" />);
+    const badge = screen.getByRole("button", { name: "Pré-marché" });
     expect(badge.className).toContain("sonr-mkt-pre");
     expect(badge.className).toContain("host-badge");
   });
 
+  it("opens a popover with the countdown message and timezone", async () => {
+    render(<MarketStatus now={utc(2026, 0, 5, 18, 0)} />); // 13:00 ET → open
+    await userEvent.click(screen.getByRole("button", { name: "Open" }));
+    const pop = screen.getByRole("dialog");
+    expect(pop).toHaveTextContent("market is open");
+    expect(pop).toHaveTextContent("It'll close in 3 hours"); // 13:00 → 16:00
+    expect(pop).toHaveTextContent("Exchange timezone: New York (UTC-5)"); // January = EST
+  });
+
   it("ticks on a 30s interval when uncontrolled", () => {
     vi.useFakeTimers();
-    // Freeze the live clock at a closed overnight instant, then advance across
-    // the 04:00 ET boundary and confirm the badge re-evaluates.
     vi.setSystemTime(utc(2026, 0, 5, 8, 59)); // 03:59 ET → closed
     render(<MarketStatus />);
-    expect(screen.getByRole("status")).toHaveTextContent("Closed");
+    expect(screen.getByRole("button")).toHaveTextContent("Closed");
     act(() => {
       vi.setSystemTime(utc(2026, 0, 5, 9, 1)); // 04:01 ET → pre-market
       vi.advanceTimersByTime(30_000);
     });
-    expect(screen.getByRole("status")).toHaveTextContent("Pre-market");
+    expect(screen.getByRole("button")).toHaveTextContent("Pre-market");
   });
 });
