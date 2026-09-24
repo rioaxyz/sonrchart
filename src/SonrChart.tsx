@@ -656,10 +656,13 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
           }
         }
         const targetBars = Math.max(2, data.length - idx);
-        // Plot width is stable across zoom: (visible bars) × (px per bar).
-        const vr = chart.getVisibleRange();
-        const widthPx = Math.max(1, vr.to - vr.from) * chart.getBarSpace().bar;
-        chart.setBarSpace(widthPx / targetBars);
+        // Use the actual plot width (excludes the y-axis, independent of the
+        // current zoom) so bar space is computed the same way every time — a
+        // range set from any prior zoom lands on the identical window, and
+        // re-picking a narrower range zooms back in instead of sticking.
+        const plotWidth = chart.getSize(CANDLE_PANE, "main")?.width ?? 0;
+        if (plotWidth <= 0) return;
+        chart.setBarSpace(plotWidth / targetBars);
         chart.scrollToRealTime();
       },
     }),

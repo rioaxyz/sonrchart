@@ -27,9 +27,6 @@ export const DEFAULT_RANGES: RangeOption[] = [
   { label: "5D", ms: 5 * DAY, title: "5 days" },
   { label: "1M", ms: 30 * DAY, title: "1 month" },
   { label: "3M", ms: 90 * DAY, title: "3 months" },
-  { label: "6M", ms: 180 * DAY, title: "6 months" },
-  { label: "1Y", ms: 365 * DAY, title: "1 year" },
-  { label: "All", ms: Infinity, title: "all data" },
 ];
 
 // Resolution → words for the tooltip ("30 minutes", "1 hour", …).

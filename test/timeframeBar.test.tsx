@@ -29,9 +29,19 @@ describe("TimeframeBar / lookback ranges (#45)", () => {
     await userEvent.click(oneM);
     expect(h.setVisibleDuration).toHaveBeenCalledWith(30 * DAY);
     expect(oneM).toHaveAttribute("aria-pressed", "true");
-    // "All" fits everything.
-    await userEvent.click(screen.getByRole("button", { name: "All" }));
-    expect(h.setVisibleDuration).toHaveBeenCalledWith(Infinity);
+    // Switching to a narrower range re-applies (and moves the highlight).
+    const oneD = screen.getByRole("button", { name: "1D" });
+    await userEvent.click(oneD);
+    expect(h.setVisibleDuration).toHaveBeenLastCalledWith(DAY);
+    expect(oneD).toHaveAttribute("aria-pressed", "true");
+    expect(oneM).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("offers exactly 1D / 5D / 1M / 3M by default", () => {
+    render(<TimeframeBar chartRef={ref(fakeHandle())} interval="1" />);
+    expect(DEFAULT_RANGES.map((r) => r.label)).toEqual(["1D", "5D", "1M", "3M"]);
+    expect(screen.queryByRole("button", { name: "All" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "1Y" })).toBeNull();
   });
 
   it("tooltip reads '{range} in {resolution} intervals'", () => {
