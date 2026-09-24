@@ -18,6 +18,8 @@ export { SymbolInfoDialog } from "./SymbolInfoDialog";
 export { NavControlBar } from "./NavControlBar";
 export { MarketStatus, marketStatus } from "./MarketStatus";
 export type { MarketPhase, MarketStatusProps } from "./MarketStatus";
+export { ChartHeader } from "./ChartHeader";
+export type { ChartHeaderProps } from "./ChartHeader";
 export { drawingLabel } from "./drawings";
 export { CandleMenu, DEFAULT_CANDLE_STYLES } from "./CandleMenu";
 export type { CandleStyleOption } from "./CandleMenu";

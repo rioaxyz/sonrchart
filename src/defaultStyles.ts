@@ -150,6 +150,14 @@ const CSS = `
 :where(.sonr-mkt-handle){position:absolute;top:50%;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #22a06b;transform:translate(-50%,-50%);}
 :where(.sonr-mkt-ticks){grid-column:2;display:flex;justify-content:space-between;font-size:10px;color:#888;}
 :where(.sonr-mkt-tz){margin-top:12px;font-size:11px;color:#888;text-align:center;}
+:where(.sonr-hd){display:inline-flex;align-items:center;gap:10px;font-family:inherit;font-size:12px;color:#000;white-space:nowrap;}
+:where(.sonr-hd-sym){font-weight:700;color:#000;}
+:where(.sonr-hd-ohlc){display:inline-flex;align-items:center;gap:8px;font-variant-numeric:tabular-nums;}
+:where(.sonr-hd-cell){display:inline-flex;align-items:baseline;gap:3px;}
+:where(.sonr-hd-k){color:#888;font-size:11px;}
+:where(.sonr-hd-v){color:#555;}
+:where(.sonr-hd-up){color:#22a06b;}
+:where(.sonr-hd-down){color:#d23c3c;}
 /* --- SaveLoadDialog --- */
 :where(.sonr-sl-overlay){position:fixed;inset:0;z-index:2147483001;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);}
 :where(.sonr-sl-panel){display:flex;flex-direction:column;width:520px;max-width:92vw;max-height:82vh;background:#fff;color:#000;border:1px solid #000;border-radius:8px;overflow:hidden;font-family:inherit;}

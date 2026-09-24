@@ -99,6 +99,9 @@ export interface SonrChartProps {
   /** Data-source label shown in the candle legend header (e.g. "Alpaca"),
    *  after `symbol · interval`, TradingView-style. */
   source?: string;
+  /** Show the built-in canvas candle legend (O/H/L/C/…). Default true. Set false
+   *  when rendering your own header via <ChartHeader> + `subscribeHeaderBar`. */
+  legend?: boolean;
   onReady?: (chart: Chart) => void;
   /** Fired when resolveSymbol returns null for the requested ticker. (#8) */
   onSymbolError?: (symbol: string) => void;
@@ -232,6 +235,10 @@ export interface SonrChartHandle {
   zoomIn(): void;
   /** Zoom the visible range out one step (toward more history). */
   zoomOut(): void;
+  /** Subscribe to the bar a custom header should show — the hovered bar while
+   *  the crosshair is active, else the latest bar (updates on each streamed
+   *  bar). Emits once immediately. Returns unsubscribe. (#45) */
+  subscribeHeaderBar(cb: (current: KLineData | null, prev: KLineData | null) => void): () => void;
 }
 
 let _seq = 0;
@@ -310,6 +317,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     priceFormatter,
     dateFormat,
     source,
+    legend = true,
     onReady,
     onSymbolError,
     className,
@@ -408,6 +416,21 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   priceFormatterRef.current = priceFormatter;
   const sourceRef = useRef(source);
   sourceRef.current = source;
+  const legendRef = useRef(legend);
+  legendRef.current = legend;
+  // Header (custom legend) subscribers: emitted the hovered bar on crosshair
+  // move, else the latest bar (on load + each streamed bar). `crosshairActive`
+  // gates the latest-bar emissions so a hover isn't overwritten by a live tick.
+  const headerSubs = useRef(new Set<(current: KLineData | null, prev: KLineData | null) => void>());
+  const crosshairActiveRef = useRef(false);
+  const emitLatestHeader = () => {
+    if (crosshairActiveRef.current) return;
+    const list = chartRef.current?.getDataList() ?? [];
+    const n = list.length;
+    const current = n ? list[n - 1] : null;
+    const prev = n > 1 ? list[n - 2] : null;
+    headerSubs.current.forEach((cb) => cb(current, prev));
+  };
   // Heikin Ashi live transformer (rebuilt per data load in the create effect).
   const haRef = useRef(new HaTransformer());
 
@@ -688,6 +711,15 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       scrollToRealTime: () => chartRef.current?.scrollToRealTime(),
       zoomIn: () => chartRef.current?.zoomAtCoordinate(1.5),
       zoomOut: () => chartRef.current?.zoomAtCoordinate(0.6667),
+      // Custom header (#45) -------------------------------------------------
+      subscribeHeaderBar: (cb) => {
+        headerSubs.current.add(cb);
+        // Seed with the latest bar so a late-mounting header isn't blank.
+        const list = chartRef.current?.getDataList() ?? [];
+        const n = list.length;
+        cb(n ? list[n - 1] : null, n > 1 ? list[n - 2] : null);
+        return () => headerSubs.current.delete(cb);
+      },
     }),
     // paneHeights/priceScale captured by closure; recreated per render is fine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -747,6 +779,20 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     if (!chart) return;
     chartRef.current = chart;
     chart.setStyles(mergeStyles(themeStyleObj, styles));
+    // Feed a custom header (#45): the hovered bar while the crosshair is over a
+    // bar, else fall back to the latest bar.
+    chart.subscribeAction("onCrosshairChange", (d) => {
+      const cross = d as { kLineData?: KLineData; dataIndex?: number } | undefined;
+      const k = cross?.kLineData;
+      if (k && typeof cross?.dataIndex === "number") {
+        crosshairActiveRef.current = true;
+        const list = chart.getDataList();
+        headerSubs.current.forEach((cb) => cb(k, cross.dataIndex! > 0 ? list[cross.dataIndex! - 1] : null));
+      } else {
+        crosshairActiveRef.current = false;
+        emitLatestHeader();
+      }
+    });
     // Candle rendering style (#1).
     applyCandleStyle(chart, candleStyleRef.current, themeStyleObj, baseTheme);
     // Crosshair date/price formatting (#46), default: TV-style date+time pill.
@@ -763,7 +809,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
             // bar's close (value + %), and volume.
             template: (data: { current: Nullable<KLineData>; prev: Nullable<KLineData> }): { title: Tip; value: Tip }[] => {
               const k = data.current;
-              if (!k) return [];
+              if (!k || !legendRef.current) return []; // host renders its own header
+
               const pal = themeRef.current === "dark" ? PALETTE.DARK : PALETTE.LIGHT;
               const label = pal.muted;
               const dir = (k.close ?? 0) >= (k.open ?? 0) ? PALETTE.GREEN : PALETTE.RED;
@@ -812,6 +859,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
           if (ha) haRef.current.seed(bars);
           const shaped = ha ? toHeikinAshi(bars) : bars;
           callback(shaped.map(toKLine), false);
+          emitLatestHeader();
           // Compare overlays need the loaded main bars to align to.
           void refreshCompare();
         } catch {
@@ -823,6 +871,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
           unsub = dataSource.subscribe(symbol, interval, (b) => {
             const shaped = isHeikinAshi(candleStyleRef.current) ? haRef.current.next(b) : b;
             callback(toKLine(shaped));
+            emitLatestHeader();
           });
         }
       },
