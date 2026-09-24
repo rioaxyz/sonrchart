@@ -6,6 +6,23 @@ export { IndicatorMenu, DEFAULT_INDICATOR_OPTIONS } from "./IndicatorMenu";
 export type { IndicatorOption } from "./IndicatorMenu";
 export { DrawingToolbar } from "./DrawingToolbar";
 export { ConfirmDialog } from "./ConfirmDialog";
+export { DataWindow } from "./DataWindow";
+export { ObjectTree } from "./ObjectTree";
+export { TimeframeBar, DEFAULT_RANGES } from "./TimeframeBar";
+export type { RangeOption } from "./TimeframeBar";
+export { Watchlist } from "./Watchlist";
+export type { WatchlistProps } from "./Watchlist";
+export { SaveLoadDialog, isChartState } from "./SaveLoadDialog";
+export { GoToDateDialog, parseLocalDateTime } from "./GoToDateDialog";
+export { SymbolInfoDialog } from "./SymbolInfoDialog";
+export { NavControlBar } from "./NavControlBar";
+export { MarketStatus, marketStatus } from "./MarketStatus";
+export type { MarketPhase, MarketStatusProps } from "./MarketStatus";
+export { ChartHeader } from "./ChartHeader";
+export type { ChartHeaderProps } from "./ChartHeader";
+export { BrandMark } from "./BrandMark";
+export type { BrandMarkProps, BrandCorner } from "./BrandMark";
+export { drawingLabel } from "./drawings";
 export { CandleMenu, DEFAULT_CANDLE_STYLES } from "./CandleMenu";
 export type { CandleStyleOption } from "./CandleMenu";
 export { PriceScaleMenu } from "./PriceScaleMenu";
@@ -55,8 +72,10 @@ export type {
   ChartState,
   CompareSpec,
   DataSource,
+  DrawingRow,
   DrawingTool,
   Interval,
+  IndicatorRow,
   IndicatorSpec,
   Magnet,
   OrderLine,

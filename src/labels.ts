@@ -40,6 +40,57 @@ export interface Labels {
   clearConfirm: string;
   clearConfirmOk: string;
   cancel: string;
+  /** Data-window / object-tree panel chrome (#45). */
+  dataWindow: string;
+  objectTree: string;
+  hide: string;
+  show: string;
+  lock: string;
+  unlock: string;
+  remove: string;
+  close: string;
+  noIndicators: string;
+  noDrawings: string;
+  /** Watchlist panel (#45). */
+  watchlist: string;
+  addSymbol: string;
+  emptyWatchlist: string;
+  searchUnavailable: string;
+  searching: string;
+  noResults: string;
+  /** Save / Load dialog (#45). */
+  saveLoad: string;
+  saveLoadExportLabel: string;
+  saveLoadImportLabel: string;
+  saveLoadCopy: string;
+  saveLoadCopied: string;
+  saveLoadDownload: string;
+  saveLoadLoad: string;
+  saveLoadError: string;
+  saveLoadClose: string;
+  /** Go-to-date dialog (#45). */
+  goToDate: string;
+  goToDateGo: string;
+  /** Symbol-info dialog (#45). */
+  symbolInfo: string;
+  symbolInfoTicker: string;
+  symbolInfoName: string;
+  symbolInfoPricePrecision: string;
+  symbolInfoVolumePrecision: string;
+  symbolInfoUnknown: string;
+  symbolInfoLoading: string;
+  /** Nav / control bar (#45). */
+  navControls: string;
+  zoomOut: string;
+  zoomIn: string;
+  fitContent: string;
+  goToRealtime: string;
+  /** Market-status badge (#45). */
+  marketPre: string;
+  marketOpen: string;
+  marketAfter: string;
+  marketClosed: string;
+  marketTimezone: string;
   /** Settings dialog section (nav) titles. */
   settingsSections: Record<"candles" | "indicators" | "grid" | "drawing" | "drawings", string>;
   /** Optional per-style overrides for the candle menu; falls back to the
@@ -72,6 +123,50 @@ export const DEFAULT_LABELS: Labels = {
   clearConfirm: "Are you sure you want to delete all drawings in this chart?",
   clearConfirmOk: "Delete",
   cancel: "Cancel",
+  dataWindow: "Indicators",
+  objectTree: "Objects",
+  hide: "Hide",
+  show: "Show",
+  lock: "Lock",
+  unlock: "Unlock",
+  remove: "Remove",
+  close: "Close",
+  noIndicators: "No indicators",
+  noDrawings: "No drawings yet",
+  watchlist: "Watchlist",
+  addSymbol: "Add symbol",
+  emptyWatchlist: "No symbols yet",
+  searchUnavailable: "Search unavailable",
+  searching: "Searching…",
+  noResults: "No results",
+  saveLoad: "Save / Load",
+  saveLoadExportLabel: "Current chart state",
+  saveLoadImportLabel: "Paste chart state to load",
+  saveLoadCopy: "Copy",
+  saveLoadCopied: "Copied",
+  saveLoadDownload: "Download",
+  saveLoadLoad: "Load",
+  saveLoadError: "Invalid JSON — could not load.",
+  saveLoadClose: "Close",
+  goToDate: "Go to date",
+  goToDateGo: "Go",
+  symbolInfo: "Symbol info",
+  symbolInfoTicker: "Ticker",
+  symbolInfoName: "Name",
+  symbolInfoPricePrecision: "Price precision",
+  symbolInfoVolumePrecision: "Volume precision",
+  symbolInfoUnknown: "Unknown symbol",
+  symbolInfoLoading: "Loading…",
+  navControls: "Chart navigation",
+  zoomOut: "Zoom out",
+  zoomIn: "Zoom in",
+  fitContent: "Fit all data",
+  goToRealtime: "Go to realtime",
+  marketPre: "Pre-market",
+  marketOpen: "Open",
+  marketAfter: "After-hours",
+  marketClosed: "Closed",
+  marketTimezone: "Exchange timezone",
   settingsSections: {
     candles: "Candles",
     indicators: "Indicators",

@@ -7,7 +7,7 @@ import { HaTransformer, isHeikinAshi, toHeikinAshi } from "./candles";
 import { applyCandleStyle } from "./candleStyle";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
 import { CANDLE_PANE, asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
-import { buildWatermark, mergeWatermark, normalizeWatermark } from "./watermark";
+import { bareTicker, buildWatermark, intervalLabel, mergeWatermark, normalizeWatermark } from "./watermark";
 import { registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
 import { useDrawings } from "./useDrawings";
 import { isEditableTarget, resolveShortcut, type ShortcutAction } from "./keyboard";
@@ -18,7 +18,9 @@ import type {
   ChartState,
   CompareSpec,
   DataSource,
+  DrawingRow,
   DrawingTool,
+  IndicatorRow,
   IndicatorSpec,
   Interval,
   Magnet,
@@ -36,6 +38,11 @@ registerCompareIndicator();
 registerBrushOverlay();
 registerShapeOverlays();
 registerTextOverlay();
+
+// Library-managed indicators the user never sees as "their" studies — excluded
+// from listIndicators / the data window / export / study templates.
+const INTERNAL_INDICATORS = new Set<string>([SESSION_INDICATOR, PATTERN_INDICATOR, COMPARE_INDICATOR, WATERMARK_INDICATOR, SERIES_INDICATOR]);
+const isUserIndicator = (name: string): boolean => !INTERNAL_INDICATORS.has(name);
 
 function magnetMode(m: Magnet | undefined): "normal" | "weak_magnet" | "strong_magnet" {
   if (m === true || m === "weak") return "weak_magnet";
@@ -89,6 +96,12 @@ export interface SonrChartProps {
   priceFormatter?: (value: number) => string;
   /** Override the crosshair date template, e.g. "YYYY-MM-DD HH:mm". (#46) */
   dateFormat?: string;
+  /** Data-source label shown in the candle legend header (e.g. "Alpaca"),
+   *  after `symbol · interval`, TradingView-style. */
+  source?: string;
+  /** Show the built-in canvas candle legend (O/H/L/C/…). Default true. Set false
+   *  when rendering your own header via <ChartHeader> + `subscribeHeaderBar`. */
+  legend?: boolean;
   onReady?: (chart: Chart) => void;
   /** Fired when resolveSymbol returns null for the requested ticker. (#8) */
   onSymbolError?: (symbol: string) => void;
@@ -191,6 +204,41 @@ export interface SonrChartHandle {
   subscribeDrawingTemplates(cb: () => void): () => void;
   /** Duplicate the most-recently-added user drawing (same points/style). */
   cloneLastDrawing(): void;
+  // Data window — per-indicator rows (#45) ----------------------------------
+  /** Active user indicators as data-window rows (excludes internal overlays). */
+  listIndicatorRows(): IndicatorRow[];
+  /** Show/hide one indicator by name. */
+  setIndicatorVisible(name: string, visible: boolean): void;
+  /** Subscribe to indicator add/remove/visibility changes. Returns unsubscribe. */
+  subscribeIndicators(cb: () => void): () => void;
+  // Object tree — per-drawing rows (#45) ------------------------------------
+  /** Every user drawing as object-tree rows (id/label/visible/locked). */
+  listDrawings(): DrawingRow[];
+  /** Show/hide one drawing by id. */
+  setDrawingVisible(id: string, visible: boolean): void;
+  /** Lock/unlock one drawing by id. */
+  setDrawingLocked(id: string, locked: boolean): void;
+  /** Remove one drawing by id. */
+  removeDrawing(id: string): void;
+  /** Scroll the chart so the drawing with this id is in view (#45). */
+  locateDrawing(id: string): void;
+  // Range bar — visible-window control (#45) --------------------------------
+  /** Zoom the visible window to the most recent `ms` of loaded data at the
+   *  current resolution (clamped to what's loaded). `Infinity` fits all data. */
+  setVisibleDuration(ms: number): void;
+  // Navigation (#45) --------------------------------------------------------
+  /** Scroll the visible window to the bar at (or nearest before) this epoch-ms. */
+  scrollToTimestamp(timestamp: number): void;
+  /** Jump the visible window to the latest (realtime) bar. */
+  scrollToRealTime(): void;
+  /** Zoom the visible range in one step (toward more detail). */
+  zoomIn(): void;
+  /** Zoom the visible range out one step (toward more history). */
+  zoomOut(): void;
+  /** Subscribe to the bar a custom header should show — the hovered bar while
+   *  the crosshair is active, else the latest bar (updates on each streamed
+   *  bar). Emits once immediately. Returns unsubscribe. (#45) */
+  subscribeHeaderBar(cb: (current: KLineData | null, prev: KLineData | null) => void): () => void;
 }
 
 let _seq = 0;
@@ -268,6 +316,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     onShortcut,
     priceFormatter,
     dateFormat,
+    source,
+    legend = true,
     onReady,
     onSymbolError,
     className,
@@ -284,6 +334,10 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   onShortcutRef.current = onShortcut;
   const idRef = useRef(`sonrchart-${++_seq}`);
   const overlayIds = useRef<string[]>([]);
+  // Data-window subscribers (indicator add/remove/visibility). Notified from the
+  // handle's indicator mutations so the panel refreshes without polling. (#45)
+  const indicatorSubs = useRef(new Set<() => void>());
+  const notifyIndicators = () => indicatorSubs.current.forEach((cb) => cb());
   // Magnet mode. Prop-seeded, but a toolbar toggle can override it imperatively;
   // a *changed* prop still wins (so the host stays authoritative when it drives
   // magnet), while an unchanged prop won't clobber a toolbar-set value.
@@ -360,6 +414,23 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   dateFormatRef.current = dateFormat;
   const priceFormatterRef = useRef(priceFormatter);
   priceFormatterRef.current = priceFormatter;
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
+  const legendRef = useRef(legend);
+  legendRef.current = legend;
+  // Header (custom legend) subscribers: emitted the hovered bar on crosshair
+  // move, else the latest bar (on load + each streamed bar). `crosshairActive`
+  // gates the latest-bar emissions so a hover isn't overwritten by a live tick.
+  const headerSubs = useRef(new Set<(current: KLineData | null, prev: KLineData | null) => void>());
+  const crosshairActiveRef = useRef(false);
+  const emitLatestHeader = () => {
+    if (crosshairActiveRef.current) return;
+    const list = chartRef.current?.getDataList() ?? [];
+    const n = list.length;
+    const current = n ? list[n - 1] : null;
+    const prev = n > 1 ? list[n - 2] : null;
+    headerSubs.current.forEach((cb) => cb(current, prev));
+  };
   // Heikin Ashi live transformer (rebuilt per data load in the create effect).
   const haRef = useRef(new HaTransformer());
 
@@ -489,14 +560,16 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     ref,
     (): SonrChartHandle => (handleRef.current = {
       chart: () => chartRef.current,
-      addIndicator: (i) => createIndicator(asSpec(i)),
+      addIndicator: (i) => {
+        createIndicator(asSpec(i));
+        notifyIndicators();
+      },
       removeIndicator: (name) => {
         chartRef.current?.removeIndicator({ name });
+        notifyIndicators();
       },
       listIndicators: () =>
-        (chartRef.current?.getIndicators() ?? [])
-          .map((ind) => ind.name)
-          .filter((n) => n !== SESSION_INDICATOR && n !== PATTERN_INDICATOR && n !== COMPARE_INDICATOR && n !== WATERMARK_INDICATOR && n !== SERIES_INDICATOR),
+        (chartRef.current?.getIndicators() ?? []).map((ind) => ind.name).filter(isUserIndicator),
       startDrawing: (tool: DrawingTool) => drawings.beginDrawing(tool),
       cancelDrawing: () => drawings.cancelDrawing(),
       activeDrawing: () => drawings.activeDrawing(),
@@ -510,7 +583,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       exportState: (): ChartState => {
         const chart = chartRef.current;
         const inds = (chart?.getIndicators() ?? [])
-          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR && i.name !== SERIES_INDICATOR)
+          .filter((i) => isUserIndicator(i.name))
           .map((i) => ({ name: i.name, paneId: i.paneId }));
         return { version: 1, drawings: drawings.snapshotDrawings(), indicators: inds, priceScale };
       },
@@ -530,18 +603,17 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       },
       getIndicatorSet: (): IndicatorSpec[] =>
         (chartRef.current?.getIndicators() ?? [])
-          .filter((i) => i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR && i.name !== SERIES_INDICATOR)
+          .filter((i) => isUserIndicator(i.name))
           .map((i) => ({ name: i.name, pane: i.paneId === CANDLE_PANE ? "main" : "new" })),
       applyIndicatorSet: (specs) => {
         const chart = chartRef.current;
         if (!chart) return;
         for (const i of chart.getIndicators()) {
-          if (i.name !== SESSION_INDICATOR && i.name !== PATTERN_INDICATOR && i.name !== COMPARE_INDICATOR && i.name !== WATERMARK_INDICATOR && i.name !== SERIES_INDICATOR) {
-            chart.removeIndicator({ name: i.name });
-          }
+          if (isUserIndicator(i.name)) chart.removeIndicator({ name: i.name });
         }
         for (const s of specs) createIndicator(asSpec(s));
         applyPaneHeights();
+        notifyIndicators();
       },
       undo: () => drawings.undo(),
       redo: () => drawings.redo(),
@@ -590,6 +662,64 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       deleteDrawingTemplate: (name) => drawings.deleteDrawingTemplate(name),
       subscribeDrawingTemplates: (cb) => drawings.subscribeDrawingTemplates(cb),
       cloneLastDrawing: () => drawings.cloneLastDrawing(),
+      // Data window — per-indicator rows (#45) ------------------------------
+      listIndicatorRows: (): IndicatorRow[] =>
+        (chartRef.current?.getIndicators() ?? [])
+          .filter((i) => isUserIndicator(i.name))
+          .map((i) => ({ name: i.name, visible: i.visible })),
+      setIndicatorVisible: (name, visible) => {
+        chartRef.current?.overrideIndicator({ name, visible });
+        notifyIndicators();
+      },
+      subscribeIndicators: (cb) => {
+        indicatorSubs.current.add(cb);
+        return () => indicatorSubs.current.delete(cb);
+      },
+      // Object tree — per-drawing rows (#45) --------------------------------
+      listDrawings: () => drawings.listDrawings(),
+      setDrawingVisible: (id, visible) => drawings.setDrawingVisible(id, visible),
+      setDrawingLocked: (id, locked) => drawings.setDrawingLocked(id, locked),
+      removeDrawing: (id) => drawings.removeDrawing(id),
+      locateDrawing: (id) => drawings.locateDrawing(id),
+      // Range bar — zoom the window to the last `ms` of data (#45) -----------
+      setVisibleDuration: (ms) => {
+        const chart = chartRef.current;
+        if (!chart) return;
+        const data = chart.getDataList();
+        if (data.length < 2) return;
+        const startTs = data[data.length - 1].timestamp - ms;
+        // First loaded bar at/after the window start (data is small; scan once).
+        let idx = 0;
+        for (let i = 0; i < data.length; i++) {
+          if (data[i].timestamp >= startTs) {
+            idx = i;
+            break;
+          }
+        }
+        const targetBars = Math.max(2, data.length - idx);
+        // Use the actual plot width (excludes the y-axis, independent of the
+        // current zoom) so bar space is computed the same way every time — a
+        // range set from any prior zoom lands on the identical window, and
+        // re-picking a narrower range zooms back in instead of sticking.
+        const plotWidth = chart.getSize(CANDLE_PANE, "main")?.width ?? 0;
+        if (plotWidth <= 0) return;
+        chart.setBarSpace(plotWidth / targetBars);
+        chart.scrollToRealTime();
+      },
+      // Navigation (#45) ----------------------------------------------------
+      scrollToTimestamp: (ts) => chartRef.current?.scrollToTimestamp(ts),
+      scrollToRealTime: () => chartRef.current?.scrollToRealTime(),
+      zoomIn: () => chartRef.current?.zoomAtCoordinate(1.5),
+      zoomOut: () => chartRef.current?.zoomAtCoordinate(0.6667),
+      // Custom header (#45) -------------------------------------------------
+      subscribeHeaderBar: (cb) => {
+        headerSubs.current.add(cb);
+        // Seed with the latest bar so a late-mounting header isn't blank.
+        const list = chartRef.current?.getDataList() ?? [];
+        const n = list.length;
+        cb(n ? list[n - 1] : null, n > 1 ? list[n - 2] : null);
+        return () => headerSubs.current.delete(cb);
+      },
     }),
     // paneHeights/priceScale captured by closure; recreated per render is fine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -640,12 +770,29 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
 
     const options: Options = {
       timezone: "America/New_York",
-      layout: yAxisLayout(priceScale),
+      // Widen KLineChart's default bar-space limits (min 1 / max 50). The 50-px
+      // cap silently no-ops setBarSpace, so a short lookback (e.g. "1D" with few
+      // bars over a wide plot) could never zoom in far enough to apply.
+      layout: { ...(yAxisLayout(priceScale) ?? {}), barSpaceLimit: { min: 0.3, max: 1000 } },
     };
     const chart = init(el, options);
     if (!chart) return;
     chartRef.current = chart;
     chart.setStyles(mergeStyles(themeStyleObj, styles));
+    // Feed a custom header (#45): the hovered bar while the crosshair is over a
+    // bar, else fall back to the latest bar.
+    chart.subscribeAction("onCrosshairChange", (d) => {
+      const cross = d as { kLineData?: KLineData; dataIndex?: number } | undefined;
+      const k = cross?.kLineData;
+      if (k && typeof cross?.dataIndex === "number") {
+        crosshairActiveRef.current = true;
+        const list = chart.getDataList();
+        headerSubs.current.forEach((cb) => cb(k, cross.dataIndex! > 0 ? list[cross.dataIndex! - 1] : null));
+      } else {
+        crosshairActiveRef.current = false;
+        emitLatestHeader();
+      }
+    });
     // Candle rendering style (#1).
     applyCandleStyle(chart, candleStyleRef.current, themeStyleObj, baseTheme);
     // Crosshair date/price formatting (#46), default: TV-style date+time pill.
@@ -656,23 +803,44 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     chart.setStyles({
       candle: {
         tooltip: {
+          // Fully hide the built-in legend when the host renders its own header
+          // (returning [] from the template isn't enough — KLineChart then falls
+          // back to its DEFAULT legend). The crosshair is a separate style.
+          showRule: legend ? "follow_cross" : "none",
           legend: {
-            template: (data: { current: Nullable<KLineData> }): { title: Tip; value: Tip }[] => {
+            // Single-line TradingView-style header: `TICKER · interval · source`
+            // then O/H/L/C colored by the bar direction, the change vs the prior
+            // bar's close (value + %), and volume.
+            template: (data: { current: Nullable<KLineData>; prev: Nullable<KLineData> }): { title: Tip; value: Tip }[] => {
               const k = data.current;
-              if (!k) return [];
-              const label = (themeRef.current === "dark" ? PALETTE.DARK : PALETTE.LIGHT).muted;
+              if (!k || !legendRef.current) return []; // host renders its own header
+
+              const pal = themeRef.current === "dark" ? PALETTE.DARK : PALETTE.LIGHT;
+              const label = pal.muted;
               const dir = (k.close ?? 0) >= (k.open ?? 0) ? PALETTE.GREEN : PALETTE.RED;
               const price = (v?: number) =>
                 priceFormatterRef.current
                   ? priceFormatterRef.current(v ?? 0)
                   : utils.formatThousands(utils.formatPrecision(v ?? 0, pricePrecRef.current), ",");
-              return [
+              const head = `${bareTicker(symbol).toUpperCase()} · ${intervalLabel(interval)}${sourceRef.current ? ` · ${sourceRef.current}` : ""}`;
+              const rows: { title: Tip; value: Tip }[] = [
+                { title: { text: head, color: pal.text }, value: { text: "", color: pal.text } },
                 { title: { text: "O", color: label }, value: { text: price(k.open), color: dir } },
                 { title: { text: "H", color: label }, value: { text: price(k.high), color: dir } },
                 { title: { text: "L", color: label }, value: { text: price(k.low), color: dir } },
                 { title: { text: "C", color: label }, value: { text: price(k.close), color: dir } },
-                { title: { text: "V", color: label }, value: { text: utils.formatBigNumber(k.volume ?? 0), color: label } },
               ];
+              // Change vs the previous bar's close (skipped on the first bar).
+              const pc = data.prev?.close;
+              if (typeof pc === "number" && pc !== 0 && typeof k.close === "number") {
+                const chg = k.close - pc;
+                const up = chg >= 0;
+                const s = up ? "+" : "−";
+                const chgTxt = `${s}${price(Math.abs(chg))} (${s}${(Math.abs(chg / pc) * 100).toFixed(2)}%)`;
+                rows.push({ title: { text: "", color: label }, value: { text: chgTxt, color: up ? PALETTE.GREEN : PALETTE.RED } });
+              }
+              rows.push({ title: { text: "V", color: label }, value: { text: utils.formatBigNumber(k.volume ?? 0), color: label } });
+              return rows;
             },
           },
         },
@@ -695,6 +863,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
           if (ha) haRef.current.seed(bars);
           const shaped = ha ? toHeikinAshi(bars) : bars;
           callback(shaped.map(toKLine), false);
+          emitLatestHeader();
           // Compare overlays need the loaded main bars to align to.
           void refreshCompare();
         } catch {
@@ -706,6 +875,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
           unsub = dataSource.subscribe(symbol, interval, (b) => {
             const shaped = isHeikinAshi(candleStyleRef.current) ? haRef.current.next(b) : b;
             callback(toKLine(shaped));
+            emitLatestHeader();
           });
         }
       },
@@ -784,6 +954,11 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     if (chart) applyFormatter(chart);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateFormat, priceFormatter]);
+
+  // Toggle the built-in candle legend when `legend` changes at runtime (#45).
+  useEffect(() => {
+    chartRef.current?.setStyles({ candle: { tooltip: { showRule: legend ? "follow_cross" : "none" } } } as DeepPartial<Styles>);
+  }, [legend]);
 
   // Compare / multi-symbol overlays (#9).
   useEffect(() => {

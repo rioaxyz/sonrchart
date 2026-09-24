@@ -124,6 +124,24 @@ export type DrawingTool =
   | "priceRange"
   | "riskReward";
 
+/** One active indicator row for the data-window panel (#45). */
+export interface IndicatorRow {
+  name: string;
+  visible: boolean;
+}
+
+/** One user-drawing row for the object-tree panel (#45). */
+export interface DrawingRow {
+  /** Overlay id — the stable handle for per-drawing operations. */
+  id: string;
+  /** Raw overlay/tool name (e.g. "segment", "sonrBrush", "text"). */
+  name: string;
+  /** Human label (tool name, or the text content for a text label). */
+  label: string;
+  visible: boolean;
+  locked: boolean;
+}
+
 /** Serialized chart state for save/load (issue #15). Opaque JSON the host
  *  persists and hands back to `importState`. */
 export interface ChartState {
