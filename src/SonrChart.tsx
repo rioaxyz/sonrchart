@@ -803,6 +803,10 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     chart.setStyles({
       candle: {
         tooltip: {
+          // Fully hide the built-in legend when the host renders its own header
+          // (returning [] from the template isn't enough — KLineChart then falls
+          // back to its DEFAULT legend). The crosshair is a separate style.
+          showRule: legend ? "follow_cross" : "none",
           legend: {
             // Single-line TradingView-style header: `TICKER · interval · source`
             // then O/H/L/C colored by the bar direction, the change vs the prior
@@ -950,6 +954,11 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     if (chart) applyFormatter(chart);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateFormat, priceFormatter]);
+
+  // Toggle the built-in candle legend when `legend` changes at runtime (#45).
+  useEffect(() => {
+    chartRef.current?.setStyles({ candle: { tooltip: { showRule: legend ? "follow_cross" : "none" } } } as DeepPartial<Styles>);
+  }, [legend]);
 
   // Compare / multi-symbol overlays (#9).
   useEffect(() => {
