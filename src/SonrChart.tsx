@@ -214,6 +214,10 @@ export interface SonrChartHandle {
   setDrawingLocked(id: string, locked: boolean): void;
   /** Remove one drawing by id. */
   removeDrawing(id: string): void;
+  // Range bar — visible-window control (#45) --------------------------------
+  /** Zoom the visible window to the most recent `ms` of loaded data at the
+   *  current resolution (clamped to what's loaded). `Infinity` fits all data. */
+  setVisibleDuration(ms: number): void;
 }
 
 let _seq = 0;
@@ -636,6 +640,28 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       setDrawingVisible: (id, visible) => drawings.setDrawingVisible(id, visible),
       setDrawingLocked: (id, locked) => drawings.setDrawingLocked(id, locked),
       removeDrawing: (id) => drawings.removeDrawing(id),
+      // Range bar — zoom the window to the last `ms` of data (#45) -----------
+      setVisibleDuration: (ms) => {
+        const chart = chartRef.current;
+        if (!chart) return;
+        const data = chart.getDataList();
+        if (data.length < 2) return;
+        const startTs = data[data.length - 1].timestamp - ms;
+        // First loaded bar at/after the window start (data is small; scan once).
+        let idx = 0;
+        for (let i = 0; i < data.length; i++) {
+          if (data[i].timestamp >= startTs) {
+            idx = i;
+            break;
+          }
+        }
+        const targetBars = Math.max(2, data.length - idx);
+        // Plot width is stable across zoom: (visible bars) × (px per bar).
+        const vr = chart.getVisibleRange();
+        const widthPx = Math.max(1, vr.to - vr.from) * chart.getBarSpace().bar;
+        chart.setBarSpace(widthPx / targetBars);
+        chart.scrollToRealTime();
+      },
     }),
     // paneHeights/priceScale captured by closure; recreated per render is fine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
