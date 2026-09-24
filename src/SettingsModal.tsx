@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import type { SonrChartHandle } from "./SonrChart";
 import type { BrushStyle, BrushTool } from "./brush";
+import type { TextStyle } from "./textOverlay";
 import type { WatermarkOptions } from "./types";
 import { ensureDefaultStyles } from "./defaultStyles";
 import { mergeLabels, type Labels } from "./labels";
@@ -81,6 +82,7 @@ export function SettingsModal({
     brush: { color: "#e6ebe9", size: 2 },
     highlighter: { color: "rgba(245,214,66,0.35)", size: 14 },
   });
+  const [textStyle, setTextStyleState] = useState<TextStyle>({ color: "#2962ff", size: 12 });
   // Drawings management (#35): lock/hide all + named templates.
   const [drawingsLocked, setDrawingsLocked] = useState(false);
   const [drawingsHidden, setDrawingsHidden] = useState(false);
@@ -124,10 +126,17 @@ export function SettingsModal({
     };
     readBrush();
     const unsubBrush = chartRef.current?.subscribeBrush?.(readBrush);
+    const readText = () => {
+      const hc = chartRef.current;
+      if (hc?.getTextStyle) setTextStyleState(hc.getTextStyle());
+    };
+    readText();
+    const unsubText = chartRef.current?.subscribeTextStyle?.(readText);
     // Drawings management state (#35): lock/hide + template list.
     const h = chartRef.current;
     setDrawingsLocked(h?.getDrawingsLocked?.() ?? false);
     setDrawingsHidden(!(h?.getDrawingsVisible?.() ?? true));
+    const unsubVis = h?.subscribeDrawingsVisible?.((visible) => setDrawingsHidden(!visible));
     const readTemplates = () => setTemplates(h?.listDrawingTemplates?.() ?? []);
     readTemplates();
     const unsubTpl = h?.subscribeDrawingTemplates?.(readTemplates);
@@ -139,6 +148,8 @@ export function SettingsModal({
       document.removeEventListener("keydown", onKey);
       unsubWm?.();
       unsubBrush?.();
+      unsubText?.();
+      unsubVis?.();
       unsubTpl?.();
     };
   }, [open, chartRef, onClose]);
@@ -189,6 +200,10 @@ export function SettingsModal({
   const applyBrush = (tool: BrushTool, style: BrushStyle) => {
     chartRef.current?.setBrushStyle?.(tool, style);
     setBrushStyles((m) => ({ ...m, [tool]: style }));
+  };
+  const applyText = (style: TextStyle) => {
+    chartRef.current?.setTextStyle?.(style);
+    setTextStyleState(style);
   };
 
   return createPortal(
@@ -339,7 +354,7 @@ export function SettingsModal({
             )}
             {section === "drawing" && (
               <>
-                <p className="sonr-set-note">Stroke settings for the freehand brush &amp; highlighter — applied to the strokes you draw next.</p>
+                <p className="sonr-set-note">Stroke settings for the freehand brush &amp; highlighter and the text label — applied to what you draw next.</p>
                 {BRUSH_TOOLS.map(({ tool, label }) => {
                   const st = brushStyles[tool];
                   const { hex: h, alpha } = parseColor(st.color);
@@ -371,6 +386,21 @@ export function SettingsModal({
                     </div>
                   );
                 })}
+                <div className="sonr-set-ind">
+                  <div className="sonr-set-subhead">Text</div>
+                  <Row label="Color">
+                    <input type="color" value={textStyle.color} onChange={(e) => applyText({ ...textStyle, color: e.target.value })} />
+                  </Row>
+                  <Row label="Size (px)">
+                    <input
+                      type="number"
+                      min="8"
+                      max="48"
+                      value={textStyle.size}
+                      onChange={(e) => applyText({ ...textStyle, size: Math.max(8, Math.min(48, Number(e.target.value) || 12)) })}
+                    />
+                  </Row>
+                </div>
               </>
             )}
             {section === "drawings" && (

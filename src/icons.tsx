@@ -60,6 +60,9 @@ export function DrawIcon({ tool }: { tool: DrawingTool }) {
           <line x1="2" y1="13.5" x2="14" y2="13.5" />
         </Svg>
       );
+    case "text":
+      // A capital "T" — the text-label tool.
+      return <Svg><line x1="3.5" y1="4" x2="12.5" y2="4" /><line x1="8" y1="4" x2="8" y2="13" /></Svg>;
     case "simpleAnnotation":
       return <Svg><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z" /></Svg>;
     case "simpleTag":
@@ -100,6 +103,28 @@ export function ClearIcon() {
       <path d="M3 4.5h10" />
       <path d="M6 4.5V3h4v1.5" />
       <path d="M4.5 4.5l.7 8.5h5.6l.7-8.5" />
+    </Svg>
+  );
+}
+
+/** Eye — drawings visible. */
+export function EyeIcon() {
+  return (
+    <Svg>
+      <path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z" />
+      <circle cx="8" cy="8" r="1.9" />
+    </Svg>
+  );
+}
+
+/** Eye with a slash — drawings hidden. */
+export function EyeOffIcon() {
+  return (
+    <Svg>
+      <path d="M6.3 3.7A6.9 6.9 0 0 1 8 3.5c4.1 0 6.5 4.5 6.5 4.5a11.7 11.7 0 0 1-1.9 2.4" />
+      <path d="M3.4 4.6A11.6 11.6 0 0 0 1.5 8S3.9 12.5 8 12.5a6.7 6.7 0 0 0 2.4-.4" />
+      <path d="M6.6 6.6a2 2 0 0 0 2.8 2.8" />
+      <path d="M2.5 2.5l11 11" />
     </Svg>
   );
 }

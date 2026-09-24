@@ -18,6 +18,7 @@ export const DEFAULT_DRAWING_TOOLS: DrawingToolOption[] = [
   { tool: "parallelStraightLine", label: "Parallel channel" },
   { tool: "priceChannelLine", label: "Price channel" },
   { tool: "fibonacciLine", label: "Fibonacci" },
+  { tool: "text", label: "Text" },
   { tool: "simpleAnnotation", label: "Note" },
   { tool: "simpleTag", label: "Tag" },
   { tool: "brush", label: "Brush" },

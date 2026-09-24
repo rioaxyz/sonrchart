@@ -4,9 +4,10 @@ import type { SonrChartHandle } from "./SonrChart";
 import type { DrawingTool, Magnet } from "./types";
 import { DEFAULT_DRAWING_TOOLS, type DrawingToolOption } from "./drawings";
 import { ensureDefaultStyles } from "./defaultStyles";
-import { DrawIcon, ClearIcon, UndoIcon, RedoIcon, PencilIcon } from "./icons";
+import { DrawIcon, ClearIcon, UndoIcon, RedoIcon, PencilIcon, EyeIcon, EyeOffIcon } from "./icons";
 import { useDropdown } from "./useDropdown";
 import { mergeLabels, type Labels } from "./labels";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 // Drop-in drawing chrome (issues #3, #13, #16): the line/drawing tools collapse
 // into a single dropdown (there are a lot of them), with a magnet-mode toggle,
@@ -30,6 +31,7 @@ export function DrawingToolbar({
   tools = DEFAULT_DRAWING_TOOLS,
   className,
   showClear = true,
+  showHide = true,
   showMagnet = true,
   showHistory = true,
   labels,
@@ -38,6 +40,8 @@ export function DrawingToolbar({
   tools?: DrawingToolOption[];
   className?: string;
   showClear?: boolean;
+  /** Show the hide/show-all-drawings eye toggle. Default true. */
+  showHide?: boolean;
   showMagnet?: boolean;
   showHistory?: boolean;
   labels?: Partial<Labels>;
@@ -51,6 +55,8 @@ export function DrawingToolbar({
   const [magnet, setMagnetState] = useState<"off" | "weak" | "strong">("off");
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const { open, setOpen, toggle: toggleOpen, pos, triggerRef, panelRef } = useDropdown();
 
   // Subscribe to the chart's drawing/magnet/history state. The handle may not be
@@ -73,6 +79,9 @@ export function DrawingToolbar({
         };
         syncHistory();
         if (h.subscribeHistory) unsubs.push(h.subscribeHistory(syncHistory));
+        // Hide/show-all state (kept in sync with the settings panel).
+        setHidden(!(h.getDrawingsVisible?.() ?? true));
+        if (h.subscribeDrawingsVisible) unsubs.push(h.subscribeDrawingsVisible((visible) => setHidden(!visible)));
       } else {
         setTimeout(attach, 50);
       }
@@ -185,17 +194,40 @@ export function DrawingToolbar({
           </button>
         </>
       )}
+      {showHide && (
+        <button
+          type="button"
+          className={`sonr-draw-btn sonr-icon-btn${hidden ? " on" : ""}`}
+          aria-pressed={hidden}
+          title={hidden ? L.showDrawings : L.hideDrawings}
+          aria-label={hidden ? L.showDrawings : L.hideDrawings}
+          onClick={() => chartRef.current?.setDrawingsVisible?.(hidden)}
+        >
+          {hidden ? <EyeOffIcon /> : <EyeIcon />}
+        </button>
+      )}
       {showClear && (
         <button
           type="button"
           className="sonr-draw-btn sonr-draw-clear sonr-icon-btn"
           title="Remove all drawings"
           aria-label={L.clear}
-          onClick={() => chartRef.current?.clearDrawings()}
+          onClick={() => setConfirmClear(true)}
         >
           <ClearIcon />
         </button>
       )}
+      <ConfirmDialog
+        open={confirmClear}
+        message={L.clearConfirm}
+        confirmLabel={L.clearConfirmOk}
+        cancelLabel={L.cancel}
+        onConfirm={() => {
+          chartRef.current?.clearDrawings();
+          setConfirmClear(false);
+        }}
+        onCancel={() => setConfirmClear(false)}
+      />
     </div>
   );
 }

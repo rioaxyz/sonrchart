@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { dispose, init, utils, type Chart, type DeepPartial, type KLineData, type Layout, type Nullable, type Options, type Styles } from "klinecharts";
+import { createPortal } from "react-dom";
+import { dispose, init, utils, type Chart, type Coordinate, type DeepPartial, type KLineData, type Layout, type Nullable, type Options, type Point, type Styles } from "klinecharts";
 import { resolveThemeStyles, PALETTE } from "./theme";
 import { PATTERN_INDICATOR, SERIES_INDICATOR, SESSION_INDICATOR, WATERMARK_INDICATOR, registerSonrIndicators } from "./indicators";
 import { HaTransformer, isHeikinAshi, toHeikinAshi } from "./candles";
@@ -11,6 +12,7 @@ import { registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
 import { useDrawings } from "./useDrawings";
 import { isEditableTarget, resolveShortcut, type ShortcutAction } from "./keyboard";
 import { registerShapeOverlays } from "./shapes";
+import { registerTextOverlay, type TextStyle } from "./textOverlay";
 import type {
   CandleStyle,
   ChartState,
@@ -33,6 +35,7 @@ registerSonrIndicators();
 registerCompareIndicator();
 registerBrushOverlay();
 registerShapeOverlays();
+registerTextOverlay();
 
 function magnetMode(m: Magnet | undefined): "normal" | "weak_magnet" | "strong_magnet" {
   if (m === true || m === "weak") return "weak_magnet";
@@ -160,6 +163,10 @@ export interface SonrChartHandle {
   setBrushStyle(tool: BrushTool, style: BrushStyle): void;
   /** Subscribe to brush-style changes (for a settings UI). Returns unsubscribe. */
   subscribeBrush(cb: () => void): () => void;
+  /** Default color/size applied to new text labels. */
+  getTextStyle(): TextStyle;
+  setTextStyle(style: TextStyle): void;
+  subscribeTextStyle(cb: () => void): () => void;
   // Drawing management tooling (#35) ---------------------------------------
   /** Lock every user drawing (non-interactive) or unlock them. New drawings
    *  inherit the current lock state. */
@@ -170,6 +177,8 @@ export interface SonrChartHandle {
   setDrawingsVisible(visible: boolean): void;
   /** Whether user drawings are currently visible. */
   getDrawingsVisible(): boolean;
+  /** Subscribe to hide/show-all changes (#35). Returns unsubscribe. */
+  subscribeDrawingsVisible(cb: (visible: boolean) => void): () => void;
   /** Save the current user drawings as a named template (in-memory). */
   saveDrawingTemplate(name: string): void;
   /** Replace the current user drawings with a saved template's set. */
@@ -353,10 +362,53 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   priceFormatterRef.current = priceFormatter;
   // Heikin Ashi live transformer (rebuilt per data load in the create effect).
   const haRef = useRef(new HaTransformer());
+
+  // Text tool: an inline input floats over the just-placed text overlay so the
+  // user can type the label. Positioned in page (fixed) coords from the anchor.
+  const [textEdit, setTextEdit] = useState<{ id: string; left: number; top: number; value: string } | null>(null);
+  // Stable: the once-built drawings API captures this, so it reads live refs only.
+  const onTextPlaced = useCallback((id: string, point: Partial<Point>) => {
+    const chart = chartRef.current;
+    const el = elRef.current;
+    if (!chart || !el) return;
+    // Chart-relative pixel of the anchor + the container's page offset → the
+    // fixed-position input lands right on the placed label, not at the page top.
+    const px = chart.convertToPixel(point, { paneId: CANDLE_PANE }) as Partial<Coordinate>;
+    const rect = el.getBoundingClientRect();
+    setTextEdit({ id, left: rect.left + (px?.x ?? rect.width / 2), top: rect.top + (px?.y ?? rect.height / 2), value: "" });
+  }, []);
+
   // User-drawing subsystem (#3/#16/#35): armed tool, undo/redo history, lock/hide
   // flags, named templates, and brush styles. Owns its own refs; reads the live
   // magnet mode via the getter and touches only the shared chart ref.
-  const drawings = useDrawings(chartRef, () => magnetMode(magnetRef.current), baseTheme);
+  const drawings = useDrawings(chartRef, () => magnetMode(magnetRef.current), baseTheme, onTextPlaced);
+
+  // Commit the typed label into the overlay's extendData (empty → discard the
+  // anchor), or cancel (discard). Both close the inline input.
+  const commitText = useCallback(() => {
+    setTextEdit((cur) => {
+      if (!cur) return null;
+      const chart = chartRef.current;
+      const text = cur.value.trim();
+      if (chart) {
+        if (text) {
+          // Preserve the label's seeded style (color/size) — only swap the text.
+          const prev = (chart.getOverlays({ id: cur.id })[0]?.extendData ?? {}) as Record<string, unknown>;
+          chart.overrideOverlay({ id: cur.id, extendData: { ...prev, text } });
+          drawings.recordHistory();
+        } else {
+          chart.removeOverlay({ id: cur.id }); // onRemoved records the discard
+        }
+      }
+      return null;
+    });
+  }, [drawings]);
+  const cancelText = useCallback(() => {
+    setTextEdit((cur) => {
+      if (cur) chartRef.current?.removeOverlay({ id: cur.id });
+      return null;
+    });
+  }, []);
 
   // Fetch each comparison symbol, align to the main bars, and (re)build the
   // compare overlay indicator (#9). Removes it when there are none.
@@ -523,11 +575,15 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       getBrushStyle: (tool) => drawings.getBrushStyle(tool),
       setBrushStyle: (tool, style) => drawings.setBrushStyle(tool, style),
       subscribeBrush: (cb) => drawings.subscribeBrush(cb),
+      getTextStyle: () => drawings.getTextStyle(),
+      setTextStyle: (style) => drawings.setTextStyle(style),
+      subscribeTextStyle: (cb) => drawings.subscribeTextStyle(cb),
       // Drawing management tooling (#35) -----------------------------------
       setDrawingsLocked: (locked) => drawings.setDrawingsLocked(locked),
       getDrawingsLocked: () => drawings.getDrawingsLocked(),
       setDrawingsVisible: (visible) => drawings.setDrawingsVisible(visible),
       getDrawingsVisible: () => drawings.getDrawingsVisible(),
+      subscribeDrawingsVisible: (cb) => drawings.subscribeDrawingsVisible(cb),
       saveDrawingTemplate: (name) => drawings.saveDrawingTemplate(name),
       applyDrawingTemplate: (name) => drawings.applyDrawingTemplate(name),
       listDrawingTemplates: () => drawings.listDrawingTemplates(),
@@ -849,13 +905,39 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   }, [priceLines, orderLines]);
 
   return (
-    <div
-      ref={elRef}
-      tabIndex={0}
-      role="application"
-      aria-label="Sonr chart"
-      className={className}
-      style={{ width: "100%", height: "100%", ...style }}
-    />
+    <>
+      <div
+        ref={elRef}
+        tabIndex={0}
+        role="application"
+        aria-label="Sonr chart"
+        className={className}
+        style={{ width: "100%", height: "100%", ...style }}
+      />
+      {textEdit &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <input
+            className="sonr-text-input"
+            aria-label="Chart text label"
+            autoFocus
+            value={textEdit.value}
+            placeholder="Text"
+            style={{ position: "fixed", left: textEdit.left, top: textEdit.top, zIndex: 2147483002 }}
+            onChange={(e) => setTextEdit((c) => (c ? { ...c, value: e.target.value } : c))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commitText();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                cancelText();
+              }
+            }}
+            onBlur={commitText}
+          />,
+          document.body,
+        )}
+    </>
   );
 });

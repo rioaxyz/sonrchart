@@ -33,6 +33,13 @@ export interface Labels {
   redo: string;
   /** Clear-drawings button aria-label. */
   clear: string;
+  /** Hide/show-all-drawings toggle labels (the eye button). */
+  hideDrawings: string;
+  showDrawings: string;
+  /** Clear-drawings confirmation dialog: prompt, confirm button, cancel button. */
+  clearConfirm: string;
+  clearConfirmOk: string;
+  cancel: string;
   /** Settings dialog section (nav) titles. */
   settingsSections: Record<"candles" | "indicators" | "grid" | "drawing" | "drawings", string>;
   /** Optional per-style overrides for the candle menu; falls back to the
@@ -60,6 +67,11 @@ export const DEFAULT_LABELS: Labels = {
   undo: "Undo",
   redo: "Redo",
   clear: "Clear drawings",
+  hideDrawings: "Hide drawings",
+  showDrawings: "Show drawings",
+  clearConfirm: "Are you sure you want to delete all drawings in this chart?",
+  clearConfirmOk: "Delete",
+  cancel: "Cancel",
   settingsSections: {
     candles: "Candles",
     indicators: "Indicators",

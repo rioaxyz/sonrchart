@@ -112,6 +112,8 @@ export type DrawingTool =
   | "fibonacciLine"
   | "simpleAnnotation"
   | "simpleTag"
+  // Click-and-type text label (custom overlay, see textOverlay.ts).
+  | "text"
   // Freehand tools (custom continuous-draw overlay).
   | "brush"
   | "highlighter"
