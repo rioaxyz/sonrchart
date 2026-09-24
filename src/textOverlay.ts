@@ -75,5 +75,8 @@ export function registerTextOverlay(): void {
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     createPointFigures: textFigures,
+    // KLineChart removes an overlay on right-click by default; returning true
+    // consumes the event so a text label isn't deleted by a stray right-click.
+    onRightClick: () => true,
   });
 }
