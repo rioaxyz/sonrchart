@@ -13,6 +13,7 @@ const PL_TOGGLES: { key: keyof PriceLabels; label: (L: Labels) => string }[] = [
   { key: "lastLine", label: (L) => L.priceLabelLastLine },
   { key: "high", label: (L) => L.priceLabelHigh },
   { key: "low", label: (L) => L.priceLabelLow },
+  { key: "countdown", label: (L) => L.priceLabelCountdown },
 ];
 
 // A single-select dropdown for the price-scale type (#12), driven by props (the
@@ -50,7 +51,7 @@ export function PriceScaleMenu({
   };
 
   // Mirror the chart's price-label toggles (seed + subscribe once attached).
-  const [priceLabels, setPriceLabels] = useState<Required<PriceLabels>>({ lastValue: true, lastLine: true, high: true, low: true });
+  const [priceLabels, setPriceLabels] = useState<Required<PriceLabels>>({ lastValue: true, lastLine: true, high: true, low: true, countdown: false });
   useEffect(() => {
     if (!chartRef) return;
     let cancelled = false;

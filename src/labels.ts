@@ -23,6 +23,7 @@ export interface Labels {
   priceLabelLastLine: string;
   priceLabelHigh: string;
   priceLabelLow: string;
+  priceLabelCountdown: string;
   /** Sessions (extended-hours tint) toggle. */
   sessions: string;
   /** Snapshot button aria-label. */
@@ -130,6 +131,7 @@ export const DEFAULT_LABELS: Labels = {
   priceLabelLastLine: "Price line",
   priceLabelHigh: "High",
   priceLabelLow: "Low",
+  priceLabelCountdown: "Countdown",
   sessions: "Sessions",
   snapshot: "Snapshot",
   settings: "Chart settings",

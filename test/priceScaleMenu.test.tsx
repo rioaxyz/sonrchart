@@ -7,7 +7,7 @@ import type { SonrChartHandle } from "../src/SonrChart";
 import type { PriceLabels } from "../src/types";
 
 function labelsHandle() {
-  let pl: Required<PriceLabels> = { lastValue: true, lastLine: true, high: true, low: true };
+  let pl: Required<PriceLabels> = { lastValue: true, lastLine: true, high: true, low: true, countdown: false };
   const subs = new Set<() => void>();
   const h = {
     getPriceLabels: () => ({ ...pl }),
@@ -56,6 +56,11 @@ describe("PriceScaleMenu (#12)", () => {
     expect(h.setPriceLabels).toHaveBeenCalledWith({ high: false });
     // The subscription flips the toggle off.
     expect(screen.getByRole("menuitemcheckbox", { name: "High" })).toHaveAttribute("aria-checked", "false");
+    // Countdown is off by default and toggles on.
+    const countdown = screen.getByRole("menuitemcheckbox", { name: "Countdown" });
+    expect(countdown).toHaveAttribute("aria-checked", "false");
+    await userEvent.click(countdown);
+    expect(h.setPriceLabels).toHaveBeenCalledWith({ countdown: true });
   });
 
   it("omits the label toggles when no chartRef is given", async () => {

@@ -6,7 +6,7 @@ import { PATTERN_INDICATOR, SERIES_INDICATOR, SESSION_INDICATOR, WATERMARK_INDIC
 import { HaTransformer, isHeikinAshi, toHeikinAshi } from "./candles";
 import { applyCandleStyle } from "./candleStyle";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
-import { CANDLE_PANE, asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
+import { CANDLE_PANE, asSpec, intervalMs, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
 import { bareTicker, buildWatermark, intervalLabel, mergeWatermark, normalizeWatermark } from "./watermark";
 import { registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
 import { useDrawings } from "./useDrawings";
@@ -291,22 +291,40 @@ function useControllable<T>(prop: T | undefined, fallback: T) {
   return { value, set, subscribe };
 }
 
-// Price-scale labels (#41). All on by default (matches KLineChart's price marks).
-const DEFAULT_PRICE_LABELS: Required<PriceLabels> = { lastValue: true, lastLine: true, high: true, low: true };
+// Price-scale labels (#41). Marks on by default (matches KLineChart); the
+// bar-close countdown is opt-in.
+const DEFAULT_PRICE_LABELS: Required<PriceLabels> = { lastValue: true, lastLine: true, high: true, low: true, countdown: false };
 
-// Apply the price-scale label toggles to the candle price marks. Safe to call
-// on every change (booleans only, no data recompute).
+// Apply the price-scale label toggles to the candle price marks. The countdown
+// is an extend-text under the last-price pill, refreshed every second; its text
+// comes from the formatExtendText formatter (see applyFormatter). Booleans only
+// — no data recompute.
 function applyPriceLabels(chart: Chart, labels: Required<PriceLabels>): void {
   chart.setStyles({
     candle: {
       priceMark: {
-        show: labels.lastValue || labels.lastLine || labels.high || labels.low,
-        last: { show: labels.lastValue, line: { show: labels.lastLine } },
+        show: labels.lastValue || labels.lastLine || labels.high || labels.low || labels.countdown,
+        last: {
+          show: labels.lastValue || labels.countdown,
+          line: { show: labels.lastLine },
+          extendTexts: labels.countdown ? [{ show: true, position: "below_price", updateInterval: 1000 }] : [],
+        },
         high: { show: labels.high },
         low: { show: labels.low },
       },
     },
   } as DeepPartial<Styles>);
+}
+
+// mm:ss (or h:mm:ss) remaining until a bar that opened at `openMs` closes, given
+// the bar length. Clamps to 0 (e.g. a stale last bar after hours).
+function formatCountdown(openMs: number, barMs: number): string {
+  const remaining = Math.max(0, openMs + barMs - Date.now());
+  const s = Math.floor(remaining / 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}:${pad(m)}:${pad(s % 60)}` : `${pad(m)}:${pad(s % 60)}`;
 }
 
 // The candle pane's y-axis config for a price scale. KLineChart fixes the scale
@@ -447,6 +465,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   }, [priceLabels]);
   const priceLabelsRef = useRef(priceLabels);
   priceLabelsRef.current = priceLabels;
+  // Current interval, read live by the countdown formatter.
+  const intervalRef = useRef(interval);
+  intervalRef.current = interval;
   const candleStyleRef = useRef(candleStyle);
   candleStyleRef.current = candleStyle;
   // Live mirrors so the (stable, []-deps) imperative handle's getters read the
@@ -612,6 +633,14 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       ...(priceFormatterRef.current
         ? { formatBigNumber: (value: string | number) => priceFormatterRef.current!(typeof value === "number" ? value : Number(value)) }
         : {}),
+      // Bar-close countdown under the last-price pill (#41), refreshed each
+      // second by KLineChart's extend-text update timer.
+      formatExtendText: ({ type, data, index }) => {
+        if (type === "last_price" && index === 0 && priceLabelsRef.current.countdown && typeof data?.timestamp === "number") {
+          return formatCountdown(data.timestamp, intervalMs(intervalRef.current));
+        }
+        return "";
+      },
     });
   };
 

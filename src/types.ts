@@ -84,6 +84,8 @@ export interface PriceLabels {
   high?: boolean;
   /** The visible-range low price mark. */
   low?: boolean;
+  /** Countdown to the current bar's close, under the last-price pill. */
+  countdown?: boolean;
 }
 
 /** Crosshair/drawing magnet mode (issue #13). `true` = weak. */
