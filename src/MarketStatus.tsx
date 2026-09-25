@@ -109,7 +109,8 @@ export function sessionProgress(minutesOfDay: number): number {
   return Math.min(1, Math.max(0, (minutesOfDay - PRE_OPEN) / (AFTER_CLOSE - PRE_OPEN)));
 }
 
-function timezoneLabel(nowMs: number): string {
+/** "New York (UTC-4)" — the exchange timezone + current UTC offset for an instant. */
+export function exchangeTimezone(nowMs: number): string {
   const part = ET_OFFSET.formatToParts(new Date(nowMs)).find((p) => p.type === "timeZoneName");
   return `New York (${(part?.value ?? "GMT-5").replace("GMT", "UTC")})`;
 }
@@ -219,7 +220,7 @@ export function MarketStatus({ now, labels, className }: MarketStatusProps) {
               </div>
             </div>
             <div className="sonr-mkt-tz">
-              {L.marketTimezone}: {timezoneLabel(at)}
+              {L.marketTimezone}: {exchangeTimezone(at)}
             </div>
           </div>,
           document.body,
