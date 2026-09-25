@@ -3,7 +3,7 @@
 // the caller (SonrChart) decides whether to run the built-in + notify the host.
 
 /** Built-in chart shortcut actions surfaced to the host via `onShortcut`. */
-export type ShortcutAction = "escape" | "undo" | "redo" | "delete";
+export type ShortcutAction = "escape" | "undo" | "redo" | "delete" | "copy" | "paste";
 
 /** True when the event originates from a field where the user is typing — an
  *  input/textarea/select or a contenteditable element. Shortcuts must never
@@ -27,6 +27,11 @@ export function resolveShortcut(e: KeyboardEvent): ShortcutAction | null {
   // Undo / redo. Cmd/Ctrl+Z; Shift flips it to redo. Ctrl/Cmd+Y is also redo.
   if (mod && (key === "z" || key === "Z")) return e.shiftKey ? "redo" : "undo";
   if (mod && (key === "y" || key === "Y")) return "redo";
+  // Copy the selected drawing / paste the copied one (#35). The caller only
+  // consumes the event (preventDefault) when there's a selection / clipboard,
+  // so an unrelated Cmd/Ctrl+C-V still works normally.
+  if (mod && (key === "c" || key === "C")) return "copy";
+  if (mod && (key === "v" || key === "V")) return "paste";
   // Clear all drawings — only without a modifier (Cmd/Ctrl+Delete is a
   // different command and must not clobber the drawings).
   if (!mod && (key === "Delete" || key === "Backspace")) return "delete";

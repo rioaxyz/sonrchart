@@ -100,6 +100,8 @@ const CSS = `
 :where(.sonr-panel-btn){display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;background:none;border:none;border-radius:3px;color:#555;cursor:pointer;}
 :where(.sonr-panel-btn:hover){background:rgba(0,0,0,0.1);color:#000;}
 :where(.sonr-panel-btn[aria-pressed="true"]){color:#000;}
+:where(.sonr-panel-btn-extra){opacity:0;}
+:where(.sonr-panel-row:hover .sonr-panel-btn-extra){opacity:1;}
 :where(.sonr-timeframe-bar){display:flex;align-items:center;gap:8px;padding:3px 8px;background:#fff;color:#000;border-top:1px solid #000;font-family:inherit;}
 :where(.sonr-timeframe-list){display:flex;align-items:center;gap:2px;flex:1 1 auto;overflow-x:auto;scrollbar-width:none;}
 :where(.sonr-timeframe-list::-webkit-scrollbar){height:0;width:0;display:none;}

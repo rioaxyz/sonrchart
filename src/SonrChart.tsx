@@ -222,6 +222,18 @@ export interface SonrChartHandle {
   removeDrawing(id: string): void;
   /** Scroll the chart so the drawing with this id is in view (#45). */
   locateDrawing(id: string): void;
+  // Drawing z-order + copy/paste (#35) --------------------------------------
+  /** Change a drawing's stacking order: front/back (extreme) or forward/
+   *  backward (one step). */
+  setDrawingZOrder(id: string, mode: "front" | "back" | "forward" | "backward"): void;
+  /** Copy a drawing to the clipboard. */
+  copyDrawing(id: string): void;
+  /** Paste the copied drawing as a new drawing. */
+  pasteDrawing(): void;
+  /** Whether a copied drawing is available to paste. */
+  canPasteDrawing(): boolean;
+  /** Id of the drawing selected on the chart (clicked), or null. */
+  getSelectedDrawing(): string | null;
   // Range bar — visible-window control (#45) --------------------------------
   /** Zoom the visible window to the most recent `ms` of loaded data at the
    *  current resolution (clamped to what's loaded). `Infinity` fits all data. */
@@ -686,6 +698,11 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       setDrawingLocked: (id, locked) => drawings.setDrawingLocked(id, locked),
       removeDrawing: (id) => drawings.removeDrawing(id),
       locateDrawing: (id) => drawings.locateDrawing(id),
+      setDrawingZOrder: (id, mode) => drawings.setDrawingZOrder(id, mode),
+      copyDrawing: (id) => drawings.copyDrawing(id),
+      pasteDrawing: () => drawings.pasteDrawing(),
+      canPasteDrawing: () => drawings.canPaste(),
+      getSelectedDrawing: () => drawings.getSelectedDrawing(),
       // Range bar — zoom the window to the last `ms` of data (#45) -----------
       setVisibleDuration: (ms) => {
         const chart = chartRef.current;
@@ -759,6 +776,19 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         // Delete/Backspace here removes the finished user drawings.
         if (!api.activeDrawing()) {
           api.clearDrawings();
+          e.preventDefault();
+        }
+      } else if (action === "copy") {
+        // Only consume Cmd/Ctrl+C when a drawing is selected — otherwise leave
+        // the browser's normal copy alone.
+        const sel = api.getSelectedDrawing();
+        if (sel) {
+          api.copyDrawing(sel);
+          e.preventDefault();
+        }
+      } else if (action === "paste") {
+        if (api.canPasteDrawing()) {
+          api.pasteDrawing();
           e.preventDefault();
         }
       }

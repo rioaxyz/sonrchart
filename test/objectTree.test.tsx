@@ -38,6 +38,9 @@ function fakeHandle(initial: DrawingRow[]) {
       notify();
     }),
     locateDrawing: vi.fn(),
+    copyDrawing: vi.fn(),
+    pasteDrawing: vi.fn(),
+    setDrawingZOrder: vi.fn(),
     subscribeHistory: (cb: () => void) => {
       subs.add(cb);
       return () => subs.delete(cb);
@@ -85,5 +88,17 @@ describe("ObjectTree (#45)", () => {
     render(<ObjectTree chartRef={ref(h)} />);
     await userEvent.click(await screen.findByText("Trend line"));
     expect(h.locateDrawing).toHaveBeenCalledWith("d1");
+  });
+
+  it("duplicates and reorders a drawing from the object-tree row (#35)", async () => {
+    const h = fakeHandle([{ id: "d1", name: "rectangle", label: "Rectangle", visible: true, locked: false }]);
+    render(<ObjectTree chartRef={ref(h)} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Duplicate: Rectangle" }));
+    expect(h.copyDrawing).toHaveBeenCalledWith("d1");
+    expect(h.pasteDrawing).toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Bring to front: Rectangle" }));
+    expect(h.setDrawingZOrder).toHaveBeenCalledWith("d1", "front");
+    await userEvent.click(screen.getByRole("button", { name: "Send to back: Rectangle" }));
+    expect(h.setDrawingZOrder).toHaveBeenCalledWith("d1", "back");
   });
 });

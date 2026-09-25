@@ -9,7 +9,7 @@ import { useRef, type MutableRefObject } from "react";
 import type { Chart, OverlayMode, Point } from "klinecharts";
 import { USER_DRAWING_GROUP, drawingLabel } from "./drawings";
 import { TEXT_OVERLAY, DEFAULT_TEXT_STYLE, type TextStyle } from "./textOverlay";
-import { DrawingTemplateStore, type DrawingSnapshot } from "./drawingTemplates";
+import { DrawingTemplateStore, type DrawingSnapshot, type DrawingSnapshotItem } from "./drawingTemplates";
 import { BRUSH_OVERLAY, brushStyle, isBrushTool, type BrushStyle, type BrushTool } from "./brush";
 import type { DrawingRow, DrawingTool, Theme } from "./types";
 
@@ -73,6 +73,18 @@ export interface DrawingsApi {
   removeDrawing(id: string): void;
   /** Scroll the chart so the drawing with this id is in view. */
   locateDrawing(id: string): void;
+  // Z-order + copy/paste (#35) ------------------------------------------------
+  /** Change one drawing's stacking order (front/back = extreme, forward/
+   *  backward = one step). */
+  setDrawingZOrder(id: string, mode: "front" | "back" | "forward" | "backward"): void;
+  /** Copy one drawing to the clipboard (survives until the next copy). */
+  copyDrawing(id: string): void;
+  /** Paste the copied drawing as a new drawing (records a history step). */
+  pasteDrawing(): void;
+  /** Whether the clipboard holds a drawing to paste. */
+  canPaste(): boolean;
+  /** The id of the currently selected drawing (clicked on the chart), or null. */
+  getSelectedDrawing(): string | null;
 }
 
 type Snap = DrawingSnapshot;
@@ -110,6 +122,12 @@ export function useDrawings(
   const visibleSubs = useRef(new Set<(visible: boolean) => void>());
   const templatesRef = useRef(new DrawingTemplateStore());
 
+  // Copy/paste clipboard + the currently-selected drawing (#35). Selection is
+  // tracked from each user overlay's onSelected/onDeselected so Cmd/Ctrl+C knows
+  // what to copy.
+  const clipboardRef = useRef<DrawingSnapshotItem | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+
   // Brush/highlighter stroke styles (color + width), seeded from theme presets;
   // each new stroke reads the current value. Seeded once (matches prior behavior).
   const brushStylesRef = useRef<Record<BrushTool, BrushStyle>>({
@@ -136,6 +154,51 @@ export function useDrawings(
     const setActiveTool = (tool: DrawingTool | null) => {
       activeToolRef.current = tool;
       drawingSubs.current.forEach((cb) => cb(tool));
+    };
+    // Track the selected drawing (for Cmd/Ctrl+C). Spread into every user
+    // overlay's create call. Callbacks return false (don't consume the event).
+    const selectHandlers = {
+      onSelected: (e: { overlay?: { id?: string } }) => {
+        selectedIdRef.current = e?.overlay?.id ?? null;
+        return false;
+      },
+      onDeselected: () => {
+        selectedIdRef.current = null;
+        return false;
+      },
+    };
+    // Snapshot one overlay (shallow-copied points) for the clipboard / paste.
+    const snapshotOne = (id: string): DrawingSnapshotItem | null => {
+      const o = chartRef.current?.getOverlays({ id })[0];
+      if (!o) return null;
+      return { name: o.name, points: (o.points ?? []).map((p) => ({ ...p })), styles: o.styles, mode: o.mode, extendData: o.extendData };
+    };
+    // Create a user overlay from a snapshot (paste/duplicate), wiring history +
+    // flags + selection. `restoring` guards the double history push.
+    const createFromSnapshot = (snap: DrawingSnapshotItem) => {
+      const chart = chartRef.current;
+      if (!chart) return;
+      restoringRef.current = true;
+      chart.createOverlay({
+        name: snap.name,
+        points: snap.points,
+        styles: snap.styles,
+        mode: snap.mode,
+        extendData: snap.extendData,
+        groupId: USER_DRAWING_GROUP,
+        ...selectHandlers,
+        onDrawEnd: () => {
+          pushHistory();
+          return false;
+        },
+        onRemoved: () => {
+          pushHistory();
+          return false;
+        },
+      });
+      restoringRef.current = false;
+      applyDrawingFlags();
+      pushHistory();
     };
 
     // Push the current lock/visible state onto every user drawing. Also called
@@ -177,6 +240,7 @@ export function useDrawings(
         mode: brush ? "normal" : getMode(),
         ...(brush ? { extendData: { ...brushStylesRef.current[tool as BrushTool] } } : {}),
         ...(isText ? { extendData: { text: "", ...textStyleRef.current } } : {}),
+        ...selectHandlers,
         onDrawEnd: (e) => {
           // Drawing placed: the overlay is now a finished drawing, not in progress.
           progressIdRef.current = null;
@@ -228,6 +292,7 @@ export function useDrawings(
           mode: d.mode,
           extendData: d.extendData,
           groupId: USER_DRAWING_GROUP,
+          ...selectHandlers,
           onDrawEnd: () => {
             pushHistory();
             return false;
@@ -317,31 +382,9 @@ export function useDrawings(
       deleteDrawingTemplate: (name) => templatesRef.current.delete(name),
       subscribeDrawingTemplates: (cb) => templatesRef.current.subscribe(cb),
       cloneLastDrawing: () => {
-        const chart = chartRef.current;
-        if (!chart) return;
-        const drawings = chart.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? [];
+        const drawings = chartRef.current?.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? [];
         const last = drawings[drawings.length - 1];
-        if (!last) return;
-        restoringRef.current = true;
-        chart.createOverlay({
-          name: last.name,
-          points: last.points,
-          styles: last.styles,
-          mode: last.mode,
-          extendData: last.extendData,
-          groupId: USER_DRAWING_GROUP,
-          onDrawEnd: () => {
-            pushHistory();
-            return false;
-          },
-          onRemoved: () => {
-            pushHistory();
-            return false;
-          },
-        });
-        restoringRef.current = false;
-        applyDrawingFlags();
-        pushHistory();
+        if (last) createFromSnapshot({ name: last.name, points: (last.points ?? []).map((p) => ({ ...p })), styles: last.styles, mode: last.mode, extendData: last.extendData });
       },
       getBrushStyle: (tool) => ({ ...brushStylesRef.current[tool] }),
       setBrushStyle: (tool, style) => {
@@ -385,6 +428,27 @@ export function useDrawings(
         const ts = chart.getOverlays({ id })[0]?.points?.[0]?.timestamp;
         if (typeof ts === "number") chart.scrollToTimestamp(ts);
       },
+      // Z-order + copy/paste (#35) ----------------------------------------
+      setDrawingZOrder: (id, mode) => {
+        const all = chartRef.current?.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? [];
+        if (all.length === 0) return;
+        const levels = all.map((o) => o.zLevel ?? 0);
+        const cur = all.find((o) => o.id === id)?.zLevel ?? 0;
+        const z =
+          mode === "front" ? Math.max(...levels) + 1 : mode === "back" ? Math.min(...levels) - 1 : mode === "forward" ? cur + 1 : cur - 1;
+        // fixedZLevel so the new order sticks instead of being overridden when
+        // the overlay is hovered.
+        chartRef.current?.overrideOverlay({ id, zLevel: z, fixedZLevel: true });
+      },
+      copyDrawing: (id) => {
+        const snap = snapshotOne(id);
+        if (snap) clipboardRef.current = snap;
+      },
+      pasteDrawing: () => {
+        if (clipboardRef.current) createFromSnapshot(clipboardRef.current);
+      },
+      canPaste: () => clipboardRef.current !== null,
+      getSelectedDrawing: () => selectedIdRef.current,
     };
   }
 
