@@ -334,6 +334,11 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   onShortcutRef.current = onShortcut;
   const idRef = useRef(`sonrchart-${++_seq}`);
   const overlayIds = useRef<string[]>([]);
+  // Bumped on every chart (re)init (e.g. an interval switch re-creates the
+  // chart). Reconcile effects key on it so the session tint / pattern markers
+  // are re-applied on the fresh chart — otherwise they'd vanish on the switch
+  // while their toggle stays on (their reconciles don't otherwise re-run). (#10)
+  const [chartEpoch, setChartEpoch] = useState(0);
   // Data-window subscribers (indicator add/remove/visibility). Notified from the
   // handle's indicator mutations so the panel refreshes without polling. (#45)
   const indicatorSubs = useRef(new Set<() => void>());
@@ -778,6 +783,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     const chart = init(el, options);
     if (!chart) return;
     chartRef.current = chart;
+    // Signal the reconcile effects to (re)apply session tint / pattern markers
+    // on this fresh chart.
+    setChartEpoch((e) => e + 1);
     chart.setStyles(mergeStyles(themeStyleObj, styles));
     // Feed a custom header (#45): the hovered bar while the crosshair is over a
     // bar, else fall back to the latest bar.
@@ -905,13 +913,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
           false,
         );
       }
-      if (sessions) {
-        chart.createIndicator({ name: SESSION_INDICATOR, paneId: CANDLE_PANE, extendData: sessionColors(sessions) }, false);
-      }
+      // Session tint + pattern markers are (re)applied by their chartEpoch-keyed
+      // reconcile effects below, so they survive a chart re-init (interval switch).
       for (const i of indicators) createIndicator(asSpec(i));
-      if (patterns && patterns.length) {
-        chart.createIndicator({ name: PATTERN_INDICATOR, paneId: CANDLE_PANE, extendData: patterns }, false);
-      }
       applyPaneHeights();
       onReady?.(chart);
     })();
@@ -984,7 +988,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     } else if (!sessions && present) {
       chart.removeIndicator({ name: SESSION_INDICATOR });
     }
-  }, [sessions]);
+    // chartEpoch: re-apply on a fresh chart (e.g. after an interval switch).
+  }, [sessions, chartEpoch]);
 
   // Watermark reconcile: create/update/remove, and refresh its ticker+interval
   // text the instant the symbol, interval, or theme changes.
@@ -1016,7 +1021,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     } else if (!has && present) {
       chart.removeIndicator({ name: PATTERN_INDICATOR });
     }
-  }, [patterns]);
+    // chartEpoch: re-apply on a fresh chart (e.g. after an interval switch).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patterns, chartEpoch]);
 
   // Price-line + order-line overlays. Runs every render (the arrays are usually
   // fresh references), but a signature guard skips the costly rebuild unless the
