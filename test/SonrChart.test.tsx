@@ -51,7 +51,11 @@ const h = vi.hoisted(() => {
         return id;
       }),
       getOverlays: vi.fn((f?: any) =>
-        f?.groupId ? chart._overlays.filter((o: any) => o.groupId === f.groupId) : chart._overlays.slice(),
+        f?.id
+          ? chart._overlays.filter((o: any) => o.id === f.id)
+          : f?.groupId
+            ? chart._overlays.filter((o: any) => o.groupId === f.groupId)
+            : chart._overlays.slice(),
       ),
       removeOverlay: vi.fn((f?: any) => {
         if (f?.groupId) chart._overlays = chart._overlays.filter((o: any) => o.groupId !== f.groupId);
@@ -173,6 +177,26 @@ describe("SonrChart — indicators (#4)", () => {
     const ref = createRef<SonrChartHandle>();
     render(<SonrChart ref={ref} symbol="A" dataSource={source()} sessions patterns={[{ time: 1000 }]} indicators={["VOL"]} />);
     expect(ref.current!.listIndicators()).toEqual(["VOL"]);
+  });
+
+  it("copies + pastes a drawing and reorders it via the handle (#35)", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("rectangle"));
+    const row = ref.current!.listDrawings()[0];
+    expect(row).toBeTruthy();
+    const before = ref.current!.listDrawings().length;
+    // Copy → paste creates a second drawing from the clipboard.
+    act(() => ref.current!.copyDrawing(row.id));
+    expect(ref.current!.canPasteDrawing()).toBe(true);
+    act(() => ref.current!.pasteDrawing());
+    expect(ref.current!.listDrawings().length).toBe(before + 1);
+    // Z-order sets the overlay's zLevel via overrideOverlay.
+    act(() => ref.current!.setDrawingZOrder(row.id, "front"));
+    const zCall = c.overrideOverlay.mock.calls.map((a: any[]) => a[0]).find((o: any) => o?.id === row.id && "zLevel" in o);
+    expect(zCall).toMatchObject({ id: row.id, fixedZLevel: true });
+    expect(typeof zCall.zLevel).toBe("number");
   });
 });
 

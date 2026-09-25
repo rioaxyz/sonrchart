@@ -51,6 +51,10 @@ export interface Labels {
   close: string;
   noIndicators: string;
   noDrawings: string;
+  /** Object-tree per-drawing actions (#35). */
+  duplicate: string;
+  bringToFront: string;
+  sendToBack: string;
   /** Watchlist panel (#45). */
   watchlist: string;
   addSymbol: string;
@@ -133,6 +137,9 @@ export const DEFAULT_LABELS: Labels = {
   close: "Close",
   noIndicators: "No indicators",
   noDrawings: "No drawings yet",
+  duplicate: "Duplicate",
+  bringToFront: "Bring to front",
+  sendToBack: "Send to back",
   watchlist: "Watchlist",
   addSymbol: "Add symbol",
   emptyWatchlist: "No symbols yet",

@@ -35,6 +35,16 @@ describe("resolveShortcut", () => {
     expect(resolveShortcut(ev("Backspace", { ctrlKey: true }))).toBeNull();
   });
 
+  it("maps Cmd/Ctrl+C to copy and Cmd/Ctrl+V to paste (#35)", () => {
+    expect(resolveShortcut(ev("c", { metaKey: true }))).toBe("copy");
+    expect(resolveShortcut(ev("C", { ctrlKey: true }))).toBe("copy");
+    expect(resolveShortcut(ev("v", { metaKey: true }))).toBe("paste");
+    expect(resolveShortcut(ev("V", { ctrlKey: true }))).toBe("paste");
+    // Bare c/v are not shortcuts.
+    expect(resolveShortcut(ev("c"))).toBeNull();
+    expect(resolveShortcut(ev("v"))).toBeNull();
+  });
+
   it("returns null for a plain letter or unmapped key", () => {
     expect(resolveShortcut(ev("z"))).toBeNull(); // no modifier
     expect(resolveShortcut(ev("a", { metaKey: true }))).toBeNull();

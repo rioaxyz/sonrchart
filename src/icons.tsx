@@ -137,6 +137,38 @@ export function UnlockIcon() {
   );
 }
 
+/** Two overlapping squares — duplicate / copy. */
+export function CopyIcon() {
+  return (
+    <Svg>
+      <rect x="5.5" y="5.5" width="8" height="8" rx="1" />
+      <path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" />
+    </Svg>
+  );
+}
+
+/** Square with an up arrow — bring to front. */
+export function FrontIcon() {
+  return (
+    <Svg>
+      <rect x="3.5" y="6.5" width="9" height="7" rx="1" />
+      <path d="M8 5V1.5" />
+      <path d="M5.8 3.2 8 1l2.2 2.2" />
+    </Svg>
+  );
+}
+
+/** Square with a down arrow — send to back. */
+export function BackIcon() {
+  return (
+    <Svg>
+      <rect x="3.5" y="2.5" width="9" height="7" rx="1" />
+      <path d="M8 11v3.5" />
+      <path d="M5.8 12.8 8 15l2.2-2.2" />
+    </Svg>
+  );
+}
+
 /** Eye with a slash — drawings hidden. */
 export function EyeOffIcon() {
   return (

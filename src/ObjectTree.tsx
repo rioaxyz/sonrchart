@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type RefObject } from "react
 import type { SonrChartHandle } from "./SonrChart";
 import type { DrawingRow } from "./types";
 import { ensureDefaultStyles } from "./defaultStyles";
-import { EyeIcon, EyeOffIcon, LockIcon, UnlockIcon, ClearIcon } from "./icons";
+import { EyeIcon, EyeOffIcon, LockIcon, UnlockIcon, ClearIcon, CopyIcon, FrontIcon, BackIcon } from "./icons";
 import { mergeLabels, type Labels } from "./labels";
 
 // Object-tree panel (issue #45): lists every user drawing with a per-row label
@@ -68,6 +68,37 @@ export function ObjectTree({
                 {row.label}
               </button>
               <span className="sonr-panel-actions">
+                <button
+                  type="button"
+                  className="sonr-panel-btn sonr-panel-btn-extra"
+                  title={L.duplicate}
+                  aria-label={`${L.duplicate}: ${row.label}`}
+                  onClick={() => {
+                    chartRef.current?.copyDrawing?.(row.id);
+                    chartRef.current?.pasteDrawing?.();
+                    refresh();
+                  }}
+                >
+                  <CopyIcon />
+                </button>
+                <button
+                  type="button"
+                  className="sonr-panel-btn sonr-panel-btn-extra"
+                  title={L.bringToFront}
+                  aria-label={`${L.bringToFront}: ${row.label}`}
+                  onClick={() => chartRef.current?.setDrawingZOrder?.(row.id, "front")}
+                >
+                  <FrontIcon />
+                </button>
+                <button
+                  type="button"
+                  className="sonr-panel-btn sonr-panel-btn-extra"
+                  title={L.sendToBack}
+                  aria-label={`${L.sendToBack}: ${row.label}`}
+                  onClick={() => chartRef.current?.setDrawingZOrder?.(row.id, "back")}
+                >
+                  <BackIcon />
+                </button>
                 <button
                   type="button"
                   className="sonr-panel-btn"
