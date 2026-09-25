@@ -83,6 +83,12 @@ export interface Labels {
   symbolInfoVolumePrecision: string;
   symbolInfoUnknown: string;
   symbolInfoLoading: string;
+  symbolInfoType: string;
+  symbolInfoPointValue: string;
+  symbolInfoListedExchange: string;
+  symbolInfoExchange: string;
+  symbolInfoTickSize: string;
+  symbolInfoSession: string;
   /** Nav / control bar (#45). */
   navControls: string;
   zoomOut: string;
@@ -164,6 +170,12 @@ export const DEFAULT_LABELS: Labels = {
   symbolInfoVolumePrecision: "Volume precision",
   symbolInfoUnknown: "Unknown symbol",
   symbolInfoLoading: "Loading…",
+  symbolInfoType: "Type",
+  symbolInfoPointValue: "Point value",
+  symbolInfoListedExchange: "Listed exchange",
+  symbolInfoExchange: "Exchange",
+  symbolInfoTickSize: "Tick size",
+  symbolInfoSession: "Session",
   navControls: "Chart navigation",
   zoomOut: "Zoom out",
   zoomIn: "Zoom in",

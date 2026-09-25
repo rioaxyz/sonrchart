@@ -21,37 +21,35 @@ describe("SymbolInfoDialog (#45)", () => {
     expect(ds.resolveSymbol).not.toHaveBeenCalled();
   });
 
-  it("resolves and renders the symbol fields in a definition list", async () => {
-    const ds = makeSource({
-      AAPL: { ticker: "AAPL", name: "Apple Inc.", pricePrecision: 2, volumePrecision: 0 },
-    });
-    render(<SymbolInfoDialog dataSource={ds} symbol="AAPL" open onClose={vi.fn()} />);
+  it("renders TradingView-style fields + a session timeline with the exchange tz", async () => {
+    const ds = makeSource({ AAPL: { ticker: "AAPL", name: "Apple Inc.", pricePrecision: 2 } });
+    render(<SymbolInfoDialog dataSource={ds} symbol="AAPL" open onClose={vi.fn()} exchange="Alpaca" now={Date.UTC(2026, 0, 9, 18, 0)} />);
 
     expect(await screen.findByText("Apple Inc.")).toBeInTheDocument();
-    // Ticker value renders alongside its label.
     expect(screen.getByText("AAPL")).toBeInTheDocument();
-    expect(screen.getByText("Ticker")).toBeInTheDocument();
-    expect(screen.getByText("Name")).toBeInTheDocument();
-    // Precision fields render their numeric values (0 must render, not be dropped).
-    expect(screen.getByText("Price precision")).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
-    expect(screen.getByText("Volume precision")).toBeInTheDocument();
-    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(screen.getByText("Type")).toBeInTheDocument();
+    expect(screen.getByText("Stock")).toBeInTheDocument();
+    expect(screen.getByText("Point value")).toBeInTheDocument();
+    expect(screen.getByText("Exchange")).toBeInTheDocument();
+    expect(screen.getByText("Alpaca")).toBeInTheDocument();
+    expect(screen.getByText("Tick size")).toBeInTheDocument();
+    expect(screen.getByText("0.01")).toBeInTheDocument(); // 10^-pricePrecision
+    expect(screen.getByText("Session")).toBeInTheDocument();
+    expect(screen.getByText(/New York \(UTC-\d\)/)).toBeInTheDocument();
     expect(ds.resolveSymbol).toHaveBeenCalledWith("AAPL");
   });
 
-  it("shows Unknown symbol when resolveSymbol yields null", async () => {
-    const ds = makeSource({}); // resolves to null
-    render(<SymbolInfoDialog dataSource={ds} symbol="NOPE" open onClose={vi.fn()} />);
-    expect(await screen.findByText("Unknown symbol")).toBeInTheDocument();
-    expect(screen.queryByText("Ticker")).toBeNull();
-  });
+  it("falls back to the raw ticker when resolveSymbol yields null or is absent", async () => {
+    const dsNull = makeSource({}); // resolves to null → raw ticker (no "unknown")
+    const { unmount } = render(<SymbolInfoDialog dataSource={dsNull} symbol="NOPE" open onClose={vi.fn()} />);
+    expect(await screen.findByText("NOPE")).toBeInTheDocument();
+    expect(screen.getByText("Tick size")).toBeInTheDocument();
+    unmount();
 
-  it("falls back to the raw ticker when the datafeed has no resolveSymbol", async () => {
-    const ds: DataSource = { getBars: vi.fn(async () => []) };
-    render(<SymbolInfoDialog dataSource={ds} symbol="MSFT" open onClose={vi.fn()} />);
+    const dsNone: DataSource = { getBars: vi.fn(async () => []) };
+    render(<SymbolInfoDialog dataSource={dsNone} symbol="MSFT" open onClose={vi.fn()} />);
     expect(await screen.findByText("MSFT")).toBeInTheDocument();
-    expect(screen.getByText("Ticker")).toBeInTheDocument();
+    expect(screen.getByText("Type")).toBeInTheDocument();
   });
 
   it("closes on the ✕ button, on Escape, and on an overlay click", async () => {
