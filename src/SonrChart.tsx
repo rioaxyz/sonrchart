@@ -313,6 +313,7 @@ function applyPriceLabels(chart: Chart, labels: Required<PriceLabels>, countdown
             ? [
                 {
                   show: true,
+                  style: "fill",
                   color: countdownColor,
                   size: 10,
                   family: "Helvetica Neue",
