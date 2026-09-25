@@ -37,6 +37,9 @@ function handleWith(chart: any, indicators: string[] = []): SonrChartHandle {
     getWatermark: () => ({ symbol: true, interval: true, color: "#e6ebe9", opacity: 0.06 }),
     setWatermark: vi.fn(),
     subscribeWatermark: () => () => {},
+    getSessions: () => true,
+    setSessions: vi.fn(),
+    subscribeSessions: () => () => {},
     // #35 drawing management
     getDrawingsLocked: () => locked,
     setDrawingsLocked: vi.fn((v: boolean) => {
@@ -148,6 +151,22 @@ describe("SettingsModal (#settings)", () => {
     const widths = screen.getAllByRole("spinbutton") as HTMLInputElement[];
     fireEvent.input(widths[0], { target: { value: "8" } });
     expect(h.setBrushStyle).toHaveBeenCalledWith("brush", expect.objectContaining({ size: 8 }));
+  });
+
+  it("edits pre-market / after-hours session color + opacity via setSessions", async () => {
+    const h = handleWith(fakeChart());
+    render(<SettingsModal chartRef={ref(h)} open onClose={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Sessions" }));
+    expect(screen.getByText("Pre-market")).toBeInTheDocument();
+    expect(screen.getByText("After-hours")).toBeInTheDocument();
+    // Two color pickers (premarket, afterhours) + two opacity sliders.
+    const colors = screen.getAllByDisplayValue(/#/i) as HTMLInputElement[];
+    fireEvent.input(colors[0], { target: { value: "#00ff00" } });
+    // Sessions stay on and premarket becomes an rgba built from #00ff00.
+    expect(h.setSessions).toHaveBeenCalledWith(expect.objectContaining({ premarket: expect.stringContaining("0,255,0") }));
+    const sliders = screen.getAllByRole("slider") as HTMLInputElement[];
+    fireEvent.input(sliders[0], { target: { value: "0.4" } });
+    expect(h.setSessions).toHaveBeenCalledWith(expect.objectContaining({ premarket: expect.stringContaining("0.4") }));
   });
 
   it("drives lock/hide, clone, and templates from the Drawings section (#35)", async () => {

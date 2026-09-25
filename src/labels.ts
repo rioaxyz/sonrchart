@@ -92,7 +92,7 @@ export interface Labels {
   marketClosed: string;
   marketTimezone: string;
   /** Settings dialog section (nav) titles. */
-  settingsSections: Record<"candles" | "indicators" | "grid" | "drawing" | "drawings", string>;
+  settingsSections: Record<"candles" | "indicators" | "grid" | "sessions" | "drawing" | "drawings", string>;
   /** Optional per-style overrides for the candle menu; falls back to the
    *  option's own `label` when a style is not listed. */
   candleStyles: Partial<Record<CandleStyle, string>>;
@@ -171,6 +171,7 @@ export const DEFAULT_LABELS: Labels = {
     candles: "Candles",
     indicators: "Indicators",
     grid: "Grid & Crosshair",
+    sessions: "Sessions",
     drawing: "Drawing",
     drawings: "Drawings",
   },

@@ -187,6 +187,17 @@ describe("SonrChart — session tinting (#10)", () => {
     expect(c.removeIndicator).toHaveBeenCalledWith({ name: SESSION_INDICATOR });
   });
 
+  it("re-applies the session tint when the chart re-inits on an interval switch (#10)", () => {
+    const { rerender } = render(<SonrChart symbol="A" interval="1" dataSource={source()} sessions />);
+    const before = h.charts.length;
+    // Switching interval re-creates the chart; the fresh chart must get sessions.
+    rerender(<SonrChart symbol="A" interval="5" dataSource={source()} sessions />);
+    expect(h.charts.length).toBeGreaterThan(before);
+    const fresh = lastChart();
+    const sess = fresh.createIndicator.mock.calls.find((call: any[]) => call[0]?.name === SESSION_INDICATOR);
+    expect(sess?.[0]).toMatchObject({ name: SESSION_INDICATOR });
+  });
+
   it("passes custom session colors and overrides on change", () => {
     const { rerender } = render(<SonrChart symbol="A" dataSource={source()} sessions={{ premarket: "#123456" }} />);
     const c = lastChart();
