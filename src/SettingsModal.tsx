@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import type { SonrChartHandle } from "./SonrChart";
 import type { BrushStyle, BrushTool } from "./brush";
 import type { TextStyle } from "./textOverlay";
-import type { WatermarkOptions } from "./types";
+import type { SessionTint, WatermarkOptions } from "./types";
+import { DEFAULT_SESSION_COLORS } from "./indicators";
 import { ensureDefaultStyles } from "./defaultStyles";
 import { mergeLabels, type Labels } from "./labels";
 
@@ -13,9 +14,9 @@ import { mergeLabels, type Labels } from "./labels";
 // handle's raw chart() surface, so no host wiring is required — drop it in with a
 // gear button (ChartToolbar does this) or render it yourself.
 
-type Section = "candles" | "indicators" | "grid" | "drawing" | "drawings";
+type Section = "candles" | "indicators" | "grid" | "sessions" | "drawing" | "drawings";
 
-const SECTION_KEYS: Section[] = ["candles", "indicators", "grid", "drawing", "drawings"];
+const SECTION_KEYS: Section[] = ["candles", "indicators", "grid", "sessions", "drawing", "drawings"];
 
 const BRUSH_TOOLS: { tool: BrushTool; label: string }[] = [
   { tool: "brush", label: "Brush" },
@@ -83,6 +84,9 @@ export function SettingsModal({
     highlighter: { color: "rgba(245,214,66,0.35)", size: 14 },
   });
   const [textStyle, setTextStyleState] = useState<TextStyle>({ color: "#2962ff", size: 12 });
+  // Session tint (extended-hours) — on/off + per-session color (rgba w/ opacity).
+  const [sessionsOn, setSessionsOn] = useState(false);
+  const [sessionCols, setSessionCols] = useState<{ premarket: string; afterhours: string }>({ ...DEFAULT_SESSION_COLORS });
   // Drawings management (#35): lock/hide all + named templates.
   const [drawingsLocked, setDrawingsLocked] = useState(false);
   const [drawingsHidden, setDrawingsHidden] = useState(false);
@@ -132,6 +136,19 @@ export function SettingsModal({
     };
     readText();
     const unsubText = chartRef.current?.subscribeTextStyle?.(readText);
+    // Session tint: resolve the current on/off + per-session colors (a boolean
+    // `true` means the defaults; an object carries custom colors).
+    const readSessions = () => {
+      const s = chartRef.current?.getSessions?.();
+      setSessionsOn(!!s);
+      if (s && typeof s === "object") {
+        setSessionCols({ premarket: s.premarket ?? DEFAULT_SESSION_COLORS.premarket, afterhours: s.afterhours ?? DEFAULT_SESSION_COLORS.afterhours });
+      } else {
+        setSessionCols({ ...DEFAULT_SESSION_COLORS });
+      }
+    };
+    readSessions();
+    const unsubSess = chartRef.current?.subscribeSessions?.(readSessions);
     // Drawings management state (#35): lock/hide + template list.
     const h = chartRef.current;
     setDrawingsLocked(h?.getDrawingsLocked?.() ?? false);
@@ -149,6 +166,7 @@ export function SettingsModal({
       unsubWm?.();
       unsubBrush?.();
       unsubText?.();
+      unsubSess?.();
       unsubVis?.();
       unsubTpl?.();
     };
@@ -204,6 +222,19 @@ export function SettingsModal({
   const applyText = (style: TextStyle) => {
     chartRef.current?.setTextStyle?.(style);
     setTextStyleState(style);
+  };
+  // Push session state to the chart: on → the custom color object (keeps colors);
+  // off → false. Partial `next` merges over the current on/off + colors.
+  const applySessions = (next: { on?: boolean; premarket?: string; afterhours?: string }) => {
+    const on = next.on ?? sessionsOn;
+    const cols = {
+      premarket: next.premarket ?? sessionCols.premarket,
+      afterhours: next.afterhours ?? sessionCols.afterhours,
+    };
+    setSessionsOn(on);
+    setSessionCols(cols);
+    const tint: SessionTint = on ? cols : false;
+    chartRef.current?.setSessions?.(tint);
   };
 
   return createPortal(
@@ -350,6 +381,42 @@ export function SettingsModal({
                     }}
                   />
                 </Row>
+              </>
+            )}
+            {section === "sessions" && (
+              <>
+                <p className="sonr-set-note">Extended-hours tint. Set the color and opacity for the pre-market and after-hours shading.</p>
+                <Row label="Show sessions">
+                  <input type="checkbox" checked={sessionsOn} onChange={(e) => applySessions({ on: e.target.checked })} />
+                </Row>
+                {(() => {
+                  const pm = parseColor(sessionCols.premarket);
+                  return (
+                    <div className="sonr-set-ind">
+                      <div className="sonr-set-subhead">Pre-market</div>
+                      <Row label="Color">
+                        <input type="color" value={pm.hex} onChange={(e) => applySessions({ premarket: composeColor(e.target.value, pm.alpha) })} />
+                      </Row>
+                      <Row label={`Opacity (${Math.round(pm.alpha * 100)}%)`}>
+                        <input type="range" min="0" max="1" step="0.01" value={pm.alpha} onChange={(e) => applySessions({ premarket: composeColor(pm.hex, Number(e.target.value)) })} />
+                      </Row>
+                    </div>
+                  );
+                })()}
+                {(() => {
+                  const ah = parseColor(sessionCols.afterhours);
+                  return (
+                    <div className="sonr-set-ind">
+                      <div className="sonr-set-subhead">After-hours</div>
+                      <Row label="Color">
+                        <input type="color" value={ah.hex} onChange={(e) => applySessions({ afterhours: composeColor(e.target.value, ah.alpha) })} />
+                      </Row>
+                      <Row label={`Opacity (${Math.round(ah.alpha * 100)}%)`}>
+                        <input type="range" min="0" max="1" step="0.01" value={ah.alpha} onChange={(e) => applySessions({ afterhours: composeColor(ah.hex, Number(e.target.value)) })} />
+                      </Row>
+                    </div>
+                  );
+                })()}
               </>
             )}
             {section === "drawing" && (
