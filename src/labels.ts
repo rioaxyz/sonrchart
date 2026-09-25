@@ -17,6 +17,12 @@ export interface Labels {
   scale: string;
   /** Price-scale option labels, keyed by scale type. */
   scaleTypes: Record<ScaleType, string>;
+  /** Price-scale labels section (#41). */
+  priceLabelsHeading: string;
+  priceLabelLastValue: string;
+  priceLabelLastLine: string;
+  priceLabelHigh: string;
+  priceLabelLow: string;
   /** Sessions (extended-hours tint) toggle. */
   sessions: string;
   /** Snapshot button aria-label. */
@@ -119,6 +125,11 @@ export const DEFAULT_LABELS: Labels = {
     logarithm: "Logarithmic",
     percentage: "Percent",
   },
+  priceLabelsHeading: "Labels",
+  priceLabelLastValue: "Last value",
+  priceLabelLastLine: "Price line",
+  priceLabelHigh: "High",
+  priceLabelLow: "Low",
   sessions: "Sessions",
   snapshot: "Snapshot",
   settings: "Chart settings",

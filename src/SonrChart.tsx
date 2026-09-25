@@ -27,6 +27,7 @@ import type {
   OrderLine,
   PatternMarker,
   PriceLine,
+  PriceLabels,
   PriceScale,
   SessionTint,
   Theme,
@@ -77,6 +78,8 @@ export interface SonrChartProps {
   orderLines?: OrderLine[];
   /** Price-scale mode (log / percentage / invert / inside). (#12) */
   priceScale?: PriceScale;
+  /** Price-scale labels (last value/line, high/low marks). (#41) */
+  priceLabels?: Partial<PriceLabels>;
   /** Magnet mode for drawing tools — snap points to nearby OHLC. (#13) */
   magnet?: Magnet;
   /** Candle rendering style — solid/hollow/ohlc/area/heikin_ashi. (#1) */
@@ -170,6 +173,11 @@ export interface SonrChartHandle {
   getWatermark(): WatermarkOptions;
   setWatermark(opts: boolean | Partial<WatermarkOptions>): void;
   subscribeWatermark(cb: () => void): () => void;
+  /** Current price-scale label toggles (#41). */
+  getPriceLabels(): Required<PriceLabels>;
+  /** Toggle price-scale labels (merges over the current set). */
+  setPriceLabels(opts: Partial<PriceLabels>): void;
+  subscribePriceLabels(cb: () => void): () => void;
   /** Current brush/highlighter stroke style (color + width). */
   getBrushStyle(tool: BrushTool): BrushStyle;
   /** Set the brush/highlighter stroke style — applies to subsequent strokes. */
@@ -283,6 +291,24 @@ function useControllable<T>(prop: T | undefined, fallback: T) {
   return { value, set, subscribe };
 }
 
+// Price-scale labels (#41). All on by default (matches KLineChart's price marks).
+const DEFAULT_PRICE_LABELS: Required<PriceLabels> = { lastValue: true, lastLine: true, high: true, low: true };
+
+// Apply the price-scale label toggles to the candle price marks. Safe to call
+// on every change (booleans only, no data recompute).
+function applyPriceLabels(chart: Chart, labels: Required<PriceLabels>): void {
+  chart.setStyles({
+    candle: {
+      priceMark: {
+        show: labels.lastValue || labels.lastLine || labels.high || labels.low,
+        last: { show: labels.lastValue, line: { show: labels.lastLine } },
+        high: { show: labels.high },
+        low: { show: labels.low },
+      },
+    },
+  } as DeepPartial<Styles>);
+}
+
 // The candle pane's y-axis config for a price scale. KLineChart fixes the scale
 // TYPE (normal/percentage/logarithm) and inversion at pane creation, so this is
 // applied at chart init — the component rebuilds when `priceScale` changes.
@@ -320,6 +346,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     priceLines,
     orderLines,
     priceScale: priceScaleProp,
+    priceLabels: priceLabelsProp,
     magnet,
     candleStyle: candleStyleProp,
     compareSeries,
@@ -405,6 +432,21 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   useEffect(() => {
     wmSubs.current.forEach((cb) => cb());
   }, [watermark]);
+  // Price-scale labels (#41): merge-able toggle config with prop-seed + a
+  // handle-driven setter for the price-scale menu.
+  const [priceLabels, setPriceLabelsState] = useState<Required<PriceLabels>>(() => ({ ...DEFAULT_PRICE_LABELS, ...priceLabelsProp }));
+  const plPropRef = useRef(priceLabelsProp);
+  if (priceLabelsProp !== plPropRef.current) {
+    plPropRef.current = priceLabelsProp;
+    if (priceLabelsProp) setPriceLabelsState((cur) => ({ ...cur, ...priceLabelsProp }));
+  }
+  const plSubs = useRef(new Set<() => void>());
+  const setPriceLabels = (next: Partial<PriceLabels>) => setPriceLabelsState((cur) => ({ ...cur, ...next }));
+  useEffect(() => {
+    plSubs.current.forEach((cb) => cb());
+  }, [priceLabels]);
+  const priceLabelsRef = useRef(priceLabels);
+  priceLabelsRef.current = priceLabels;
   const candleStyleRef = useRef(candleStyle);
   candleStyleRef.current = candleStyle;
   // Live mirrors so the (stable, []-deps) imperative handle's getters read the
@@ -661,6 +703,12 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         wmSubs.current.add(cb);
         return () => wmSubs.current.delete(cb);
       },
+      getPriceLabels: () => ({ ...priceLabelsRef.current }),
+      setPriceLabels: (opts) => setPriceLabels(opts),
+      subscribePriceLabels: (cb) => {
+        plSubs.current.add(cb);
+        return () => plSubs.current.delete(cb);
+      },
       getBrushStyle: (tool) => drawings.getBrushStyle(tool),
       setBrushStyle: (tool, style) => drawings.setBrushStyle(tool, style),
       subscribeBrush: (cb) => drawings.subscribeBrush(cb),
@@ -833,6 +881,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     });
     // Candle rendering style (#1).
     applyCandleStyle(chart, candleStyleRef.current, themeStyleObj, baseTheme);
+    // Price-scale labels (#41) — last value/line + high/low marks.
+    applyPriceLabels(chart, priceLabelsRef.current);
     // Crosshair date/price formatting (#46), default: TV-style date+time pill.
     applyFormatter(chart);
     // Candle legend without the time row: the hovered bar's time lives in the
@@ -993,6 +1043,12 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   useEffect(() => {
     chartRef.current?.setStyles({ candle: { tooltip: { showRule: legend ? "follow_cross" : "none" } } } as DeepPartial<Styles>);
   }, [legend]);
+
+  // Price-scale labels reconcile (#41).
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (chart) applyPriceLabels(chart, priceLabels);
+  }, [priceLabels]);
 
   // Compare / multi-symbol overlays (#9).
   useEffect(() => {

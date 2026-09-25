@@ -849,3 +849,33 @@ describe("SonrChart — formatters (#46)", () => {
     expect(fmt.formatBigNumber(12.5)).toBe("$12.50");
   });
 });
+
+describe("SonrChart — price-scale labels (#41)", () => {
+  it("applies the label toggles to the candle price marks", () => {
+    render(<SonrChart symbol="A" dataSource={source()} priceLabels={{ high: false, low: false }} />);
+    const c = lastChart();
+    const call = c.setStyles.mock.calls.map((a: any[]) => a[0]).find((s: any) => s?.candle?.priceMark);
+    expect(call.candle.priceMark).toMatchObject({
+      last: { show: true, line: { show: true } },
+      high: { show: false },
+      low: { show: false },
+    });
+  });
+
+  it("get/set/subscribe price labels through the handle", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    expect(ref.current!.getPriceLabels()).toMatchObject({ lastValue: true, lastLine: true, high: true, low: true });
+    const cb = vi.fn();
+    act(() => {
+      ref.current!.subscribePriceLabels(cb);
+      ref.current!.setPriceLabels({ high: false });
+    });
+    expect(ref.current!.getPriceLabels().high).toBe(false);
+    expect(cb).toHaveBeenCalled();
+    // The change re-applies the price marks.
+    const c = lastChart();
+    const last = c.setStyles.mock.calls.map((a: any[]) => a[0]).filter((s: any) => s?.candle?.priceMark).at(-1);
+    expect(last.candle.priceMark.high).toMatchObject({ show: false });
+  });
+});

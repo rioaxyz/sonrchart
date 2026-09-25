@@ -73,6 +73,19 @@ export interface PriceScale {
   inside?: boolean;
 }
 
+/** Price-scale labels shown on the y-axis (issue #41 — labels). Each toggles a
+ *  KLineChart price mark. `undefined` fields keep the current value. */
+export interface PriceLabels {
+  /** The last-price value pill on the axis. */
+  lastValue?: boolean;
+  /** The horizontal line drawn across the chart at the last price. */
+  lastLine?: boolean;
+  /** The visible-range high price mark. */
+  high?: boolean;
+  /** The visible-range low price mark. */
+  low?: boolean;
+}
+
 /** Crosshair/drawing magnet mode (issue #13). `true` = weak. */
 export type Magnet = boolean | "weak" | "strong";
 

@@ -62,6 +62,8 @@ const CSS = `
 :where(.sonr-menu-option:hover){background:#e6e6e6;}
 :where(.sonr-menu-option.on){font-weight:700;}
 :where(.sonr-menu-check){display:inline-block;width:12px;flex:0 0 12px;}
+:where(.sonr-menu-sep){height:1px;background:#e0e0e0;margin:4px 6px;}
+:where(.sonr-menu-subhead){color:#555;font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;padding:2px 8px;}
 :where(.sonr-menu-name){font-weight:700;min-width:38px;}
 :where(.sonr-menu-label){color:#555;font-size:11px;}
 :where(.sonr-menu-label-wide){color:#000;font-size:12px;}
