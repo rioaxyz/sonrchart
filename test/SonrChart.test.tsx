@@ -164,6 +164,31 @@ describe("SonrChart — indicators (#4)", () => {
     expect(call[0]).toMatchObject({ name: "MA", paneId: "candle_pane", calcParams: [5, 10] });
   });
 
+  it("stacks main-pane overlays (isStack=true) so they coexist — regression", () => {
+    // KLineChart's addIndicator with isStack=false removes every indicator on the
+    // target pane first, so two main-pane overlays would replace one another.
+    render(
+      <SonrChart symbol="A" dataSource={source()} indicators={[{ name: "MA", pane: "main" }, { name: "BOLL", pane: "main" }]} />,
+    );
+    const calls = lastChart().createIndicator.mock.calls;
+    const ma = calls.find((c: any[]) => c[0]?.name === "MA");
+    const boll = calls.find((c: any[]) => c[0]?.name === "BOLL");
+    expect(ma[0]).toMatchObject({ name: "MA", paneId: "candle_pane" });
+    expect(boll[0]).toMatchObject({ name: "BOLL", paneId: "candle_pane" });
+    expect(ma[1]).toBe(true); // isStack
+    expect(boll[1]).toBe(true);
+  });
+
+  it("creates the candle-pane layers with isStack=true so they don't wipe each other", () => {
+    render(<SonrChart symbol="A" dataSource={source()} sessions watermark patterns={[{ time: 1000 }]} indicators={[]} />);
+    const calls = lastChart().createIndicator.mock.calls;
+    for (const name of ["SONR_SESSION", "SONR_WATERMARK", "SONR_PATTERNS"]) {
+      const call = calls.find((c: any[]) => c[0]?.name === name);
+      expect(call, name).toBeTruthy();
+      expect(call[1], name).toBe(true); // isStack — never destructive to the pane
+    }
+  });
+
   it("ref exposes add / remove / list", () => {
     const ref = createRef<SonrChartHandle>();
     render(<SonrChart ref={ref} symbol="A" dataSource={source()} indicators={[]} />);

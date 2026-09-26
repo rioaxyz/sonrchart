@@ -650,20 +650,26 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     if (chart.getIndicators({ name: COMPARE_INDICATOR }).length > 0) {
       chart.overrideIndicator({ name: COMPARE_INDICATOR, extendData: lines });
     } else {
-      chart.createIndicator({ name: COMPARE_INDICATOR, paneId: CANDLE_PANE, extendData: lines }, false);
+      chart.createIndicator({ name: COMPARE_INDICATOR, paneId: CANDLE_PANE, extendData: lines }, true);
     }
   };
 
   const createIndicator = (spec: IndicatorSpec) => {
     const chart = chartRef.current;
     if (!chart) return;
+    // isStack=true: KLineChart's addIndicator with isStack=false REMOVES every
+    // existing indicator on the target pane first, so main-pane overlays (MA,
+    // BOLL, VWAP…) would replace one another and wipe the session/watermark/
+    // pattern layers that also live on the candle pane. Stacking lets them
+    // coexist; duplicates are still blocked by KLineChart's per-name filter, and
+    // a "new"-pane indicator lands on a fresh pane where stacking is a no-op.
     chart.createIndicator(
       {
         name: spec.name,
         ...(spec.calcParams ? { calcParams: spec.calcParams } : {}),
         ...(spec.pane === "main" ? { paneId: CANDLE_PANE } : {}),
       },
-      false,
+      true,
     );
   };
 
@@ -740,7 +746,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         drawings.restoreDrawings(state.drawings ?? []);
         for (const ind of state.indicators ?? []) {
           if (!chart.getIndicators({ name: ind.name }).length) {
-            chart.createIndicator({ name: ind.name, ...(ind.paneId === CANDLE_PANE ? { paneId: CANDLE_PANE } : {}) }, false);
+            chart.createIndicator({ name: ind.name, ...(ind.paneId === CANDLE_PANE ? { paneId: CANDLE_PANE } : {}) }, true);
           }
         }
         // Reset the undo history to the imported drawing set.
@@ -1092,7 +1098,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       if (watermark.symbol || watermark.interval) {
         chart.createIndicator(
           { name: WATERMARK_INDICATOR, paneId: CANDLE_PANE, extendData: buildWatermark(info.ticker ?? symbol, interval, watermark) },
-          false,
+          true,
         );
       }
       // Session tint + pattern markers are (re)applied by their chartEpoch-keyed
@@ -1170,7 +1176,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     if (!chart) return;
     const present = chart.getIndicators({ name: SESSION_INDICATOR }).length > 0;
     if (sessions && !present) {
-      chart.createIndicator({ name: SESSION_INDICATOR, paneId: CANDLE_PANE, extendData: sessionColors(sessions) }, false);
+      chart.createIndicator({ name: SESSION_INDICATOR, paneId: CANDLE_PANE, extendData: sessionColors(sessions) }, true);
     } else if (sessions && present) {
       chart.overrideIndicator({ name: SESSION_INDICATOR, extendData: sessionColors(sessions) });
     } else if (!sessions && present) {
@@ -1188,7 +1194,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     const active = watermark.symbol || watermark.interval;
     const ext = buildWatermark(symbol, interval, watermark);
     if (active && !present) {
-      chart.createIndicator({ name: WATERMARK_INDICATOR, paneId: CANDLE_PANE, extendData: ext }, false);
+      chart.createIndicator({ name: WATERMARK_INDICATOR, paneId: CANDLE_PANE, extendData: ext }, true);
     } else if (active && present) {
       chart.overrideIndicator({ name: WATERMARK_INDICATOR, extendData: ext });
     } else if (!active && present) {
@@ -1203,7 +1209,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     const present = chart.getIndicators({ name: PATTERN_INDICATOR }).length > 0;
     const has = !!(patterns && patterns.length);
     if (has && !present) {
-      chart.createIndicator({ name: PATTERN_INDICATOR, paneId: CANDLE_PANE, extendData: patterns }, false);
+      chart.createIndicator({ name: PATTERN_INDICATOR, paneId: CANDLE_PANE, extendData: patterns }, true);
     } else if (has && present) {
       chart.overrideIndicator({ name: PATTERN_INDICATOR, extendData: patterns });
     } else if (!has && present) {
