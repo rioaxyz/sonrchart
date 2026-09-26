@@ -17,8 +17,8 @@ export { parseResolution, resolutionMs, resolutionLabel, DEFAULT_RESOLUTIONS, UN
 export type { ResolutionOption } from "./resolutions";
 export { formatWithUnit } from "./symbolFormat";
 export type { QuoteFormat } from "./symbolFormat";
-export { Watchlist } from "./Watchlist";
-export type { WatchlistProps } from "./Watchlist";
+export { SonrChartShell } from "./SonrChartShell";
+export type { SonrChartShellProps } from "./SonrChartShell";
 export { SaveLoadDialog, isChartState } from "./SaveLoadDialog";
 export { GoToDateDialog, parseLocalDateTime } from "./GoToDateDialog";
 export { SymbolInfoDialog } from "./SymbolInfoDialog";

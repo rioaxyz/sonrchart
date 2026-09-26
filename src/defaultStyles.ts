@@ -205,24 +205,18 @@ const CSS = `
 :where(.sonr-sl-btn:hover){background:#e6e6e6;}
 :where(.sonr-sl-load){background:#000;color:#fff;font-weight:600;padding:4px 16px;}
 :where(.sonr-sl-load:hover){background:#222;}
-/* --- Watchlist --- */
-:where(.sonr-watchlist){display:flex;flex-direction:column;min-width:180px;font-size:12px;color:#000;}
-:where(.sonr-watchlist-add){position:relative;padding:2px 8px 6px;}
-:where(.sonr-watchlist-add .sonr-search-input){width:100%;box-sizing:border-box;}
-:where(.sonr-watchlist-results){position:absolute;left:8px;right:8px;top:100%;z-index:2147483000;display:flex;flex-direction:column;background:#fff;color:#000;border:1px solid #000;border-radius:4px;box-shadow:0 6px 20px rgba(0,0,0,0.25);padding:4px;max-height:50vh;overflow-y:auto;}
-:where(.sonr-watchlist-list){list-style:none;margin:0;padding:0;display:flex;flex-direction:column;}
-:where(.sonr-watchlist-row){display:flex;align-items:center;gap:4px;padding-right:6px;}
-:where(.sonr-watchlist-row:hover){background:rgba(0,0,0,0.05);}
-:where(.sonr-watchlist-pick){flex:1 1 auto;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:8px;background:none;border:none;cursor:pointer;color:inherit;font:inherit;text-align:left;padding:4px 8px;}
-:where(.sonr-watchlist-sym){font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-:where(.sonr-watchlist-quote){display:inline-flex;align-items:baseline;gap:8px;flex:0 0 auto;}
-:where(.sonr-watchlist-last){font-variant-numeric:tabular-nums;}
-:where(.sonr-watchlist-chg){font-variant-numeric:tabular-nums;font-size:11px;min-width:52px;text-align:right;}
-:where(.sonr-watchlist-chg-up){color:#0a9d57;}
-:where(.sonr-watchlist-chg-down){color:#d23c3c;}
-:where(.sonr-watchlist-chg-flat){color:#888;}
-:where(.sonr-watchlist-remove){flex:0 0 auto;opacity:0;}
-:where(.sonr-watchlist-row:hover .sonr-watchlist-remove){opacity:1;}
+/* --- Chart shell (SonrChartShell) — structural defaults; host themes via color. --- */
+:where(.sonr-tile){display:flex;flex-direction:column;}
+:where(.sonr-tile-body){display:flex;flex:1 1 auto;min-height:0;}
+:where(.sonr-tile-canvas){position:relative;flex:1 1 auto;min-height:0;}
+:where(.sonr-tile-header){position:absolute;top:6px;left:8px;z-index:4;max-width:calc(100% - 160px);overflow:hidden;}
+:where(.sonr-tile-nav){position:absolute;right:8px;bottom:8px;z-index:4;}
+:where(.sonr-side-panel){flex:0 0 210px;overflow-y:auto;background:#fff;border-left:1px solid #ccc;display:flex;flex-direction:column;}
+:where(.sonr-side-tools){display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;border-bottom:1px solid #ccc;}
+:where(.sonr-side-tool){flex:1 1 auto;background:#f4f4f4;color:#000;border:1px solid #ccc;border-radius:5px;font-size:11px;font-weight:600;padding:4px 6px;cursor:pointer;}
+:where(.sonr-side-tool:hover){border-color:#000;}
+:where(.sonr-bottom-btn){display:inline-flex;align-items:center;justify-content:center;width:26px;height:22px;padding:0;background:none;border:none;border-radius:4px;color:inherit;cursor:pointer;}
+:where(.sonr-bottom-btn:hover){background:rgba(0,0,0,0.06);}
 `;
 
 /** Inject the default toolbar stylesheet once. No-op on the server, when already
