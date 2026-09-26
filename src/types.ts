@@ -153,7 +153,15 @@ export type DrawingTool =
   | "ellipse"
   | "triangle"
   | "priceRange"
-  | "riskReward";
+  | "riskReward"
+  // Extended family (custom overlays, see drawingsExtended.ts) — opt-in (#34).
+  | "horizontalRay"
+  | "crossLine"
+  | "arrow"
+  | "fibExtension"
+  | "fibTimeZone"
+  | "dateRange"
+  | "datePriceRange";
 
 /** One active indicator row for the data-window panel (#45). */
 export interface IndicatorRow {

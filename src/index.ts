@@ -38,8 +38,17 @@ export { ChartToolbar } from "./ChartToolbar";
 export { SymbolSearch } from "./SymbolSearch";
 export { ToolbarButton } from "./ToolbarButton";
 export { ensureDefaultStyles } from "./defaultStyles";
-export { DEFAULT_DRAWING_TOOLS, USER_DRAWING_GROUP } from "./drawings";
+export { DEFAULT_DRAWING_TOOLS, EXTENDED_DRAWING_TOOLS, USER_DRAWING_GROUP } from "./drawings";
 export type { DrawingToolOption } from "./drawings";
+export {
+  registerExtendedDrawings,
+  EXTENDED_OVERLAYS,
+  FIB_EXTENSION_LEVELS,
+  fibSequence,
+  arrowHeadPoints,
+  humanDuration,
+  dateRangeLabel,
+} from "./drawingsExtended";
 export { DrawingTemplateStore } from "./drawingTemplates";
 export type { DrawingSnapshot, DrawingSnapshotItem } from "./drawingTemplates";
 export { downloadSnapshot } from "./snapshot";

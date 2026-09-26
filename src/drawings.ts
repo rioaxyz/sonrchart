@@ -32,13 +32,29 @@ export const DEFAULT_DRAWING_TOOLS: DrawingToolOption[] = [
   { tool: "riskReward", label: "Risk / reward" },
 ];
 
+// Extended drawing family (issue #34) — an opt-in second tier of tools
+// registered as custom overlays (see drawingsExtended.ts). NOT in the default
+// toolbar; a host spreads these into <DrawingToolbar tools> to offer them.
+export const EXTENDED_DRAWING_TOOLS: DrawingToolOption[] = [
+  { tool: "horizontalRay", label: "Horizontal ray" },
+  { tool: "crossLine", label: "Cross line" },
+  { tool: "arrow", label: "Arrow" },
+  { tool: "fibExtension", label: "Fib extension" },
+  { tool: "fibTimeZone", label: "Fib time zone" },
+  { tool: "dateRange", label: "Date range" },
+  { tool: "datePriceRange", label: "Date & price range" },
+];
+
 // Every user-started drawing is tagged with this group id so clearDrawings()
 // can remove them without touching library-managed overlays (price/order lines,
 // session/pattern indicators).
 export const USER_DRAWING_GROUP = "sonr-user-drawing";
 
-// Tool id → label, for the object tree (#45). Built once from the default set.
-const TOOL_LABELS: Record<string, string> = Object.fromEntries(DEFAULT_DRAWING_TOOLS.map((t) => [t.tool, t.label]));
+// Tool id → label, for the object tree (#45). Built once from the default +
+// extended sets so every placed overlay resolves to a human label.
+const TOOL_LABELS: Record<string, string> = Object.fromEntries(
+  [...DEFAULT_DRAWING_TOOLS, ...EXTENDED_DRAWING_TOOLS].map((t) => [t.tool, t.label]),
+);
 
 /** Human label for a placed drawing in the object tree. Text labels show their
  *  own content; freehand shares one overlay name; everything else maps to its
