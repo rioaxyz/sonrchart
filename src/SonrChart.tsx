@@ -301,7 +301,7 @@ const DEFAULT_PRICE_LABELS: Required<PriceLabels> = { lastValue: true, lastLine:
 // — no data recompute. The extend-text style must be COMPLETE: KLineChart reads
 // paddingLeft/size/weight/family etc. directly, and any `undefined` yields a NaN
 // text width that blanks the whole candle pane.
-function applyPriceLabels(chart: Chart, labels: Required<PriceLabels>, countdownColor: string): void {
+function applyPriceLabels(chart: Chart, labels: Required<PriceLabels>): void {
   chart.setStyles({
     candle: {
       priceMark: {
@@ -309,19 +309,23 @@ function applyPriceLabels(chart: Chart, labels: Required<PriceLabels>, countdown
         last: {
           show: labels.lastValue || labels.countdown,
           line: { show: labels.lastLine },
+          // Match the last-price pill's own text style (white, size 12, same
+          // padding) so the countdown reads as a matching label centered under
+          // it — it inherits the pill's colored background + right-axis
+          // alignment, so a matching style keeps them stacked and legible.
           extendTexts: labels.countdown
             ? [
                 {
                   show: true,
                   style: "fill",
-                  color: countdownColor,
-                  size: 10,
+                  color: "#FFFFFF",
+                  size: 12,
                   family: "Helvetica Neue",
                   weight: "normal",
                   paddingLeft: 4,
                   paddingRight: 4,
-                  paddingTop: 2,
-                  paddingBottom: 2,
+                  paddingTop: 4,
+                  paddingBottom: 4,
                   borderColor: "transparent",
                   borderSize: 0,
                   borderStyle: "solid",
@@ -935,7 +939,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     // Candle rendering style (#1).
     applyCandleStyle(chart, candleStyleRef.current, themeStyleObj, baseTheme);
     // Price-scale labels (#41) — last value/line + high/low marks.
-    applyPriceLabels(chart, priceLabelsRef.current, (baseTheme === "dark" ? PALETTE.DARK : PALETTE.LIGHT).muted);
+    applyPriceLabels(chart, priceLabelsRef.current);
     // Crosshair date/price formatting (#46), default: TV-style date+time pill.
     applyFormatter(chart);
     // Candle legend without the time row: the hovered bar's time lives in the
@@ -1100,8 +1104,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   // Price-scale labels reconcile (#41).
   useEffect(() => {
     const chart = chartRef.current;
-    if (chart) applyPriceLabels(chart, priceLabels, (baseTheme === "dark" ? PALETTE.DARK : PALETTE.LIGHT).muted);
-  }, [priceLabels, baseTheme]);
+    if (chart) applyPriceLabels(chart, priceLabels);
+  }, [priceLabels]);
 
   // Compare / multi-symbol overlays (#9).
   useEffect(() => {
