@@ -218,6 +218,9 @@ export function SymbolSearch({
                   onMouseEnter={() => setHighlight(idx)}
                   onClick={() => choose(r.symbol)}
                 >
+                  {r.logo ? (
+                    <img className="sonr-search-logo" src={r.logo} alt="" aria-hidden width={18} height={18} />
+                  ) : null}
                   <span className="sonr-search-sym">{r.symbol}</span>
                   {(r.name || r.exchange) && (
                     <span className="sonr-search-name">{r.name ?? r.exchange}</span>

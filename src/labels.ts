@@ -98,6 +98,11 @@ export interface Labels {
   symbolInfoExchange: string;
   symbolInfoTickSize: string;
   symbolInfoSession: string;
+  /** Symbol-info metadata fields (#39). */
+  symbolInfoCurrency: string;
+  symbolInfoUnit: string;
+  symbolInfoDescription: string;
+  symbolInfoPriceSource: string;
   /** Nav / control bar (#45). */
   navControls: string;
   zoomOut: string;
@@ -192,6 +197,10 @@ export const DEFAULT_LABELS: Labels = {
   symbolInfoExchange: "Exchange",
   symbolInfoTickSize: "Tick size",
   symbolInfoSession: "Session",
+  symbolInfoCurrency: "Currency",
+  symbolInfoUnit: "Unit",
+  symbolInfoDescription: "Description",
+  symbolInfoPriceSource: "Price source",
   navControls: "Chart navigation",
   zoomOut: "Zoom out",
   zoomIn: "Zoom in",

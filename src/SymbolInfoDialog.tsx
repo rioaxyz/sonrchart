@@ -104,6 +104,16 @@ export function SymbolInfoDialog({
   const { weekday, minutesOfDay } = etClock(at);
   const pct = (m: number) => `${((m / DAY) * 100).toFixed(2)}%`;
 
+  // Listed-exchange cell: the exchange logo (when known) beside the label (#39).
+  const exchangeCell = info?.exchangeLogo ? (
+    <span className="sonr-syminfo-exwrap">
+      <img className="sonr-syminfo-exlogo" src={info.exchangeLogo} alt="" aria-hidden width={16} height={16} />
+      {listedExchange}
+    </span>
+  ) : (
+    listedExchange
+  );
+
   const Field = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div className="sonr-syminfo-field">
       <div className="sonr-syminfo-flabel">{label}</div>
@@ -128,15 +138,22 @@ export function SymbolInfoDialog({
           ) : (
             <>
               <div className="sonr-syminfo-sym">
+                {info.logo ? (
+                  <img className="sonr-syminfo-logo" src={info.logo} alt="" aria-hidden width={28} height={28} />
+                ) : null}
                 <span className="sonr-syminfo-ticker">{ticker}</span>
                 {name ? <span className="sonr-syminfo-name">{name}</span> : null}
               </div>
+              {info.description ? <div className="sonr-syminfo-desc">{info.description}</div> : null}
               <div className="sonr-syminfo-grid">
                 <Field label={L.symbolInfoType} value={type} />
                 <Field label={L.symbolInfoPointValue} value={pointValue} />
-                <Field label={L.symbolInfoListedExchange} value={listedExchange} />
+                <Field label={L.symbolInfoListedExchange} value={exchangeCell} />
                 <Field label={L.symbolInfoExchange} value={exchange} />
                 <Field label={L.symbolInfoTickSize} value={tickText} />
+                {info.currency ? <Field label={L.symbolInfoCurrency} value={info.currency} /> : null}
+                {info.unit ? <Field label={L.symbolInfoUnit} value={info.unit} /> : null}
+                {info.priceSource ? <Field label={L.symbolInfoPriceSource} value={info.priceSource} /> : null}
               </div>
               <div className="sonr-syminfo-session">
                 <div className="sonr-syminfo-flabel">{L.symbolInfoSession}</div>

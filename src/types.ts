@@ -25,6 +25,20 @@ export interface SymbolInfo {
   pricePrecision?: number;
   /** Decimal places for volume. */
   volumePrecision?: number;
+  // Symbol metadata (issue #39) — all optional; the host supplies what it knows.
+  /** ISO currency code or symbol prices are quoted in (e.g. "USD", "$", "€").
+   *  Prefixed to prices in the legend / crosshair pill. */
+  currency?: string;
+  /** Unit prices are quoted in (e.g. "pts", "¢", "bps"). Suffixed to prices. */
+  unit?: string;
+  /** URL (or data URI) for the symbol's logo, shown in the info dialog + legend. */
+  logo?: string;
+  /** URL (or data URI) for the listing exchange's logo. */
+  exchangeLogo?: string;
+  /** Long-form description of the instrument, shown in the info dialog. */
+  description?: string;
+  /** Where the price data originates (e.g. "Alpaca", "IEX"), shown in the dialog. */
+  priceSource?: string;
 }
 
 /** One hit from a symbol search (issue #37). Only `symbol` is required; the
@@ -34,6 +48,8 @@ export interface SymbolSearchResult {
   name?: string;
   exchange?: string;
   type?: string;
+  /** URL (or data URI) for the symbol's logo, shown beside the result (#39). */
+  logo?: string;
 }
 
 /**

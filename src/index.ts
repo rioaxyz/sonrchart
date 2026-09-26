@@ -15,6 +15,8 @@ export { DEFAULT_TIMEZONE, DEFAULT_TIMEZONES, timezoneLabel, getTimezoneApi } fr
 export type { TimezoneOption } from "./timezone";
 export { parseResolution, resolutionMs, resolutionLabel, DEFAULT_RESOLUTIONS, UNIT_MS } from "./resolutions";
 export type { ResolutionOption } from "./resolutions";
+export { formatWithUnit } from "./symbolFormat";
+export type { QuoteFormat } from "./symbolFormat";
 export { Watchlist } from "./Watchlist";
 export type { WatchlistProps } from "./Watchlist";
 export { SaveLoadDialog, isChartState } from "./SaveLoadDialog";
