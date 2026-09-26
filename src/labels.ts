@@ -26,6 +26,8 @@ export interface Labels {
   priceLabelCountdown: string;
   /** Sessions (extended-hours tint) toggle. */
   sessions: string;
+  /** Timezone menu trigger + group label (#38). */
+  timezone: string;
   /** Snapshot button aria-label. */
   snapshot: string;
   /** Settings gear aria-label + settings dialog title. */
@@ -133,6 +135,7 @@ export const DEFAULT_LABELS: Labels = {
   priceLabelLow: "Low",
   priceLabelCountdown: "Countdown",
   sessions: "Sessions",
+  timezone: "Timezone",
   snapshot: "Snapshot",
   settings: "Chart settings",
   candleType: "Candle type",

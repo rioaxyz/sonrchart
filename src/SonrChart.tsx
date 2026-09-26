@@ -7,6 +7,7 @@ import { HaTransformer, isHeikinAshi, toHeikinAshi } from "./candles";
 import { applyCandleStyle } from "./candleStyle";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
 import { CANDLE_PANE, asSpec, intervalMs, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
+import { DEFAULT_TIMEZONE } from "./timezone";
 import { bareTicker, buildWatermark, intervalLabel, mergeWatermark, normalizeWatermark } from "./watermark";
 import { registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
 import { useDrawings } from "./useDrawings";
@@ -99,6 +100,9 @@ export interface SonrChartProps {
   priceFormatter?: (value: number) => string;
   /** Override the crosshair date template, e.g. "YYYY-MM-DD HH:mm". (#46) */
   dateFormat?: string;
+  /** IANA timezone for the x-axis + crosshair time (#38). Default
+   *  "America/New_York". Also settable via the handle / <TimezoneMenu>. */
+  timezone?: string;
   /** Data-source label shown in the candle legend header (e.g. "Alpaca"),
    *  after `symbol · interval`, TradingView-style. */
   source?: string;
@@ -161,6 +165,11 @@ export interface SonrChartHandle {
   /** Apply a theme by name imperatively (a changed `theme` prop still wins). (#46) */
   setTheme(theme: Theme | string): void;
   subscribeTheme(cb: (theme: Theme | string) => void): () => void;
+  /** Current IANA timezone for the x-axis + crosshair time (#38). */
+  getTimezone(): string;
+  /** Set the timezone imperatively (a changed `timezone` prop still wins). (#38) */
+  setTimezone(tz: string): void;
+  subscribeTimezone(cb: (tz: string) => void): () => void;
   getCandleStyle(): CandleStyle;
   setCandleStyle(style: CandleStyle): void;
   subscribeCandleStyle(cb: (style: CandleStyle) => void): () => void;
@@ -401,6 +410,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     onShortcut,
     priceFormatter,
     dateFormat,
+    timezone: timezoneProp,
     source,
     legend = true,
     onReady,
@@ -496,6 +506,21 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   // Current interval, read live by the countdown formatter.
   const intervalRef = useRef(interval);
   intervalRef.current = interval;
+  // Timezone (#38): prop-seeded, handle-settable. A changed `timezone` prop wins
+  // over an imperative set (mirrors theme/candle-style).
+  const [timezone, setTimezoneState] = useState<string>(timezoneProp ?? DEFAULT_TIMEZONE);
+  const tzPropRef = useRef(timezoneProp);
+  if (timezoneProp !== undefined && timezoneProp !== tzPropRef.current) {
+    tzPropRef.current = timezoneProp;
+    setTimezoneState(timezoneProp);
+  }
+  const tzSubs = useRef(new Set<(tz: string) => void>());
+  const timezoneRef = useRef(timezone);
+  timezoneRef.current = timezone;
+  useEffect(() => {
+    chartRef.current?.setTimezone(timezone);
+    tzSubs.current.forEach((cb) => cb(timezone));
+  }, [timezone]);
   const candleStyleRef = useRef(candleStyle);
   candleStyleRef.current = candleStyle;
   // Live mirrors so the (stable, []-deps) imperative handle's getters read the
@@ -745,6 +770,12 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       getTheme: () => themeSelRef.current,
       setTheme: (t) => th.set(t),
       subscribeTheme: (cb) => th.subscribe(cb),
+      getTimezone: () => timezoneRef.current,
+      setTimezone: (tz) => setTimezoneState(tz),
+      subscribeTimezone: (cb) => {
+        tzSubs.current.add(cb);
+        return () => tzSubs.current.delete(cb);
+      },
       getCandleStyle: () => candleStyleRef.current ?? "candle",
       setCandleStyle: (s) => candle.set(s),
       subscribeCandleStyle: (cb) => candle.subscribe(cb),
@@ -909,7 +940,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     el.id = idRef.current;
 
     const options: Options = {
-      timezone: "America/New_York",
+      timezone: timezoneRef.current,
       // Widen KLineChart's default bar-space limits (min 1 / max 50). The 50-px
       // cap silently no-ops setBarSpace, so a short lookback (e.g. "1D" with few
       // bars over a wide plot) could never zoom in far enough to apply.
