@@ -2,7 +2,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { createPortal } from "react-dom";
 import { dispose, init, utils, type Chart, type Coordinate, type DeepPartial, type KLineData, type Layout, type Nullable, type Options, type Point, type Styles } from "klinecharts";
 import { resolveThemeStyles, PALETTE } from "./theme";
-import { PATTERN_INDICATOR, SERIES_INDICATOR, SESSION_INDICATOR, WATERMARK_INDICATOR, registerSonrIndicators } from "./indicators";
+import { PATTERN_INDICATOR, SERIES_INDICATOR, SESSION_INDICATOR, WATERMARK_INDICATOR, Z_ORDER, registerSonrIndicators } from "./indicators";
 import { HaTransformer, isHeikinAshi, toHeikinAshi } from "./candles";
 import { applyCandleStyle } from "./candleStyle";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
@@ -650,7 +650,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     if (chart.getIndicators({ name: COMPARE_INDICATOR }).length > 0) {
       chart.overrideIndicator({ name: COMPARE_INDICATOR, extendData: lines });
     } else {
-      chart.createIndicator({ name: COMPARE_INDICATOR, paneId: CANDLE_PANE, extendData: lines }, true);
+      chart.createIndicator({ name: COMPARE_INDICATOR, paneId: CANDLE_PANE, zLevel: Z_ORDER.compare, extendData: lines }, true);
     }
   };
 
@@ -1097,7 +1097,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       // Watermark first so it sits at the very back (behind session tint + candles).
       if (watermark.symbol || watermark.interval) {
         chart.createIndicator(
-          { name: WATERMARK_INDICATOR, paneId: CANDLE_PANE, extendData: buildWatermark(info.ticker ?? symbol, interval, watermark) },
+          { name: WATERMARK_INDICATOR, paneId: CANDLE_PANE, zLevel: Z_ORDER.watermark, extendData: buildWatermark(info.ticker ?? symbol, interval, watermark) },
           true,
         );
       }
@@ -1176,7 +1176,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     if (!chart) return;
     const present = chart.getIndicators({ name: SESSION_INDICATOR }).length > 0;
     if (sessions && !present) {
-      chart.createIndicator({ name: SESSION_INDICATOR, paneId: CANDLE_PANE, extendData: sessionColors(sessions) }, true);
+      chart.createIndicator({ name: SESSION_INDICATOR, paneId: CANDLE_PANE, zLevel: Z_ORDER.session, extendData: sessionColors(sessions) }, true);
     } else if (sessions && present) {
       chart.overrideIndicator({ name: SESSION_INDICATOR, extendData: sessionColors(sessions) });
     } else if (!sessions && present) {
@@ -1194,7 +1194,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     const active = watermark.symbol || watermark.interval;
     const ext = buildWatermark(symbol, interval, watermark);
     if (active && !present) {
-      chart.createIndicator({ name: WATERMARK_INDICATOR, paneId: CANDLE_PANE, extendData: ext }, true);
+      chart.createIndicator({ name: WATERMARK_INDICATOR, paneId: CANDLE_PANE, zLevel: Z_ORDER.watermark, extendData: ext }, true);
     } else if (active && present) {
       chart.overrideIndicator({ name: WATERMARK_INDICATOR, extendData: ext });
     } else if (!active && present) {
@@ -1209,7 +1209,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     const present = chart.getIndicators({ name: PATTERN_INDICATOR }).length > 0;
     const has = !!(patterns && patterns.length);
     if (has && !present) {
-      chart.createIndicator({ name: PATTERN_INDICATOR, paneId: CANDLE_PANE, extendData: patterns }, true);
+      chart.createIndicator({ name: PATTERN_INDICATOR, paneId: CANDLE_PANE, zLevel: Z_ORDER.pattern, extendData: patterns }, true);
     } else if (has && present) {
       chart.overrideIndicator({ name: PATTERN_INDICATOR, extendData: patterns });
     } else if (!has && present) {

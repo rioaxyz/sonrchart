@@ -7,7 +7,7 @@
 import type { Chart, DeepPartial, Styles } from "klinecharts";
 import { CANDLE_TYPE, isCustomSeries } from "./candles";
 import { CANDLE_PANE } from "./internal";
-import { SERIES_INDICATOR, type SeriesData } from "./indicators";
+import { SERIES_INDICATOR, Z_ORDER, type SeriesData } from "./indicators";
 import { PALETTE } from "./theme";
 import type { CandleStyle, Theme } from "./types";
 
@@ -51,7 +51,7 @@ export function applyCandleStyle(chart: Chart, style: CandleStyle | undefined, s
     // isStack=true so drawing the custom series doesn't wipe the other
     // candle-pane layers (session tint, watermark, pattern markers, user
     // overlays). Re-applies are guarded by the `present` check above.
-    else chart.createIndicator({ name: SERIES_INDICATOR, paneId: CANDLE_PANE, extendData: ext }, true);
+    else chart.createIndicator({ name: SERIES_INDICATOR, paneId: CANDLE_PANE, zLevel: Z_ORDER.series, extendData: ext }, true);
   } else if (present) {
     chart.removeIndicator({ name: SERIES_INDICATOR });
   }
