@@ -48,7 +48,10 @@ export function applyCandleStyle(chart: Chart, style: CandleStyle | undefined, s
   if (custom) {
     const ext = seriesConfig(s, baseTheme);
     if (present) chart.overrideIndicator({ name: SERIES_INDICATOR, extendData: ext });
-    else chart.createIndicator({ name: SERIES_INDICATOR, paneId: CANDLE_PANE, extendData: ext }, false);
+    // isStack=true so drawing the custom series doesn't wipe the other
+    // candle-pane layers (session tint, watermark, pattern markers, user
+    // overlays). Re-applies are guarded by the `present` check above.
+    else chart.createIndicator({ name: SERIES_INDICATOR, paneId: CANDLE_PANE, extendData: ext }, true);
   } else if (present) {
     chart.removeIndicator({ name: SERIES_INDICATOR });
   }
