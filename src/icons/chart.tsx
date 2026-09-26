@@ -161,6 +161,72 @@ export function DrawIcon({ tool }: { tool: DrawingTool }) {
           <line x1="3" y1="12" x2="21" y2="12" />
         </Icon>
       );
+    // --- Extended family (drawingsExtended.ts) ---
+    case "horizontalRay":
+      // Anchored dot with a line running to the right edge.
+      return (
+        <Icon>
+          <line x1="4" y1="12" x2="21" y2="12" />
+          {dot(4, 12)}
+        </Icon>
+      );
+    case "crossLine":
+      // Full-width + full-height crosshair through an anchor.
+      return (
+        <Icon>
+          <line x1="12" y1="3" x2="12" y2="21" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          {dot(12, 12)}
+        </Icon>
+      );
+    case "arrow":
+      // Directional arrow (up-right).
+      return (
+        <Icon>
+          <line x1="5" y1="19" x2="18" y2="6" />
+          <path d="M9 6h9v9" />
+        </Icon>
+      );
+    case "fibExtension":
+      // A→B→C impulse leg projected onto horizontal levels.
+      return (
+        <Icon>
+          <path d="M3 20l4-7 4 4" />
+          <line x1="12" y1="5" x2="21" y2="5" />
+          <line x1="12" y1="11" x2="21" y2="11" />
+          <line x1="12" y1="17" x2="21" y2="17" />
+        </Icon>
+      );
+    case "fibTimeZone":
+      // Vertical lines at Fibonacci-widening intervals.
+      return (
+        <Icon>
+          <line x1="4" y1="4" x2="4" y2="20" />
+          <line x1="7" y1="4" x2="7" y2="20" />
+          <line x1="12" y1="4" x2="12" y2="20" />
+          <line x1="20" y1="4" x2="20" y2="20" />
+        </Icon>
+      );
+    case "dateRange":
+      // Horizontal span measured between two end-bars, double-headed.
+      return (
+        <Icon>
+          <line x1="4" y1="6" x2="4" y2="18" />
+          <line x1="20" y1="6" x2="20" y2="18" />
+          <line x1="4" y1="12" x2="20" y2="12" />
+          <path d="M7 9 4 12l3 3" />
+          <path d="M17 9l3 3-3 3" />
+        </Icon>
+      );
+    case "datePriceRange":
+      // A range box measured across both axes (diagonal arrow).
+      return (
+        <Icon>
+          <rect x="3" y="5" width="18" height="14" rx="1" />
+          <line x1="7" y1="17" x2="17" y2="7" />
+          <path d="M11 7h6v6" />
+        </Icon>
+      );
     default:
       return (
         <Icon>
