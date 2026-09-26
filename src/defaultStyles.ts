@@ -77,6 +77,7 @@ const CSS = `
 :where(.sonr-search-option:hover,.sonr-search-option.active){background:#e6e6e6;}
 :where(.sonr-search-expr){border-bottom:1px solid #ccc;}
 :where(.sonr-search-sym){font-weight:700;min-width:44px;}
+:where(.sonr-search-logo){flex:0 0 auto;width:18px;height:18px;border-radius:3px;object-fit:contain;align-self:center;}
 :where(.sonr-search-name){color:#555;font-size:11px;overflow:hidden;text-overflow:ellipsis;}
 :where(.sonr-search-ex){color:#888;font-size:10px;margin-left:auto;}
 :where(.sonr-search-msg){color:#555;font-size:12px;padding:4px 8px;}
@@ -133,6 +134,10 @@ const CSS = `
 :where(.sonr-syminfo-body){padding:16px 18px;overflow-y:auto;display:flex;flex-direction:column;gap:18px;}
 :where(.sonr-syminfo-sym){display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
 :where(.sonr-syminfo-ticker){font-weight:700;font-size:16px;}
+:where(.sonr-syminfo-logo){flex:0 0 auto;width:28px;height:28px;border-radius:4px;object-fit:contain;align-self:center;}
+:where(.sonr-syminfo-desc){color:#555;font-size:12px;line-height:1.4;margin-top:2px;}
+:where(.sonr-syminfo-exwrap){display:inline-flex;align-items:center;gap:5px;}
+:where(.sonr-syminfo-exlogo){width:16px;height:16px;border-radius:2px;object-fit:contain;}
 :where(.sonr-syminfo-name){color:#555;font-size:13px;}
 :where(.sonr-syminfo-grid){display:grid;grid-template-columns:1fr 1fr;gap:16px 20px;}
 :where(.sonr-syminfo-field){display:flex;flex-direction:column;gap:3px;}

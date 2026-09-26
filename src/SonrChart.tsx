@@ -14,6 +14,7 @@ import { useDrawings } from "./useDrawings";
 import { isEditableTarget, resolveShortcut, type ShortcutAction } from "./keyboard";
 import { registerShapeOverlays } from "./shapes";
 import { registerTextOverlay, type TextStyle } from "./textOverlay";
+import { formatWithUnit, type QuoteFormat } from "./symbolFormat";
 import type {
   CandleStyle,
   ChartState,
@@ -31,6 +32,7 @@ import type {
   PriceLabels,
   PriceScale,
   SessionTint,
+  SymbolInfo,
   Theme,
   WatermarkOptions,
 } from "./types";
@@ -542,6 +544,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   const themeSelRef = useRef(theme);
   themeSelRef.current = theme;
   const pricePrecRef = useRef(2);
+  // Currency/unit for the resolved symbol (#39), read live by the legend price().
+  const quoteRef = useRef<QuoteFormat>({});
   // Host formatter overrides, read live from the (stable) formatter callbacks.
   const dateFormatRef = useRef(dateFormat);
   dateFormatRef.current = dateFormat;
@@ -995,9 +999,12 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
               const label = pal.muted;
               const dir = (k.close ?? 0) >= (k.open ?? 0) ? PALETTE.GREEN : PALETTE.RED;
               const price = (v?: number) =>
-                priceFormatterRef.current
-                  ? priceFormatterRef.current(v ?? 0)
-                  : utils.formatThousands(utils.formatPrecision(v ?? 0, pricePrecRef.current), ",");
+                formatWithUnit(
+                  priceFormatterRef.current
+                    ? priceFormatterRef.current(v ?? 0)
+                    : utils.formatThousands(utils.formatPrecision(v ?? 0, pricePrecRef.current), ","),
+                  quoteRef.current,
+                );
               const head = `${bareTicker(symbol).toUpperCase()} · ${intervalLabel(interval)}${sourceRef.current ? ` · ${sourceRef.current}` : ""}`;
               const rows: { title: Tip; value: Tip }[] = [
                 { title: { text: head, color: pal.text }, value: { text: "", color: pal.text } },
@@ -1061,7 +1068,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     let disposed = false;
     (async () => {
       // Symbol resolution (#8): validate/enrich before loading.
-      let info: { ticker: string; name?: string; pricePrecision?: number; volumePrecision?: number } = { ticker: symbol };
+      let info: SymbolInfo = { ticker: symbol };
       if (dataSource.resolveSymbol) {
         const resolved = await dataSource.resolveSymbol(symbol);
         if (disposed) return;
@@ -1071,8 +1078,13 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         }
         info = resolved;
       }
-      chart.setSymbol(info);
+      // Our SymbolInfo is a stricter subset of KLineChart's (which carries an
+      // open index signature); every field is a valid quote key, so cast to the
+      // exact expected parameter type rather than widening our public type.
+      chart.setSymbol(info as unknown as Parameters<typeof chart.setSymbol>[0]);
       pricePrecRef.current = info.pricePrecision ?? 2;
+      // Quote metadata (#39): currency/unit decorate the legend + crosshair price.
+      quoteRef.current = { currency: info.currency, unit: info.unit };
       chart.setPeriod(toPeriod(interval));
       // Watermark first so it sits at the very back (behind session tint + candles).
       if (watermark.symbol || watermark.interval) {
