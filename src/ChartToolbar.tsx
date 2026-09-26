@@ -196,7 +196,7 @@ export function ChartToolbar({
         )}
         {showCandle && <CandleMenu value={candleValue} onChange={candleChange} options={candleStyles} labels={labels} />}
         <IndicatorMenu chartRef={chartRef} options={indicatorOptions} labels={labels} />
-        {showScale && <PriceScaleMenu value={scaleValue} onChange={scaleChange} labels={labels} />}
+        {showScale && <PriceScaleMenu value={scaleValue} onChange={scaleChange} labels={labels} chartRef={chartRef} />}
         {showSessions && (
           <div className="sonr-session-group" role="group" aria-label={L.sessions}>
             <button

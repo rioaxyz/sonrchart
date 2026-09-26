@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "../src/internal";
+import { asSpec, intervalMs, mergeStyles, sessionColors, toKLine, toPeriod } from "../src/internal";
 import { DEFAULT_SESSION_COLORS } from "../src/indicators";
 
 describe("toPeriod", () => {
@@ -17,6 +17,17 @@ describe("toPeriod", () => {
 
   it("defaults an unknown interval to a 1-minute period", () => {
     expect(toPeriod("nonsense")).toEqual({ type: "minute", span: 1 });
+  });
+});
+
+describe("intervalMs", () => {
+  it("returns the bar length in ms for each interval (#41)", () => {
+    expect(intervalMs("10S")).toBe(10_000);
+    expect(intervalMs("30S")).toBe(30_000);
+    expect(intervalMs("1")).toBe(60_000);
+    expect(intervalMs("5")).toBe(300_000);
+    expect(intervalMs("60")).toBe(3_600_000);
+    expect(intervalMs("D")).toBe(86_400_000);
   });
 });
 

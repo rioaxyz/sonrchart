@@ -21,6 +21,14 @@ export function toPeriod(interval: Interval): { type: PeriodType; span: number }
   return { type: "minute", span: parseInt(String(interval), 10) || 1 };
 }
 
+const UNIT_MS: Partial<Record<PeriodType, number>> = { second: 1000, minute: 60_000, hour: 3_600_000, day: 86_400_000 };
+
+/** Duration of one bar at this interval, in ms (for the bar-close countdown). */
+export function intervalMs(interval: Interval): number {
+  const { type, span } = toPeriod(interval);
+  return span * (UNIT_MS[type] ?? 60_000);
+}
+
 export function asSpec(i: string | IndicatorSpec): IndicatorSpec {
   return typeof i === "string" ? { name: i } : i;
 }

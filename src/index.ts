@@ -80,6 +80,7 @@ export type {
   Magnet,
   OrderLine,
   PatternMarker,
+  PriceLabels,
   PriceLine,
   PriceScale,
   SessionTint,

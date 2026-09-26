@@ -6,7 +6,7 @@ import { PATTERN_INDICATOR, SERIES_INDICATOR, SESSION_INDICATOR, WATERMARK_INDIC
 import { HaTransformer, isHeikinAshi, toHeikinAshi } from "./candles";
 import { applyCandleStyle } from "./candleStyle";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
-import { CANDLE_PANE, asSpec, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
+import { CANDLE_PANE, asSpec, intervalMs, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
 import { bareTicker, buildWatermark, intervalLabel, mergeWatermark, normalizeWatermark } from "./watermark";
 import { registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
 import { useDrawings } from "./useDrawings";
@@ -27,6 +27,7 @@ import type {
   OrderLine,
   PatternMarker,
   PriceLine,
+  PriceLabels,
   PriceScale,
   SessionTint,
   Theme,
@@ -77,6 +78,8 @@ export interface SonrChartProps {
   orderLines?: OrderLine[];
   /** Price-scale mode (log / percentage / invert / inside). (#12) */
   priceScale?: PriceScale;
+  /** Price-scale labels (last value/line, high/low marks). (#41) */
+  priceLabels?: Partial<PriceLabels>;
   /** Magnet mode for drawing tools — snap points to nearby OHLC. (#13) */
   magnet?: Magnet;
   /** Candle rendering style — solid/hollow/ohlc/area/heikin_ashi. (#1) */
@@ -170,6 +173,11 @@ export interface SonrChartHandle {
   getWatermark(): WatermarkOptions;
   setWatermark(opts: boolean | Partial<WatermarkOptions>): void;
   subscribeWatermark(cb: () => void): () => void;
+  /** Current price-scale label toggles (#41). */
+  getPriceLabels(): Required<PriceLabels>;
+  /** Toggle price-scale labels (merges over the current set). */
+  setPriceLabels(opts: Partial<PriceLabels>): void;
+  subscribePriceLabels(cb: () => void): () => void;
   /** Current brush/highlighter stroke style (color + width). */
   getBrushStyle(tool: BrushTool): BrushStyle;
   /** Set the brush/highlighter stroke style — applies to subsequent strokes. */
@@ -283,6 +291,70 @@ function useControllable<T>(prop: T | undefined, fallback: T) {
   return { value, set, subscribe };
 }
 
+// Price-scale labels (#41). Marks on by default (matches KLineChart); the
+// bar-close countdown is opt-in.
+const DEFAULT_PRICE_LABELS: Required<PriceLabels> = { lastValue: true, lastLine: true, high: true, low: true, countdown: false };
+
+// Apply the price-scale label toggles to the candle price marks. The countdown
+// is an extend-text under the last-price pill, refreshed every second; its text
+// comes from the formatExtendText formatter (see applyFormatter). Booleans only
+// — no data recompute. The extend-text style must be COMPLETE: KLineChart reads
+// paddingLeft/size/weight/family etc. directly, and any `undefined` yields a NaN
+// text width that blanks the whole candle pane.
+function applyPriceLabels(chart: Chart, labels: Required<PriceLabels>): void {
+  chart.setStyles({
+    candle: {
+      priceMark: {
+        show: labels.lastValue || labels.lastLine || labels.high || labels.low || labels.countdown,
+        last: {
+          show: labels.lastValue || labels.countdown,
+          line: { show: labels.lastLine },
+          // Match the last-price pill's own text style (white, size 12, same
+          // padding) so the countdown reads as a matching label centered under
+          // it — it inherits the pill's colored background + right-axis
+          // alignment, so a matching style keeps them stacked and legible.
+          extendTexts: labels.countdown
+            ? [
+                {
+                  show: true,
+                  style: "fill",
+                  color: "#FFFFFF",
+                  size: 12,
+                  family: "Helvetica Neue",
+                  weight: "normal",
+                  paddingLeft: 4,
+                  paddingRight: 4,
+                  paddingTop: 4,
+                  paddingBottom: 4,
+                  borderColor: "transparent",
+                  borderSize: 0,
+                  borderStyle: "solid",
+                  borderDashedValue: [2, 2],
+                  borderRadius: 2,
+                  position: "below_price",
+                  updateInterval: 1000,
+                },
+              ]
+            : [],
+        },
+        high: { show: labels.high },
+        low: { show: labels.low },
+      },
+    },
+  } as DeepPartial<Styles>);
+}
+
+// mm:ss (or h:mm:ss) remaining until a bar that opened at `openMs` closes, given
+// the bar length. Clamps to 0 (e.g. a stale last bar after hours).
+function formatCountdown(openMs: number, barMs: number): string {
+  const remaining = Math.max(0, openMs + barMs - Date.now());
+  const s = Math.floor(remaining / 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}:${pad(m)}:${pad(s % 60)}` : `${pad(m)}:${pad(s % 60)}`;
+}
+
 // The candle pane's y-axis config for a price scale. KLineChart fixes the scale
 // TYPE (normal/percentage/logarithm) and inversion at pane creation, so this is
 // applied at chart init — the component rebuilds when `priceScale` changes.
@@ -320,6 +392,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     priceLines,
     orderLines,
     priceScale: priceScaleProp,
+    priceLabels: priceLabelsProp,
     magnet,
     candleStyle: candleStyleProp,
     compareSeries,
@@ -405,6 +478,24 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   useEffect(() => {
     wmSubs.current.forEach((cb) => cb());
   }, [watermark]);
+  // Price-scale labels (#41): merge-able toggle config with prop-seed + a
+  // handle-driven setter for the price-scale menu.
+  const [priceLabels, setPriceLabelsState] = useState<Required<PriceLabels>>(() => ({ ...DEFAULT_PRICE_LABELS, ...priceLabelsProp }));
+  const plPropRef = useRef(priceLabelsProp);
+  if (priceLabelsProp !== plPropRef.current) {
+    plPropRef.current = priceLabelsProp;
+    if (priceLabelsProp) setPriceLabelsState((cur) => ({ ...cur, ...priceLabelsProp }));
+  }
+  const plSubs = useRef(new Set<() => void>());
+  const setPriceLabels = (next: Partial<PriceLabels>) => setPriceLabelsState((cur) => ({ ...cur, ...next }));
+  useEffect(() => {
+    plSubs.current.forEach((cb) => cb());
+  }, [priceLabels]);
+  const priceLabelsRef = useRef(priceLabels);
+  priceLabelsRef.current = priceLabels;
+  // Current interval, read live by the countdown formatter.
+  const intervalRef = useRef(interval);
+  intervalRef.current = interval;
   const candleStyleRef = useRef(candleStyle);
   candleStyleRef.current = candleStyle;
   // Live mirrors so the (stable, []-deps) imperative handle's getters read the
@@ -570,6 +661,14 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       ...(priceFormatterRef.current
         ? { formatBigNumber: (value: string | number) => priceFormatterRef.current!(typeof value === "number" ? value : Number(value)) }
         : {}),
+      // Bar-close countdown under the last-price pill (#41), refreshed each
+      // second by KLineChart's extend-text update timer.
+      formatExtendText: ({ type, data, index }) => {
+        if (type === "last_price" && index === 0 && priceLabelsRef.current.countdown && typeof data?.timestamp === "number") {
+          return formatCountdown(data.timestamp, intervalMs(intervalRef.current));
+        }
+        return "";
+      },
     });
   };
 
@@ -660,6 +759,12 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       subscribeWatermark: (cb) => {
         wmSubs.current.add(cb);
         return () => wmSubs.current.delete(cb);
+      },
+      getPriceLabels: () => ({ ...priceLabelsRef.current }),
+      setPriceLabels: (opts) => setPriceLabels(opts),
+      subscribePriceLabels: (cb) => {
+        plSubs.current.add(cb);
+        return () => plSubs.current.delete(cb);
       },
       getBrushStyle: (tool) => drawings.getBrushStyle(tool),
       setBrushStyle: (tool, style) => drawings.setBrushStyle(tool, style),
@@ -833,6 +938,8 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     });
     // Candle rendering style (#1).
     applyCandleStyle(chart, candleStyleRef.current, themeStyleObj, baseTheme);
+    // Price-scale labels (#41) — last value/line + high/low marks.
+    applyPriceLabels(chart, priceLabelsRef.current);
     // Crosshair date/price formatting (#46), default: TV-style date+time pill.
     applyFormatter(chart);
     // Candle legend without the time row: the hovered bar's time lives in the
@@ -993,6 +1100,12 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   useEffect(() => {
     chartRef.current?.setStyles({ candle: { tooltip: { showRule: legend ? "follow_cross" : "none" } } } as DeepPartial<Styles>);
   }, [legend]);
+
+  // Price-scale labels reconcile (#41).
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (chart) applyPriceLabels(chart, priceLabels);
+  }, [priceLabels]);
 
   // Compare / multi-symbol overlays (#9).
   useEffect(() => {
