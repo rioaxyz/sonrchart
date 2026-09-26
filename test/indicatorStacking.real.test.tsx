@@ -120,4 +120,43 @@ describe("indicator stacking — real KLineChart", () => {
     // The user overlay AND the internal layers all survive on the shared pane.
     expect(onCandle).toEqual(expect.arrayContaining(["MA", "SONR_SESSION", "SONR_WATERMARK"]));
   });
+
+  it("component: candle-pane layers are drawn back-to-front by zLevel", async () => {
+    const ref = createRef<SonrChartHandle>();
+    await act(async () => {
+      render(
+        <SonrChart
+          ref={ref}
+          symbol="AAPL"
+          dataSource={source()}
+          sessions
+          watermark
+          patterns={[{ time: 1000 }]}
+          indicators={[{ name: "MA", pane: "main" }]}
+        />,
+        { container: document.body.appendChild(sizedEl()) },
+      );
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    const chart = ref.current!.chart()!;
+    // getIndicators returns the pane's indicators sorted ascending by zLevel —
+    // the exact back-to-front draw order KLineChart uses.
+    const inds = chart.getIndicators({ paneId: CANDLE });
+    const order = inds.map((i) => i.name);
+    const z = Object.fromEntries(inds.map((i) => [i.name, i.zLevel]));
+
+    // Back layers sit behind the candles (zLevel < 0); patterns ride on top.
+    expect(z.SONR_WATERMARK).toBeLessThan(z.SONR_SESSION);
+    expect(z.SONR_SESSION).toBeLessThan(0);
+    expect(z.MA).toBeGreaterThanOrEqual(0);
+    expect(z.SONR_PATTERNS).toBeGreaterThan(z.MA);
+
+    // …and that yields watermark → session → MA → patterns front-to-back.
+    const rank = (n: string) => order.indexOf(n);
+    expect(rank("SONR_WATERMARK")).toBeLessThan(rank("SONR_SESSION"));
+    expect(rank("SONR_SESSION")).toBeLessThan(rank("MA"));
+    expect(rank("MA")).toBeLessThan(rank("SONR_PATTERNS"));
+  });
 });

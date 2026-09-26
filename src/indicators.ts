@@ -16,6 +16,24 @@ export const WATERMARK_INDICATOR = "SONR_WATERMARK";
 export const SERIES_INDICATOR = "SONR_SERIES";
 export const VWAP_INDICATOR = "VWAP";
 
+/**
+ * Draw order for the layers that share the main candle pane. KLineChart draws
+ * an indicator with `zLevel < 0` BEHIND the candles (`destination-over`) and
+ * `zLevel >= 0` in front, sorting ascending within each group. So the back-to-
+ * front stack is: watermark → session tint → custom price series (all behind the
+ * candles), then the comparison series + the user's overlay indicators (MA, BOLL,
+ * VWAP…) at the default level 0 in front of the candles, then pattern markers on
+ * top of everything. User overlays keep KLineChart's default zLevel (0), so they
+ * sit above the back layers and below the markers without any explicit value.
+ */
+export const Z_ORDER = {
+  watermark: -3,
+  session: -2,
+  series: -1,
+  compare: 0,
+  pattern: 10,
+} as const;
+
 /** Config for the custom series renderer (line/step/baseline/column/hlc/high_low). */
 export interface SeriesData {
   style: "line" | "step" | "baseline" | "column" | "hlc" | "high_low";

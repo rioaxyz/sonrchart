@@ -179,13 +179,16 @@ describe("SonrChart — indicators (#4)", () => {
     expect(boll[1]).toBe(true);
   });
 
-  it("creates the candle-pane layers with isStack=true so they don't wipe each other", () => {
+  it("creates the candle-pane layers with isStack=true and layered zLevels", () => {
     render(<SonrChart symbol="A" dataSource={source()} sessions watermark patterns={[{ time: 1000 }]} indicators={[]} />);
     const calls = lastChart().createIndicator.mock.calls;
-    for (const name of ["SONR_SESSION", "SONR_WATERMARK", "SONR_PATTERNS"]) {
+    // zLevel < 0 draws behind the candles; patterns ride on top (>0).
+    const expected: Record<string, number> = { SONR_WATERMARK: -3, SONR_SESSION: -2, SONR_PATTERNS: 10 };
+    for (const [name, zLevel] of Object.entries(expected)) {
       const call = calls.find((c: any[]) => c[0]?.name === name);
       expect(call, name).toBeTruthy();
       expect(call[1], name).toBe(true); // isStack — never destructive to the pane
+      expect(call[0].zLevel, name).toBe(zLevel);
     }
   });
 
