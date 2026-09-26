@@ -3,6 +3,7 @@
 // pulling in React/klinecharts.
 import type { DeepPartial, KLineData, PeriodType, Styles } from "klinecharts";
 import { DEFAULT_SESSION_COLORS, type SessionColors } from "./indicators";
+import { parseResolution, resolutionMs } from "./resolutions";
 import type { Bar, IndicatorSpec, Interval, SessionTint } from "./types";
 
 /** KLineChart's id for the main price pane — where the candles, watermark,
@@ -13,20 +14,16 @@ export function toKLine(b: Bar): KLineData {
   return { timestamp: b.time, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume ?? 0 };
 }
 
+/** Map a resolution token to a KLineChart Period. Thin alias over
+ *  `parseResolution` (resolutions.ts) — the single source of truth for
+ *  resolution parsing, including custom resolutions (#38). */
 export function toPeriod(interval: Interval): { type: PeriodType; span: number } {
-  if (interval === "10S") return { type: "second", span: 10 };
-  if (interval === "30S") return { type: "second", span: 30 };
-  if (interval === "D" || interval === "1D") return { type: "day", span: 1 };
-  if (interval === "60") return { type: "hour", span: 1 };
-  return { type: "minute", span: parseInt(String(interval), 10) || 1 };
+  return parseResolution(interval);
 }
-
-const UNIT_MS: Partial<Record<PeriodType, number>> = { second: 1000, minute: 60_000, hour: 3_600_000, day: 86_400_000 };
 
 /** Duration of one bar at this interval, in ms (for the bar-close countdown). */
 export function intervalMs(interval: Interval): number {
-  const { type, span } = toPeriod(interval);
-  return span * (UNIT_MS[type] ?? 60_000);
+  return resolutionMs(interval);
 }
 
 export function asSpec(i: string | IndicatorSpec): IndicatorSpec {
