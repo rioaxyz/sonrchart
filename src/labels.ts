@@ -52,6 +52,8 @@ export interface Labels {
   /** Data-window / object-tree panel chrome (#45). */
   dataWindow: string;
   objectTree: string;
+  /** Shell's side-panel toggle button (indicators + objects). */
+  panelToggle: string;
   hide: string;
   show: string;
   lock: string;
@@ -64,10 +66,6 @@ export interface Labels {
   duplicate: string;
   bringToFront: string;
   sendToBack: string;
-  /** Watchlist panel (#45). */
-  watchlist: string;
-  addSymbol: string;
-  emptyWatchlist: string;
   searchUnavailable: string;
   searching: string;
   noResults: string;
@@ -156,6 +154,7 @@ export const DEFAULT_LABELS: Labels = {
   cancel: "Cancel",
   dataWindow: "Indicators",
   objectTree: "Objects",
+  panelToggle: "Indicators & objects",
   hide: "Hide",
   show: "Show",
   lock: "Lock",
@@ -167,9 +166,6 @@ export const DEFAULT_LABELS: Labels = {
   duplicate: "Duplicate",
   bringToFront: "Bring to front",
   sendToBack: "Send to back",
-  watchlist: "Watchlist",
-  addSymbol: "Add symbol",
-  emptyWatchlist: "No symbols yet",
   searchUnavailable: "Search unavailable",
   searching: "Searching…",
   noResults: "No results",

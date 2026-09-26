@@ -238,3 +238,25 @@ export function CameraIcon() {
     </Svg>
   );
 }
+
+/** Stacked layers — the indicators/objects side panel toggle. */
+export function ObjectsIcon() {
+  return (
+    <Svg>
+      <path d="M8 1.8 1.8 5 8 8.2 14.2 5 8 1.8Z" />
+      <path d="M2 8l6 3.1L14 8" />
+      <path d="M2 11l6 3.1L14 11" />
+    </Svg>
+  );
+}
+
+/** Calendar — go to date. */
+export function CalendarIcon() {
+  return (
+    <Svg>
+      <rect x="2.5" y="3.5" width="11" height="10" rx="1.5" />
+      <path d="M2.5 6.5h11" />
+      <path d="M5.5 2v3M10.5 2v3" />
+    </Svg>
+  );
+}
