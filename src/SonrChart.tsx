@@ -13,6 +13,7 @@ import { registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
 import { useDrawings } from "./useDrawings";
 import { isEditableTarget, resolveShortcut, type ShortcutAction } from "./keyboard";
 import { registerShapeOverlays } from "./shapes";
+import { registerExtendedDrawings } from "./drawingsExtended";
 import { registerTextOverlay, type TextStyle } from "./textOverlay";
 import { formatWithUnit, type QuoteFormat } from "./symbolFormat";
 import type {
@@ -41,6 +42,7 @@ registerSonrIndicators();
 registerCompareIndicator();
 registerBrushOverlay();
 registerShapeOverlays();
+registerExtendedDrawings();
 registerTextOverlay();
 
 // Library-managed indicators the user never sees as "their" studies — excluded
