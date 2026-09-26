@@ -82,6 +82,14 @@ describe("icon set", () => {
     }
   });
 
+  it("every extended drawing tool has a dedicated glyph (not the 1-line fallback)", () => {
+    for (const { tool } of EXTENDED_DRAWING_TOOLS) {
+      const { container } = render(<DrawIcon tool={tool} />);
+      // The fallback renders a single <line>; every extended glyph draws more.
+      expect(svgOf(container).childElementCount).toBeGreaterThanOrEqual(2);
+    }
+  });
+
   it("DrawIcon falls back to a segment glyph for an unknown tool", () => {
     const { container } = render(<DrawIcon tool={"totally-unknown" as DrawingTool} />);
     const svg = svgOf(container);
