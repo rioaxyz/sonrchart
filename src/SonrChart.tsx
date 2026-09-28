@@ -14,6 +14,7 @@ import { useDrawings } from "./useDrawings";
 import { isEditableTarget, resolveShortcut, type ShortcutAction } from "./keyboard";
 import { registerShapeOverlays } from "./shapes";
 import { registerExtendedDrawings } from "./drawingsExtended";
+import { registerTradeReview } from "./tradeReview";
 import { registerTextOverlay, type TextStyle } from "./textOverlay";
 import { formatWithUnit, type QuoteFormat } from "./symbolFormat";
 import type {
@@ -43,6 +44,7 @@ registerCompareIndicator();
 registerBrushOverlay();
 registerShapeOverlays();
 registerExtendedDrawings();
+registerTradeReview();
 registerTextOverlay();
 
 // Library-managed indicators the user never sees as "their" studies — excluded

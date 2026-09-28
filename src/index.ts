@@ -40,6 +40,7 @@ export { ToolbarButton } from "./ToolbarButton";
 export { ensureDefaultStyles } from "./defaultStyles";
 export { DEFAULT_DRAWING_TOOLS, EXTENDED_DRAWING_TOOLS, USER_DRAWING_GROUP } from "./drawings";
 export type { DrawingToolOption } from "./drawings";
+export { registerTradeReview, tradeBoxFigures, SONR_TRADE_BOX } from "./tradeReview";
 export {
   registerExtendedDrawings,
   EXTENDED_OVERLAYS,
