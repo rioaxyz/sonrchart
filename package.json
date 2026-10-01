@@ -1,6 +1,9 @@
 {
-  "name": "sonrchart",
+  "name": "@rioaxyz/sonrchart",
   "version": "0.1.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "A themed, data-source-agnostic React charting component for financial candlestick charts, built on KLineChart.",
   "license": "MIT",
   "author": "Rioa, LLC",
@@ -26,15 +29,12 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    },
-    "./styles.css": "./dist/styles.css"
+    }
   },
   "files": [
     "dist"
   ],
-  "sideEffects": [
-    "*.css"
-  ],
+  "sideEffects": false,
   "scripts": {
     "build": "tsup",
     "dev": "vite",
