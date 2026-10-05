@@ -2,7 +2,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { createPortal } from "react-dom";
 import { dispose, init, utils, type Chart, type Coordinate, type DeepPartial, type KLineData, type Layout, type Nullable, type Options, type Point, type Styles } from "klinecharts";
 import { resolveThemeStyles, PALETTE } from "./theme";
-import { PATTERN_INDICATOR, SERIES_INDICATOR, SESSION_INDICATOR, WATERMARK_INDICATOR, Z_ORDER, registerSonrIndicators } from "./indicators";
+import { HALT_INDICATOR, PATTERN_INDICATOR, SERIES_INDICATOR, SESSION_INDICATOR, WATERMARK_INDICATOR, Z_ORDER, normalizeHalt, registerSonrIndicators } from "./indicators";
 import { HaTransformer, isHeikinAshi, toHeikinAshi } from "./candles";
 import { applyCandleStyle } from "./candleStyle";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
@@ -25,6 +25,7 @@ import type {
   DataSource,
   DrawingRow,
   DrawingTool,
+  HaltBadge,
   IndicatorRow,
   IndicatorSpec,
   Interval,
@@ -50,7 +51,7 @@ registerTextOverlay();
 
 // Library-managed indicators the user never sees as "their" studies — excluded
 // from listIndicators / the data window / export / study templates.
-const INTERNAL_INDICATORS = new Set<string>([SESSION_INDICATOR, PATTERN_INDICATOR, COMPARE_INDICATOR, WATERMARK_INDICATOR, SERIES_INDICATOR]);
+const INTERNAL_INDICATORS = new Set<string>([SESSION_INDICATOR, PATTERN_INDICATOR, COMPARE_INDICATOR, WATERMARK_INDICATOR, SERIES_INDICATOR, HALT_INDICATOR]);
 const isUserIndicator = (name: string): boolean => !INTERNAL_INDICATORS.has(name);
 
 function magnetMode(m: Magnet | undefined): "normal" | "weak_magnet" | "strong_magnet" {
@@ -80,6 +81,9 @@ export interface SonrChartProps {
   watermark?: boolean | Partial<WatermarkOptions>;
   /** Pattern-context markers on the price pane. (#5) */
   patterns?: PatternMarker[];
+  /** Trading-halt badge (#78): `true` pins a blue "Halt" pill to the top of
+   *  the price pane against the y-axis; pass a HaltBadge to customize. */
+  halted?: boolean | HaltBadge;
   /** Static reference lines (entry / stop / target). */
   priceLines?: PriceLine[];
   /** Draggable order/position lines. (#19) */
@@ -418,6 +422,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     sessions: sessionsProp,
     watermark: watermarkProp,
     patterns,
+    halted,
     priceLines,
     orderLines,
     priceScale: priceScaleProp,
@@ -1295,6 +1300,23 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     // chartEpoch: re-apply on a fresh chart (e.g. after an interval switch).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patterns, chartEpoch]);
+
+  // Halt badge reconcile (#78).
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const present = chart.getIndicators({ name: HALT_INDICATOR }).length > 0;
+    const badge = normalizeHalt(halted);
+    if (badge && !present) {
+      chart.createIndicator({ name: HALT_INDICATOR, paneId: CANDLE_PANE, zLevel: Z_ORDER.halt, extendData: badge }, true);
+    } else if (badge && present) {
+      chart.overrideIndicator({ name: HALT_INDICATOR, extendData: badge });
+    } else if (!badge && present) {
+      chart.removeIndicator({ name: HALT_INDICATOR });
+    }
+    // chartEpoch: re-apply on a fresh chart (e.g. after an interval switch).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [halted, chartEpoch]);
 
   // Price-line + order-line overlays. Runs every render (the arrays are usually
   // fresh references), but a signature guard skips the costly rebuild unless the

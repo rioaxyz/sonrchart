@@ -81,10 +81,13 @@ export {
   PATTERN_INDICATOR,
   WATERMARK_INDICATOR,
   SERIES_INDICATOR,
+  HALT_INDICATOR,
   VWAP_INDICATOR,
   DEFAULT_SESSION_COLORS,
+  DEFAULT_HALT_BADGE,
+  normalizeHalt,
 } from "./indicators";
-export type { WatermarkData } from "./indicators";
+export type { WatermarkData, HaltBadgeData } from "./indicators";
 export type {
   Bar,
   CandleStyle,
@@ -93,6 +96,7 @@ export type {
   DataSource,
   DrawingRow,
   DrawingTool,
+  HaltBadge,
   Interval,
   IndicatorRow,
   IndicatorSpec,

@@ -16,6 +16,7 @@ function Demo() {
   const [scaleType, setScaleType] = useState<PriceScale["type"]>("normal");
   const [candleStyle, setCandleStyle] = useState<CandleStyle>("candle");
   const [compareOn, setCompareOn] = useState(false);
+  const [halted, setHalted] = useState(false);
   const [entry, setEntry] = useState(100.0);
   const chartRef = useRef<SonrChartHandle>(null);
   // Symbol-aware source: SYNTH seeds ~100, other tickers seed elsewhere, so a
@@ -67,6 +68,7 @@ function Demo() {
         </select>
         <span style={{ display: "flex", gap: 4 }}>{scaleBtn("normal", "lin")}{scaleBtn("logarithm", "log")}{scaleBtn("percentage", "%")}</span>
         <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+          <button onClick={() => setHalted((h) => !h)} style={btn(halted, theme)}>Halt</button>
           <button onClick={() => setCompareOn((c) => !c)} style={btn(compareOn, theme)}>Compare</button>
           <button onClick={() => setMagnet((m) => !m)} style={btn(magnet, theme)}>Magnet</button>
           <button onClick={() => setSessions((s) => !s)} style={btn(sessions, theme)}>Sessions</button>
@@ -84,6 +86,7 @@ function Demo() {
           indicators={["VOL"]}
           sessions={sessions}
           patterns={patterns}
+          halted={halted}
           priceLines={priceLines}
           orderLines={orderLines}
           priceScale={{ type: scaleType }}
