@@ -245,6 +245,18 @@ export interface PatternMarker {
   color?: string;
 }
 
+/** Halt badge shown at the top of the price pane while the symbol is
+ *  trading-halted (issue #78). `halted={true}` shows the default blue "Halt"
+ *  pill; pass an object to customize it. */
+export interface HaltBadge {
+  /** Badge text. Default "Halt". */
+  label?: string;
+  /** Pill background color. Default "#2196f3". */
+  color?: string;
+  /** Badge text color. Default "#ffffff". */
+  textColor?: string;
+}
+
 /** Session background tinting (issue #10). `true` uses the default palette;
  *  pass an object to override the pre/after-hours tints (regular hours are
  *  untinted). Colors should be low-alpha so candles read through. */

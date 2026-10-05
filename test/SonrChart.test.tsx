@@ -98,7 +98,7 @@ vi.mock("klinecharts", () => ({
 }));
 
 import { SonrChart, type SonrChartHandle } from "../src/SonrChart";
-import { SESSION_INDICATOR, PATTERN_INDICATOR, SERIES_INDICATOR, WATERMARK_INDICATOR, DEFAULT_SESSION_COLORS } from "../src/indicators";
+import { SESSION_INDICATOR, PATTERN_INDICATOR, SERIES_INDICATOR, WATERMARK_INDICATOR, HALT_INDICATOR, DEFAULT_SESSION_COLORS, DEFAULT_HALT_BADGE } from "../src/indicators";
 import { registerTheme } from "../src/theme";
 import { utils } from "klinecharts";
 import type { DataSource } from "../src/types";
@@ -311,6 +311,44 @@ describe("SonrChart — pattern markers (#5)", () => {
     const c = lastChart();
     rerender(<SonrChart symbol="A" dataSource={source()} patterns={[]} />);
     expect(c.removeIndicator).toHaveBeenCalledWith({ name: PATTERN_INDICATOR });
+  });
+});
+
+describe("SonrChart — halt badge (#78)", () => {
+  it("creates the halt indicator above the pattern markers with the default badge", () => {
+    render(<SonrChart symbol="A" dataSource={source()} halted />);
+    const c = lastChart();
+    const create = c.createIndicator.mock.calls.find((call: any[]) => call[0]?.name === HALT_INDICATOR);
+    expect(create[0]).toMatchObject({ name: HALT_INDICATOR, paneId: "candle_pane", extendData: DEFAULT_HALT_BADGE });
+    expect(create[0].zLevel).toBeGreaterThan(10); // on top of SONR_PATTERNS
+    expect(create[1]).toBe(true); // isStack — never destructive to the pane
+  });
+
+  it("overrides the badge on config change and removes it when the halt lifts", () => {
+    const { rerender } = render(<SonrChart symbol="A" dataSource={source()} halted />);
+    const c = lastChart();
+    rerender(<SonrChart symbol="A" dataSource={source()} halted={{ label: "Volatility halt", color: "#e0a33c" }} />);
+    const override = c.overrideIndicator.mock.calls.filter((call: any[]) => call[0]?.name === HALT_INDICATOR).at(-1);
+    expect(override![0].extendData).toEqual({ label: "Volatility halt", color: "#e0a33c", textColor: "#ffffff" });
+
+    rerender(<SonrChart symbol="A" dataSource={source()} halted={false} />);
+    expect(c.removeIndicator).toHaveBeenCalledWith({ name: HALT_INDICATOR });
+  });
+
+  it("re-applies the badge when the chart re-inits on an interval switch", () => {
+    const { rerender } = render(<SonrChart symbol="A" interval="1" dataSource={source()} halted />);
+    const before = h.charts.length;
+    rerender(<SonrChart symbol="A" interval="5" dataSource={source()} halted />);
+    expect(h.charts.length).toBeGreaterThan(before);
+    const fresh = lastChart();
+    const create = fresh.createIndicator.mock.calls.find((call: any[]) => call[0]?.name === HALT_INDICATOR);
+    expect(create?.[0]).toMatchObject({ name: HALT_INDICATOR });
+  });
+
+  it("list excludes the internal halt indicator", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} halted indicators={["VOL"]} />);
+    expect(ref.current!.listIndicators()).toEqual(["VOL"]);
   });
 });
 

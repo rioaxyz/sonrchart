@@ -9,7 +9,7 @@ vi.mock("klinecharts", () => ({
   registerIndicator: vi.fn((t: any) => reg.templates.push(t)),
 }));
 
-import { registerSonrIndicators, SESSION_INDICATOR, PATTERN_INDICATOR, DEFAULT_SESSION_COLORS } from "../src/indicators";
+import { registerSonrIndicators, SESSION_INDICATOR, PATTERN_INDICATOR, HALT_INDICATOR, DEFAULT_SESSION_COLORS, DEFAULT_HALT_BADGE, normalizeHalt } from "../src/indicators";
 
 function template(name: string) {
   return reg.templates.find((t) => t.name === name);
@@ -34,10 +34,13 @@ function fakeCtx() {
     beginPath: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
+    arcTo: vi.fn(),
     closePath: vi.fn(),
     fill: vi.fn(),
     fillText: vi.fn(),
+    measureText: vi.fn((s: string) => ({ width: s.length * 7 })),
     textAlign: "",
+    textBaseline: "",
     font: "",
   };
   return ctx;
@@ -135,5 +138,66 @@ describe("SONR_PATTERNS draw (#5)", () => {
     const ctx = fakeCtx();
     t.draw({ ctx, indicator: { extendData: [] }, bounding, xAxis });
     expect(ctx.fill).not.toHaveBeenCalled();
+  });
+});
+
+describe("SONR_HALT draw (#78)", () => {
+  const haltBounding = { top: 0, height: 400, width: 800, left: 0, right: 0, bottom: 0 };
+
+  it("registers as a price-series overlay with no figures", () => {
+    const t = template(HALT_INDICATOR);
+    expect(t.series).toBe("price");
+    expect(t.figures).toEqual([]);
+  });
+
+  it("draws a pill at the pane's top-right with the label centered in it", () => {
+    const t = template(HALT_INDICATOR);
+    const ctx = fakeCtx();
+    const ret = t.draw({ ctx, indicator: { extendData: DEFAULT_HALT_BADGE }, bounding: haltBounding });
+    expect(ret).toBe(false);
+    expect(ctx.fill).toHaveBeenCalledTimes(1);
+    expect(ctx.arcTo).toHaveBeenCalledTimes(4); // rounded pill corners
+    expect(ctx._fillStyleLog).toContain(DEFAULT_HALT_BADGE.color);
+    expect(ctx._fillStyleLog).toContain(DEFAULT_HALT_BADGE.textColor);
+    // Label text: "Halt" = 4 chars * 7px + 2*8 padding = 44px pill, inset 8px
+    // from the right edge → centered at 800 - 8 - 44/2 = 770.
+    expect(ctx.fillText).toHaveBeenCalledWith("Halt", 770, expect.any(Number));
+    // Pinned to the top of the pane (8px inset + half the 20px pill height).
+    const y = ctx.fillText.mock.calls[0][2];
+    expect(y).toBeGreaterThan(8);
+    expect(y).toBeLessThan(28 + 1);
+  });
+
+  it("honors custom label and colors", () => {
+    const t = template(HALT_INDICATOR);
+    const ctx = fakeCtx();
+    t.draw({ ctx, indicator: { extendData: { label: "Halted (LUDP)", color: "#f00", textColor: "#000" } }, bounding: haltBounding });
+    expect(ctx.fillText).toHaveBeenCalledWith("Halted (LUDP)", expect.any(Number), expect.any(Number));
+    expect(ctx._fillStyleLog).toContain("#f00");
+    expect(ctx._fillStyleLog).toContain("#000");
+  });
+
+  it("no-ops without config", () => {
+    const t = template(HALT_INDICATOR);
+    const ctx = fakeCtx();
+    t.draw({ ctx, indicator: {}, bounding: haltBounding });
+    expect(ctx.fill).not.toHaveBeenCalled();
+    expect(ctx.fillText).not.toHaveBeenCalled();
+  });
+});
+
+describe("normalizeHalt (#78)", () => {
+  it("maps false/undefined to null (badge off)", () => {
+    expect(normalizeHalt(false)).toBeNull();
+    expect(normalizeHalt(undefined)).toBeNull();
+  });
+
+  it("maps true to the default blue badge", () => {
+    expect(normalizeHalt(true)).toEqual(DEFAULT_HALT_BADGE);
+  });
+
+  it("fills partial overrides with defaults", () => {
+    expect(normalizeHalt({ label: "Volatility halt" })).toEqual({ ...DEFAULT_HALT_BADGE, label: "Volatility halt" });
+    expect(normalizeHalt({ color: "#e0a33c", textColor: "#111" })).toEqual({ label: "Halt", color: "#e0a33c", textColor: "#111" });
   });
 });

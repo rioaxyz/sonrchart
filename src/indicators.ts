@@ -1,5 +1,5 @@
 import { registerIndicator } from "klinecharts";
-import type { PatternMarker } from "./types";
+import type { HaltBadge, PatternMarker } from "./types";
 
 // Sonr's own custom KLineChart indicators (issues #5 and #10). Registered once
 // at module load — registerIndicator is global to KLineChart, so the guard
@@ -14,6 +14,7 @@ export const SESSION_INDICATOR = "SONR_SESSION";
 export const PATTERN_INDICATOR = "SONR_PATTERNS";
 export const WATERMARK_INDICATOR = "SONR_WATERMARK";
 export const SERIES_INDICATOR = "SONR_SERIES";
+export const HALT_INDICATOR = "SONR_HALT";
 export const VWAP_INDICATOR = "VWAP";
 
 /**
@@ -32,6 +33,7 @@ export const Z_ORDER = {
   series: -1,
   compare: 0,
   pattern: 10,
+  halt: 11,
 } as const;
 
 /** Config for the custom series renderer (line/step/baseline/column/hlc/high_low). */
@@ -48,6 +50,27 @@ export interface WatermarkData {
   title: string;
   subtitle?: string;
   color: string;
+}
+
+/** Resolved halt-badge config the HALT_INDICATOR paints (#78). */
+export interface HaltBadgeData {
+  label: string;
+  color: string;
+  textColor: string;
+}
+
+export const DEFAULT_HALT_BADGE: HaltBadgeData = { label: "Halt", color: "#2196f3", textColor: "#ffffff" };
+
+/** Coerce the `halted` prop (boolean | partial badge) into a full config, or
+ *  null when the badge is off. */
+export function normalizeHalt(prop: boolean | HaltBadge | undefined): HaltBadgeData | null {
+  if (!prop) return null;
+  if (prop === true) return DEFAULT_HALT_BADGE;
+  return {
+    label: prop.label ?? DEFAULT_HALT_BADGE.label,
+    color: prop.color ?? DEFAULT_HALT_BADGE.color,
+    textColor: prop.textColor ?? DEFAULT_HALT_BADGE.textColor,
+  };
 }
 
 // A distinct, theme-agnostic line color for VWAP (violet) so it reads apart from
@@ -363,6 +386,47 @@ export function registerSonrIndicators(): void {
           }
         }
       }
+      ctx.restore();
+      return false;
+    },
+  });
+
+  // Halt badge (#78): a rounded pill pinned to the top-right of the candle
+  // pane (against the y-axis), shown while the symbol is trading-halted.
+  // Config arrives via extendData; drawn on the canvas (not HTML) so it pans
+  // with nothing, survives re-layout, and lands in snapshots.
+  registerIndicator<Record<string, never>, unknown, HaltBadgeData>({
+    name: HALT_INDICATOR,
+    shortName: "",
+    series: "price",
+    figures: [],
+    calc: (dataList) => dataList.map(() => ({})),
+    draw: ({ ctx, bounding, indicator }) => {
+      const cfg = indicator.extendData as HaltBadgeData | undefined;
+      if (!cfg || !cfg.label) return false;
+      const padX = 8;
+      const h = 20;
+      const inset = 8;
+      ctx.save();
+      ctx.font = '600 11px ui-sans-serif, -apple-system, "Segoe UI", sans-serif';
+      const w = Math.ceil(ctx.measureText(cfg.label).width) + padX * 2;
+      const x = bounding.width - w - inset;
+      const y = (bounding.top ?? 0) + inset;
+      const r = h / 2;
+      // Full-radius pill via arcTo (roundRect isn't on every canvas yet).
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+      ctx.fillStyle = cfg.color;
+      ctx.fill();
+      ctx.fillStyle = cfg.textColor;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(cfg.label, x + w / 2, y + h / 2 + 0.5);
       ctx.restore();
       return false;
     },

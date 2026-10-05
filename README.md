@@ -155,6 +155,7 @@ function TradingChart({ source }: { source: DataSource }) {
 | `paneHeights` | `Record<string, number>` | Sub-pane pixel heights, keyed by indicator name. |
 | `sessions` | `boolean \| { premarket?, afterhours? }` | Tint pre/after-hours session backgrounds (ET). |
 | `patterns` | `PatternMarker[]` | Setup markers (`{ time, kind, label }`) drawn on the price pane. |
+| `halted` | `boolean \| HaltBadge` | Trading-halt badge: a pill pinned to the top of the price pane against the y-axis. `true` shows the default blue "Halt"; pass `{ label?, color?, textColor? }` to customize. |
 | `priceLines` | `PriceLine[]` | Static horizontal reference lines (entry / stop / target). |
 | `orderLines` | `OrderLine[]` | Draggable order/position lines; `onMove(price, phase)` fires as the user drags. |
 | `priceScale` | `{ type?, invert?, inside? }` | Scale mode — `"normal" \| "percentage" \| "logarithm"`, plus invert / labels-inside. |
@@ -218,10 +219,13 @@ const ref = useRef<SonrChartHandle>(null);
 
 ### Sonr custom indicators
 
-`sessions` and `patterns` are Sonr's own custom KLineChart indicators
-(registered automatically). Session tinting shades pre-market (04:00–09:30 ET)
-and after-hours (16:00–20:00 ET); pattern markers draw a labeled triangle at
-each setup's bar (green up for longs, red down for shorts).
+`sessions`, `patterns`, and `halted` are Sonr's own custom KLineChart
+indicators (registered automatically). Session tinting shades pre-market
+(04:00–09:30 ET) and after-hours (16:00–20:00 ET); pattern markers draw a
+labeled triangle at each setup's bar (green up for longs, red down for
+shorts); the halt badge pins a rounded pill to the top-right of the price
+pane while a symbol is trading-halted (drawn on the canvas, so it's included
+in snapshots).
 
 ## Develop
 
