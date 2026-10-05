@@ -6,6 +6,7 @@ import { ensureDefaultStyles } from "./defaultStyles";
 import { MarketStatus } from "./MarketStatus";
 import { bareTicker, intervalLabel } from "./watermark";
 import { mergeLabels, type Labels } from "./labels";
+import type { VolumeTrend } from "./volumeTrend";
 
 // TradingView-style chart header (issue #45): one HTML line reading
 // `TICKER · interval · source` → the clickable market-status button → the live
@@ -22,6 +23,11 @@ export interface ChartHeaderProps {
   source?: string;
   /** Precision for O/H/L/C/change (defaults to 2). */
   pricePrecision?: number;
+  /** Volume-trend row (#79): `true` shows it with the chart-level lookback
+   *  (default 3 bars, editable in the settings dialog); a number also sets
+   *  that lookback. Shown on a second line below the symbol/OHLC row; tracks
+   *  the same bar as the OHLC (crosshair, falling back to the latest bar). */
+  volumeTrend?: boolean | number;
   labels?: Partial<Labels>;
   className?: string;
 }
@@ -37,19 +43,28 @@ const fmtVolume = (v: number | undefined): string => {
   return `${n}`;
 };
 
-export function ChartHeader({ chartRef, symbol, interval, source, pricePrecision = 2, labels, className }: ChartHeaderProps) {
+export function ChartHeader({ chartRef, symbol, interval, source, pricePrecision = 2, volumeTrend, labels, className }: ChartHeaderProps) {
   useEffect(ensureDefaultStyles, []);
   const L = useMemo(() => mergeLabels(labels), [labels]);
   const [bar, setBar] = useState<{ current: KLineData | null; prev: KLineData | null }>({ current: null, prev: null });
+  const [trend, setTrend] = useState<VolumeTrend | null>(null);
+  const trendOn = volumeTrend === true || (typeof volumeTrend === "number" && volumeTrend > 0);
 
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
+    let unsubTrend: (() => void) | undefined;
     const attach = () => {
       if (cancelled) return;
       const h = chartRef.current;
       if (h?.subscribeHeaderBar) {
         unsub = h.subscribeHeaderBar((current, prev) => setBar({ current, prev }));
+        if (trendOn) {
+          // A numeric prop (re)sets the chart-level lookback; the subscription
+          // itself stays unpinned so settings-dialog edits apply live.
+          if (typeof volumeTrend === "number") h.setVolumeTrendBars?.(volumeTrend);
+          unsubTrend = h.subscribeVolumeTrend?.((t) => setTrend(t));
+        }
       } else {
         setTimeout(attach, 50);
       }
@@ -58,8 +73,9 @@ export function ChartHeader({ chartRef, symbol, interval, source, pricePrecision
     return () => {
       cancelled = true;
       unsub?.();
+      unsubTrend?.();
     };
-  }, [chartRef]);
+  }, [chartRef, volumeTrend, trendOn]);
 
   const k = bar.current;
   const up = (k?.close ?? 0) >= (k?.open ?? 0);
@@ -103,6 +119,14 @@ export function ChartHeader({ chartRef, symbol, interval, source, pricePrecision
           <span className="sonr-hd-cell">
             <span className="sonr-hd-k">V</span>
             <span className="sonr-hd-v">{fmtVolume(k.volume)}</span>
+          </span>
+        </span>
+      )}
+      {trendOn && trend && (
+        <span className="sonr-hd-trend">
+          <span className="sonr-hd-k">{L.volumeTrend}</span>
+          <span className={trend === "increasing" ? "sonr-hd-up" : trend === "decreasing" ? "sonr-hd-down" : "sonr-hd-mixed"}>
+            {trend === "increasing" ? L.volumeTrendIncreasing : trend === "decreasing" ? L.volumeTrendDecreasing : L.volumeTrendMixed}
           </span>
         </span>
       )}

@@ -7,6 +7,7 @@ import type { SessionTint, WatermarkOptions } from "./types";
 import { DEFAULT_SESSION_COLORS } from "./indicators";
 import { ensureDefaultStyles } from "./defaultStyles";
 import { mergeLabels, type Labels } from "./labels";
+import { DEFAULT_VOLUME_TREND_BARS } from "./volumeTrend";
 
 // A self-contained chart settings dialog (one modal, sections mirroring the
 // toolbar): Candles (bullish/bearish colors), Indicators (per-active-indicator
@@ -78,6 +79,8 @@ export function SettingsModal({
   const [indicators, setIndicators] = useState<string[]>([]);
   const [indColors, setIndColors] = useState<Record<string, string>>({});
   const [indParams, setIndParams] = useState<Record<string, number[]>>({});
+  // Volume-trend lookback (#79): chart-level bar count behind the header row.
+  const [trendBars, setTrendBars] = useState(DEFAULT_VOLUME_TREND_BARS);
   const [watermark, setWatermark] = useState<WatermarkOptions>({ symbol: true, interval: true, color: "#e6ebe9", opacity: 0.06 });
   const [brushStyles, setBrushStyles] = useState<Record<BrushTool, BrushStyle>>({
     brush: { color: "#e6ebe9", size: 2 },
@@ -118,6 +121,9 @@ export function SettingsModal({
       }
     }
     setIndParams(params);
+    // Volume-trend lookback (#79): seed + live-sync with the chart handle.
+    setTrendBars(chartRef.current?.getVolumeTrendBars?.() ?? DEFAULT_VOLUME_TREND_BARS);
+    const unsubTrendBars = chartRef.current?.subscribeVolumeTrendBars?.(setTrendBars);
     const readWm = () => {
       const w = chartRef.current?.getWatermark?.();
       if (w) setWatermark(w);
@@ -163,6 +169,7 @@ export function SettingsModal({
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
+      unsubTrendBars?.();
       unsubWm?.();
       unsubBrush?.();
       unsubText?.();
@@ -287,6 +294,24 @@ export function SettingsModal({
             )}
             {section === "indicators" && (
               <>
+                <div className="sonr-set-subhead">{L.volumeTrend}</div>
+                <Row label="Bars (lookback)">
+                  <input
+                    type="number"
+                    className="sonr-set-num"
+                    min="1"
+                    max="100"
+                    value={trendBars}
+                    onChange={(e) => {
+                      const v = e.target.valueAsNumber;
+                      if (Number.isNaN(v)) return;
+                      const n = Math.max(1, Math.min(100, Math.floor(v)));
+                      setTrendBars(n);
+                      chartRef.current?.setVolumeTrendBars?.(n);
+                    }}
+                  />
+                </Row>
+                <div className="sonr-set-subhead">Active indicators</div>
                 <p className="sonr-set-note">An indicator must be active on the chart to change its settings — add it from the Indicators menu first.</p>
                 {indicators.length === 0 && <p className="sonr-set-empty">No indicators active.</p>}
                 {indicators.map((name) => {
