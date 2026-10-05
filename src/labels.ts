@@ -107,6 +107,11 @@ export interface Labels {
   zoomIn: string;
   fitContent: string;
   goToRealtime: string;
+  /** Volume-trend header row (#79): label + the three trend values. */
+  volumeTrend: string;
+  volumeTrendIncreasing: string;
+  volumeTrendDecreasing: string;
+  volumeTrendMixed: string;
   /** Market-status badge (#45). */
   marketPre: string;
   marketOpen: string;
@@ -202,6 +207,10 @@ export const DEFAULT_LABELS: Labels = {
   zoomIn: "Zoom in",
   fitContent: "Fit all data",
   goToRealtime: "Go to realtime",
+  volumeTrend: "Vol trend",
+  volumeTrendIncreasing: "Increasing",
+  volumeTrendDecreasing: "Decreasing",
+  volumeTrendMixed: "Mixed",
   marketPre: "Pre-market",
   marketOpen: "Open",
   marketAfter: "After-hours",

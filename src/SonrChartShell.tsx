@@ -56,6 +56,10 @@ export interface SonrChartShellProps {
   source?: string;
   /** Instrument venue label for the Symbol-info dialog (e.g. "Alpaca"). */
   exchange?: string;
+  /** Volume-trend row in the header (#79): `true` (default) shows it with the
+   *  chart-level lookback (3 bars unless changed in the settings dialog), a
+   *  number sets that lookback, `false` hides the row. */
+  volumeTrend?: boolean | number;
   onIntervalChange?: (interval: Interval) => void;
   onSymbolChange?: (symbol: string) => void;
   /** Brand mark content (host logo), shown in a chart corner. Omit for none. */
@@ -92,6 +96,7 @@ export const SonrChartShell = forwardRef<SonrChartHandle, SonrChartShellProps>(f
     ranges,
     source,
     exchange = source,
+    volumeTrend = true,
     onIntervalChange,
     onSymbolChange,
     brand,
@@ -165,9 +170,9 @@ export const SonrChartShell = forwardRef<SonrChartHandle, SonrChartShellProps>(f
             legend={false}
             style={{ position: "absolute", inset: 0 }}
           />
-          {/* Header: ticker · interval · source, market button, OHLC. */}
+          {/* Header: ticker · interval · source, market button, OHLC, volume trend. */}
           <div className="sonr-tile-header">
-            <ChartHeader chartRef={chartRef} symbol={symbol} interval={interval} source={source} />
+            <ChartHeader chartRef={chartRef} symbol={symbol} interval={interval} source={source} volumeTrend={volumeTrend} labels={labels} />
           </div>
           {/* Nav controls — bottom-right overlay. */}
           <div className="sonr-tile-nav">

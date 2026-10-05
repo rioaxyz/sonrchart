@@ -17,6 +17,7 @@ import { registerExtendedDrawings } from "./drawingsExtended";
 import { registerTradeReview } from "./tradeReview";
 import { registerTextOverlay, type TextStyle } from "./textOverlay";
 import { formatWithUnit, type QuoteFormat } from "./symbolFormat";
+import { volumeTrend, DEFAULT_VOLUME_TREND_BARS, type VolumeTrend } from "./volumeTrend";
 import type {
   CandleStyle,
   ChartState,
@@ -274,6 +275,19 @@ export interface SonrChartHandle {
    *  the crosshair is active, else the latest bar (updates on each streamed
    *  bar). Emits once immediately. Returns unsubscribe. (#45) */
   subscribeHeaderBar(cb: (current: KLineData | null, prev: KLineData | null) => void): () => void;
+  /** Subscribe to the volume trend over the bars ending at the header bar
+   *  (hovered bar while the crosshair is active, else the latest bar):
+   *  "increasing" | "decreasing" | "mixed", or null until enough bars are
+   *  loaded. Omit `bars` to track the chart-level lookback (re-emits when the
+   *  setting changes); pass a number to pin this subscription's own count.
+   *  Emits once immediately. Returns unsubscribe. (#79) */
+  subscribeVolumeTrend(cb: (trend: VolumeTrend | null) => void, bars?: number): () => void;
+  /** Chart-level volume-trend lookback (#79): the bar count used by
+   *  subscriptions that don't pin their own. Clamped to ≥ 1; setting it
+   *  re-emits the trend to those subscribers. */
+  getVolumeTrendBars(): number;
+  setVolumeTrendBars(bars: number): void;
+  subscribeVolumeTrendBars(cb: (bars: number) => void): () => void;
 }
 
 let _seq = 0;
@@ -563,14 +577,29 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   // move, else the latest bar (on load + each streamed bar). `crosshairActive`
   // gates the latest-bar emissions so a hover isn't overwritten by a live tick.
   const headerSubs = useRef(new Set<(current: KLineData | null, prev: KLineData | null) => void>());
+  // Volume-trend subscribers (#79): each watches the trend ending at the same
+  // bar the header shows. A subscriber may pin its own bar count; otherwise it
+  // tracks the chart-level setting (editable live from the settings dialog).
+  const trendSubs = useRef(new Set<{ bars?: number; cb: (trend: VolumeTrend | null) => void }>());
+  const trendBarsRef = useRef(DEFAULT_VOLUME_TREND_BARS);
+  const trendBarsSubs = useRef(new Set<(bars: number) => void>());
   const crosshairActiveRef = useRef(false);
+  // The bar index the header currently shows, so a settings change mid-hover
+  // recomputes the trend at the hovered bar, not the tail.
+  const headerIdxRef = useRef(-1);
+  // Emit the header bar at `idx` (and the volume trend ending there) to all
+  // subscribers. idx < 0 means "no data": emits nulls.
+  const emitHeaderAt = (list: KLineData[], idx: number) => {
+    headerIdxRef.current = idx;
+    const current = idx >= 0 ? (list[idx] ?? null) : null;
+    const prev = idx > 0 ? list[idx - 1] : null;
+    headerSubs.current.forEach((cb) => cb(current, prev));
+    trendSubs.current.forEach((s) => s.cb(volumeTrend(list, idx, s.bars ?? trendBarsRef.current)));
+  };
   const emitLatestHeader = () => {
     if (crosshairActiveRef.current) return;
     const list = chartRef.current?.getDataList() ?? [];
-    const n = list.length;
-    const current = n ? list[n - 1] : null;
-    const prev = n > 1 ? list[n - 2] : null;
-    headerSubs.current.forEach((cb) => cb(current, prev));
+    emitHeaderAt(list, list.length - 1);
   };
   // Heikin Ashi live transformer (rebuilt per data load in the create effect).
   const haRef = useRef(new HaTransformer());
@@ -892,6 +921,33 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         cb(n ? list[n - 1] : null, n > 1 ? list[n - 2] : null);
         return () => headerSubs.current.delete(cb);
       },
+      // Volume trend (#79) ---------------------------------------------------
+      subscribeVolumeTrend: (cb, bars) => {
+        const sub = { bars: bars === undefined ? undefined : Math.max(1, Math.floor(bars)), cb };
+        trendSubs.current.add(sub);
+        // Seed from the latest bar so a late-mounting label isn't blank.
+        const list = chartRef.current?.getDataList() ?? [];
+        cb(volumeTrend(list, list.length - 1, sub.bars ?? trendBarsRef.current));
+        return () => trendSubs.current.delete(sub);
+      },
+      getVolumeTrendBars: () => trendBarsRef.current,
+      setVolumeTrendBars: (bars) => {
+        const n = Math.max(1, Math.floor(bars));
+        if (!Number.isFinite(n) || n === trendBarsRef.current) return;
+        trendBarsRef.current = n;
+        // Recompute for unpinned subscribers at the bar the header shows now
+        // (the hovered bar mid-crosshair, else the latest).
+        const list = chartRef.current?.getDataList() ?? [];
+        const idx = crosshairActiveRef.current ? headerIdxRef.current : list.length - 1;
+        trendSubs.current.forEach((s) => {
+          if (s.bars === undefined) s.cb(volumeTrend(list, idx, n));
+        });
+        trendBarsSubs.current.forEach((cb) => cb(n));
+      },
+      subscribeVolumeTrendBars: (cb) => {
+        trendBarsSubs.current.add(cb);
+        return () => trendBarsSubs.current.delete(cb);
+      },
     }),
     // paneHeights/priceScale captured by closure; recreated per render is fine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -968,19 +1024,37 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     setChartEpoch((e) => e + 1);
     chart.setStyles(mergeStyles(themeStyleObj, styles));
     // Feed a custom header (#45): the hovered bar while the crosshair is over a
-    // bar, else fall back to the latest bar.
+    // bar, else fall back to the latest bar. KLineChart v10 emits the RAW
+    // crosshair ({x, y, paneId} from the pointer event) to onCrosshairChange —
+    // kLineData/dataIndex are never populated — so resolve the hovered bar from
+    // the x coordinate ourselves.
     chart.subscribeAction("onCrosshairChange", (d) => {
-      const cross = d as { kLineData?: KLineData; dataIndex?: number } | undefined;
-      const k = cross?.kLineData;
-      if (k && typeof cross?.dataIndex === "number") {
+      const cross = d as { kLineData?: KLineData; dataIndex?: number; x?: number } | undefined;
+      const list = chart.getDataList();
+      let k = cross?.kLineData ?? null;
+      let idx = typeof cross?.dataIndex === "number" ? cross.dataIndex : -1;
+      if (!k && typeof cross?.x === "number" && list.length > 0) {
+        const [p] = chart.convertFromPixel([{ x: cross.x }], { paneId: CANDLE_PANE }) as Array<Partial<Point>>;
+        if (typeof p?.dataIndex === "number") {
+          idx = Math.max(0, Math.min(p.dataIndex, list.length - 1));
+          k = list[idx] ?? null;
+        }
+      }
+      if (k && idx >= 0) {
         crosshairActiveRef.current = true;
-        const list = chart.getDataList();
-        headerSubs.current.forEach((cb) => cb(k, cross.dataIndex! > 0 ? list[cross.dataIndex! - 1] : null));
+        emitHeaderAt(list, idx);
       } else {
         crosshairActiveRef.current = false;
         emitLatestHeader();
       }
     });
+    // v10 fires no action when the crosshair clears (its paneId gate drops the
+    // event), so restore the latest-bar header on pointer exit ourselves.
+    const onPointerLeave = () => {
+      crosshairActiveRef.current = false;
+      emitLatestHeader();
+    };
+    el.addEventListener("mouseleave", onPointerLeave);
     // Candle rendering style (#1).
     applyCandleStyle(chart, candleStyleRef.current, themeStyleObj, baseTheme);
     // Price-scale labels (#41) — last value/line + high/low marks.
@@ -1113,6 +1187,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     return () => {
       disposed = true;
       unsub();
+      el.removeEventListener("mouseleave", onPointerLeave);
       dispose(idRef.current);
       chartRef.current = null;
       overlayIds.current = [];

@@ -41,6 +41,10 @@ bars come from.
 - **Snapshots.** Capture the chart to a PNG data URL (or trigger a download).
 - **Composable chrome.** `ChartToolbar` bundles intervals + indicators +
   drawing tools + snapshot; add your own buttons via its children slot.
+- **Volume trend readout.** Optional header row classifying the last N bars'
+  volume as Increasing / Decreasing / Mixed (lookback editable live in the
+  settings dialog, tracks the crosshair) — `volumeTrend` on `ChartHeader` /
+  `SonrChartShell`, or subscribe via `subscribeVolumeTrend` on the chart handle.
 - **Fast & dependency-light.** The only runtime dependency is KLineChart;
   React is a peer. The per-frame hot paths are tuned (see
   [PERFORMANCE.md](PERFORMANCE.md)).

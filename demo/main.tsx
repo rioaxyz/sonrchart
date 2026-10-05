@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { SonrChart, ChartToolbar, ToolbarButton, type SonrChartHandle } from "../src";
+import { SonrChart, ChartToolbar, ChartHeader, ToolbarButton, type SonrChartHandle } from "../src";
 import type { CandleStyle, Interval, OrderLine, PatternMarker, PriceScale, Theme } from "../src/types";
 import { syntheticSource } from "./syntheticSource";
 
@@ -74,7 +74,7 @@ function Demo() {
           <button onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))} style={btn(false, theme)}>{theme === "dark" ? "☾" : "☀"}</button>
         </span>
       </header>
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
         <SonrChart
           ref={chartRef}
           symbol="SYNTH"
@@ -90,7 +90,12 @@ function Demo() {
           magnet={magnet}
           candleStyle={candleStyle}
           compareSeries={compareOn ? [{ symbol: "SPY", color: "#e0a33c" }] : []}
+          legend={false}
         />
+        {/* HTML header (#45) with the volume-trend row (#79). */}
+        <div className="sonr-tile-header">
+          <ChartHeader chartRef={chartRef} symbol="SYNTH" interval={interval} source="Synthetic" volumeTrend />
+        </div>
       </div>
       <style>{`
         .sonr-chart-toolbar, .sonr-interval-group, .sonr-indicator-menu, .sonr-drawing-toolbar { display: inline-flex; gap: 3px; align-items: center; }

@@ -24,6 +24,7 @@ function handleWith(chart: any, indicators: string[] = []): SonrChartHandle {
   const brush: any = { brush: { color: "#e6ebe9", size: 2 }, highlighter: { color: "rgba(245,214,66,0.35)", size: 14 } };
   let locked = false;
   let visible = true;
+  let trendBars = 3;
   const templates: string[] = [];
   const tplSubs = new Set<() => void>();
   return {
@@ -40,6 +41,12 @@ function handleWith(chart: any, indicators: string[] = []): SonrChartHandle {
     getSessions: () => true,
     setSessions: vi.fn(),
     subscribeSessions: () => () => {},
+    // #79 volume-trend lookback
+    getVolumeTrendBars: () => trendBars,
+    setVolumeTrendBars: vi.fn((n: number) => {
+      trendBars = n;
+    }),
+    subscribeVolumeTrendBars: () => () => {},
     // #35 drawing management
     getDrawingsLocked: () => locked,
     setDrawingsLocked: vi.fn((v: boolean) => {
@@ -127,6 +134,21 @@ describe("SettingsModal (#settings)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Indicators" }));
     expect(screen.getByText("VOL")).toBeInTheDocument();
     expect(screen.queryByLabelText(/VOL input/)).toBeNull();
+  });
+
+  it("edits the volume-trend lookback (#79) via setVolumeTrendBars", async () => {
+    const h = handleWith(fakeChart());
+    render(<SettingsModal chartRef={ref(h)} open onClose={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Indicators" }));
+    // Seeded from the handle's chart-level value.
+    const input = screen.getByLabelText("Bars (lookback)") as HTMLInputElement;
+    expect(input.value).toBe("3");
+    fireEvent.change(input, { target: { value: "5" } });
+    expect((h as any).setVolumeTrendBars).toHaveBeenCalledWith(5);
+    expect(input.value).toBe("5");
+    // Out-of-range input clamps to ≥ 1.
+    fireEvent.change(input, { target: { value: "0" } });
+    expect((h as any).setVolumeTrendBars).toHaveBeenCalledWith(1);
   });
 
   it("configures the watermark (symbol/interval/color/opacity) via the handle", async () => {

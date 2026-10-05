@@ -171,7 +171,7 @@ const CSS = `
 :where(.sonr-mkt-handle){position:absolute;top:50%;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #22a06b;transform:translate(-50%,-50%);}
 :where(.sonr-mkt-ticks){grid-column:2;display:flex;justify-content:space-between;font-size:10px;color:#888;}
 :where(.sonr-mkt-tz){margin-top:12px;font-size:11px;color:#888;text-align:center;}
-:where(.sonr-hd){display:inline-flex;align-items:center;gap:10px;font-family:inherit;font-size:12px;color:#000;white-space:nowrap;}
+:where(.sonr-hd){display:inline-flex;flex-wrap:wrap;align-items:center;gap:10px;font-family:inherit;font-size:12px;color:#000;white-space:nowrap;}
 :where(.sonr-hd-sym){font-weight:700;color:#000;}
 :where(.sonr-hd-ohlc){display:inline-flex;align-items:center;gap:8px;font-variant-numeric:tabular-nums;}
 :where(.sonr-hd-cell){display:inline-flex;align-items:baseline;gap:3px;}
@@ -179,6 +179,8 @@ const CSS = `
 :where(.sonr-hd-v){color:#555;}
 :where(.sonr-hd-up){color:#22a06b;}
 :where(.sonr-hd-down){color:#d23c3c;}
+:where(.sonr-hd-trend){flex-basis:100%;display:inline-flex;align-items:baseline;gap:4px;margin-top:2px;}
+:where(.sonr-hd-mixed){color:#c98a1b;}
 :where(.sonr-brand){position:absolute;z-index:3;pointer-events:none;font-family:inherit;font-weight:700;font-size:13px;letter-spacing:0.02em;color:#000;user-select:none;line-height:1;}
 :where(.sonr-brand-img){display:block;}
 :where(.sonr-brand-link){pointer-events:auto;color:inherit;text-decoration:none;}

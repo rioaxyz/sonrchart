@@ -32,6 +32,8 @@ const h = vi.hoisted(() => {
         { timestamp: 1000, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 },
         { timestamp: 2000, open: 1.5, high: 2.2, low: 1.4, close: 2.0, volume: 20 },
       ]),
+      // 100px per bar: x=0 → bar 0, x=100 → bar 1.
+      convertFromPixel: vi.fn((coords: any[]) => coords.map((c: any) => ({ dataIndex: Math.round((c.x ?? 0) / 100) }))),
       createIndicator: vi.fn((v: any) => {
         const name = typeof v === "string" ? v : v.name;
         const paneId = v?.paneId ?? "pane_" + name;
@@ -81,6 +83,7 @@ vi.mock("klinecharts", () => ({
   init: vi.fn((_el: unknown, opts: unknown) => {
     const c = h.make();
     c._initOptions = opts;
+    c._el = _el;
     return c;
   }),
   dispose: vi.fn(),
@@ -930,5 +933,81 @@ describe("SonrChart — bar-close countdown (#41)", () => {
     expect(mark.candle.priceMark.last.extendTexts).toEqual([]);
     const fmt = c.setFormatter.mock.calls.at(-1)![0];
     expect(fmt.formatExtendText({ type: "last_price", data: { timestamp: Date.now() }, index: 0 })).toBe("");
+  });
+});
+
+describe("SonrChart — header crosshair bar (#45)", () => {
+  it("resolves the hovered bar from the crosshair x when the payload has no kLineData (KLineChart v10)", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    const seen: { current: any; prev: any }[] = [];
+    ref.current!.subscribeHeaderBar((current, prev) => seen.push({ current, prev }));
+    // Seeded with the latest bar on subscribe.
+    expect(seen.at(-1)!.current?.timestamp).toBe(2000);
+
+    // KLineChart v10 emits the RAW pointer crosshair — {x, y, paneId} only —
+    // so the hovered bar must be derived from x via convertFromPixel.
+    const onCross = c.subscribeAction.mock.calls.find((x: any[]) => x[0] === "onCrosshairChange")![1];
+    onCross({ x: 0, y: 50, paneId: "candle_pane" });
+    expect(c.convertFromPixel).toHaveBeenCalledWith([{ x: 0 }], { paneId: "candle_pane" });
+    expect(seen.at(-1)!.current?.timestamp).toBe(1000); // hovered bar 0
+    expect(seen.at(-1)!.prev).toBeNull(); // no bar before the first
+
+    // v10 fires no action on crosshair clear — leaving the chart must restore
+    // the latest bar (and re-enable live-tick emissions).
+    fireEvent.mouseLeave(c._el as Element);
+    expect(seen.at(-1)!.current?.timestamp).toBe(2000);
+    expect(seen.at(-1)!.prev?.timestamp).toBe(1000);
+  });
+
+  it("emits the volume trend (#79) for the header bar — seeded, crosshair-tracked, restored on leave", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    const seen: (string | null)[] = [];
+    // Mock data has volumes 10 → 20, so a 1-bar window at the tail is rising.
+    ref.current!.subscribeVolumeTrend((t) => seen.push(t), 1);
+    expect(seen.at(-1)).toBe("increasing");
+
+    // Hover the first bar: no predecessor → null.
+    const onCross = c.subscribeAction.mock.calls.find((x: any[]) => x[0] === "onCrosshairChange")![1];
+    onCross({ x: 0, y: 50, paneId: "candle_pane" });
+    expect(seen.at(-1)).toBeNull();
+
+    // Leaving the chart falls back to the latest bar's trend.
+    fireEvent.mouseLeave(c._el as Element);
+    expect(seen.at(-1)).toBe("increasing");
+
+    // Default lookback (3 bars) has too little data on this mock → null.
+    const def: (string | null)[] = [];
+    ref.current!.subscribeVolumeTrend((t) => def.push(t));
+    expect(def.at(-1)).toBeNull();
+  });
+
+  it("drives the chart-level volume-trend lookback (#79): get/set/subscribe", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    expect(ref.current!.getVolumeTrendBars()).toBe(3);
+
+    // Unpinned subscription tracks the setting: 3 bars → null on the 2-bar mock.
+    const seen: (string | null)[] = [];
+    ref.current!.subscribeVolumeTrend((t) => seen.push(t));
+    expect(seen.at(-1)).toBeNull();
+
+    const barsSeen: number[] = [];
+    ref.current!.subscribeVolumeTrendBars((b) => barsSeen.push(b));
+    ref.current!.setVolumeTrendBars(1);
+    expect(ref.current!.getVolumeTrendBars()).toBe(1);
+    expect(barsSeen).toEqual([1]);
+    // Re-emitted with the narrower window: volumes 10 → 20 rise.
+    expect(seen.at(-1)).toBe("increasing");
+
+    // A pinned subscription ignores later setting changes.
+    const pinned: (string | null)[] = [];
+    ref.current!.subscribeVolumeTrend((t) => pinned.push(t), 1);
+    ref.current!.setVolumeTrendBars(3);
+    expect(pinned).toEqual(["increasing"]); // seed only — no re-emit
+    expect(seen.at(-1)).toBeNull(); // unpinned followed the setting back to 3
   });
 });
