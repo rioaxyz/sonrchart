@@ -292,6 +292,13 @@ export interface SonrChartHandle {
   getVolumeTrendBars(): number;
   setVolumeTrendBars(bars: number): void;
   subscribeVolumeTrendBars(cb: (bars: number) => void): () => void;
+  /** Whether the volume-trend header row is on (#79). Chart-level state so
+   *  any control (the indicators menu, a host button) can toggle it and a
+   *  mounted <ChartHeader> shows/hides its row live. Default off; the
+   *  header's `volumeTrend` prop seeds it on. */
+  getVolumeTrendEnabled(): boolean;
+  setVolumeTrendEnabled(on: boolean): void;
+  subscribeVolumeTrendEnabled(cb: (on: boolean) => void): () => void;
 }
 
 let _seq = 0;
@@ -588,6 +595,10 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   const trendSubs = useRef(new Set<{ bars?: number; cb: (trend: VolumeTrend | null) => void }>());
   const trendBarsRef = useRef(DEFAULT_VOLUME_TREND_BARS);
   const trendBarsSubs = useRef(new Set<(bars: number) => void>());
+  // Volume-trend row on/off — chart-level so the indicators menu and the
+  // header agree without host wiring. Seeded by <ChartHeader volumeTrend>.
+  const trendOnRef = useRef(false);
+  const trendOnSubs = useRef(new Set<(on: boolean) => void>());
   const crosshairActiveRef = useRef(false);
   // The bar index the header currently shows, so a settings change mid-hover
   // recomputes the trend at the hovered bar, not the tail.
@@ -952,6 +963,16 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       subscribeVolumeTrendBars: (cb) => {
         trendBarsSubs.current.add(cb);
         return () => trendBarsSubs.current.delete(cb);
+      },
+      getVolumeTrendEnabled: () => trendOnRef.current,
+      setVolumeTrendEnabled: (on) => {
+        if (on === trendOnRef.current) return;
+        trendOnRef.current = on;
+        trendOnSubs.current.forEach((cb) => cb(on));
+      },
+      subscribeVolumeTrendEnabled: (cb) => {
+        trendOnSubs.current.add(cb);
+        return () => trendOnSubs.current.delete(cb);
       },
     }),
     // paneHeights/priceScale captured by closure; recreated per render is fine.

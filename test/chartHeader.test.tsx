@@ -12,7 +12,14 @@ type TrendCb = (trend: VolumeTrend | null) => void;
 function fakeHandle() {
   const subs = new Set<HeaderCb>();
   const trendSubs = new Set<{ bars: number | undefined; cb: TrendCb }>();
+  const onSubs = new Set<(on: boolean) => void>();
+  let enabled = false;
   const setVolumeTrendBars = vi.fn();
+  const setVolumeTrendEnabled = vi.fn((on: boolean) => {
+    if (on === enabled) return;
+    enabled = on;
+    onSubs.forEach((cb) => cb(on));
+  });
   return {
     handle: {
       subscribeHeaderBar: (cb: HeaderCb) => {
@@ -27,11 +34,18 @@ function fakeHandle() {
         return () => trendSubs.delete(sub);
       },
       setVolumeTrendBars,
+      getVolumeTrendEnabled: () => enabled,
+      setVolumeTrendEnabled,
+      subscribeVolumeTrendEnabled: (cb: (on: boolean) => void) => {
+        onSubs.add(cb);
+        return () => onSubs.delete(cb);
+      },
     } as unknown as SonrChartHandle,
     emit: (current: KLineData | null, prev: KLineData | null) => subs.forEach((cb) => cb(current, prev)),
     emitTrend: (trend: VolumeTrend | null) => trendSubs.forEach((s) => s.cb(trend)),
     trendSubs,
     setVolumeTrendBars,
+    setVolumeTrendEnabled,
   };
 }
 
@@ -92,6 +106,26 @@ describe("ChartHeader (#45)", () => {
     render(<ChartHeader chartRef={ref(handle)} symbol="CRWD" interval="1" />);
     expect(trendSubs.size).toBe(0);
     expect(screen.queryByText("Vol trend")).toBeNull();
+  });
+
+  it("follows the chart-level toggle (indicators menu) with no prop set", () => {
+    const { handle, trendSubs, emitTrend } = fakeHandle();
+    render(<ChartHeader chartRef={ref(handle)} symbol="CRWD" interval="1" />);
+    // Menu (or any host control) turns it on → the header subscribes + shows.
+    act(() => handle.setVolumeTrendEnabled(true));
+    expect(trendSubs.size).toBe(1);
+    act(() => emitTrend("increasing"));
+    expect(screen.getByText("Vol trend")).toBeInTheDocument();
+    // ...and off → row unmounts and the trend subscription is released.
+    act(() => handle.setVolumeTrendEnabled(false));
+    expect(screen.queryByText("Vol trend")).toBeNull();
+    expect(trendSubs.size).toBe(0);
+  });
+
+  it("the volumeTrend prop seeds the chart-level flag on", () => {
+    const { handle, setVolumeTrendEnabled } = fakeHandle();
+    render(<ChartHeader chartRef={ref(handle)} symbol="CRWD" interval="1" volumeTrend />);
+    expect(setVolumeTrendEnabled).toHaveBeenCalledWith(true);
   });
 
   it("honors label overrides for the trend row", () => {
