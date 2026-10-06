@@ -314,6 +314,24 @@ describe("SonrChart — pattern markers (#5)", () => {
   });
 });
 
+describe("SonrChart — volume-trend toggle (#79)", () => {
+  it("defaults off; set/subscribe round-trip, de-duping repeat sets", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    expect(ref.current!.getVolumeTrendEnabled()).toBe(false);
+    const seen: boolean[] = [];
+    const unsub = ref.current!.subscribeVolumeTrendEnabled((on) => seen.push(on));
+    act(() => ref.current!.setVolumeTrendEnabled(true));
+    expect(ref.current!.getVolumeTrendEnabled()).toBe(true);
+    act(() => ref.current!.setVolumeTrendEnabled(true)); // same value — no re-emit
+    act(() => ref.current!.setVolumeTrendEnabled(false));
+    expect(seen).toEqual([true, false]);
+    unsub();
+    act(() => ref.current!.setVolumeTrendEnabled(true));
+    expect(seen).toEqual([true, false]); // unsubscribed
+  });
+});
+
 describe("SonrChart — halt badge (#78)", () => {
   it("creates the halt indicator above the pattern markers with the default badge", () => {
     render(<SonrChart symbol="A" dataSource={source()} halted />);

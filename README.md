@@ -43,8 +43,10 @@ bars come from.
   drawing tools + snapshot; add your own buttons via its children slot.
 - **Volume trend readout.** Optional header row classifying the last N bars'
   volume as Increasing / Decreasing / Mixed (lookback editable live in the
-  settings dialog, tracks the crosshair) — `volumeTrend` on `ChartHeader` /
-  `SonrChartShell`, or subscribe via `subscribeVolumeTrend` on the chart handle.
+  settings dialog, tracks the crosshair). Toggle it from the indicators menu
+  ("VOLTREND"), seed it on with `volumeTrend` on `ChartHeader` /
+  `SonrChartShell`, drive it via `setVolumeTrendEnabled` on the chart handle,
+  or subscribe to the raw trend via `subscribeVolumeTrend`.
 - **Fast & dependency-light.** The only runtime dependency is KLineChart;
   React is a peer. The per-frame hot paths are tuned (see
   [PERFORMANCE.md](PERFORMANCE.md)).

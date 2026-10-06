@@ -2,20 +2,32 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
-import { IndicatorMenu, DEFAULT_INDICATOR_OPTIONS } from "../src/IndicatorMenu";
+import { IndicatorMenu, DEFAULT_INDICATOR_OPTIONS, VOLUME_TREND_OPTION } from "../src/IndicatorMenu";
 import type { SonrChartHandle } from "../src/SonrChart";
 
-// A fake chart handle backed by an in-memory indicator set, so the menu can be
-// tested without a real chart.
+// A fake chart handle backed by an in-memory indicator set (plus the
+// volume-trend header-row flag), so the menu can be tested without a chart.
 function fakeHandle() {
   const set = new Set<string>();
+  const onSubs = new Set<(on: boolean) => void>();
+  let trendEnabled = false;
   const handle: SonrChartHandle = {
     chart: () => null,
     addIndicator: vi.fn((i) => set.add(typeof i === "string" ? i : i.name)),
     removeIndicator: vi.fn((n) => set.delete(n)),
     listIndicators: vi.fn(() => [...set]),
+    getVolumeTrendEnabled: vi.fn(() => trendEnabled),
+    setVolumeTrendEnabled: vi.fn((on: boolean) => {
+      if (on === trendEnabled) return;
+      trendEnabled = on;
+      onSubs.forEach((cb) => cb(on));
+    }),
+    subscribeVolumeTrendEnabled: vi.fn((cb: (on: boolean) => void) => {
+      onSubs.add(cb);
+      return () => onSubs.delete(cb);
+    }),
   };
-  return { handle, set };
+  return { handle, set, enableTrend: () => { trendEnabled = true; } };
 }
 
 describe("DEFAULT_INDICATOR_OPTIONS (#36 wider library)", () => {
@@ -80,5 +92,45 @@ describe("IndicatorMenu (#4 config UI)", () => {
     await userEvent.click(opt);
     expect(handle.removeIndicator).toHaveBeenCalledWith("MACD");
     expect(opt).toHaveAttribute("aria-checked", "false");
+  });
+});
+
+describe("IndicatorMenu — volume-trend row (#79 toggle)", () => {
+  it("offers VOLTREND in the default options", () => {
+    const opt = DEFAULT_INDICATOR_OPTIONS.find((o) => o.name === VOLUME_TREND_OPTION);
+    expect(opt).toBeTruthy();
+    expect(opt!.pane).toBeUndefined(); // not a pane study
+  });
+
+  it("toggles the header row via setVolumeTrendEnabled, not add/removeIndicator", async () => {
+    const { handle } = fakeHandle();
+    const ref = createRef<SonrChartHandle>();
+    (ref as any).current = handle;
+    render(<IndicatorMenu chartRef={ref} options={[{ name: VOLUME_TREND_OPTION, label: "Volume Trend (header row)" }]} />);
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    await userEvent.click(screen.getByRole("button", { name: /Indicators/ }));
+    const opt = screen.getByRole("menuitemcheckbox", { name: /VOLTREND/ });
+
+    await userEvent.click(opt);
+    expect(handle.setVolumeTrendEnabled).toHaveBeenCalledWith(true);
+    expect(handle.addIndicator).not.toHaveBeenCalled();
+    expect(opt).toHaveAttribute("aria-checked", "true"); // via the subscription
+
+    await userEvent.click(opt);
+    expect(handle.setVolumeTrendEnabled).toHaveBeenCalledWith(false);
+    expect(handle.removeIndicator).not.toHaveBeenCalled();
+    expect(opt).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("seeds checked when the chart-level flag is already on", async () => {
+    const { handle, enableTrend } = fakeHandle();
+    enableTrend(); // e.g. seeded by <ChartHeader volumeTrend>
+    const ref = createRef<SonrChartHandle>();
+    (ref as any).current = handle;
+    render(<IndicatorMenu chartRef={ref} options={[{ name: VOLUME_TREND_OPTION, label: "Volume Trend (header row)" }]} />);
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(screen.getByRole("button", { name: /Indicators/ })).toHaveTextContent("(1)");
+    await userEvent.click(screen.getByRole("button", { name: /Indicators/ }));
+    expect(screen.getByRole("menuitemcheckbox", { name: /VOLTREND/ })).toHaveAttribute("aria-checked", "true");
   });
 });

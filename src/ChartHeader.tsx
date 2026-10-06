@@ -23,10 +23,12 @@ export interface ChartHeaderProps {
   source?: string;
   /** Precision for O/H/L/C/change (defaults to 2). */
   pricePrecision?: number;
-  /** Volume-trend row (#79): `true` shows it with the chart-level lookback
+  /** Volume-trend row (#79): `true` turns it on with the chart-level lookback
    *  (default 3 bars, editable in the settings dialog); a number also sets
-   *  that lookback. Shown on a second line below the symbol/OHLC row; tracks
-   *  the same bar as the OHLC (crosshair, falling back to the latest bar). */
+   *  that lookback. The on/off state lives on the chart handle, so it's also
+   *  toggleable from the indicators menu ("VOLTREND") — this prop seeds it on.
+   *  Shown on a second line below the symbol/OHLC row; tracks the same bar as
+   *  the OHLC (crosshair, falling back to the latest bar). */
   volumeTrend?: boolean | number;
   labels?: Partial<Labels>;
   className?: string;
@@ -48,23 +50,28 @@ export function ChartHeader({ chartRef, symbol, interval, source, pricePrecision
   const L = useMemo(() => mergeLabels(labels), [labels]);
   const [bar, setBar] = useState<{ current: KLineData | null; prev: KLineData | null }>({ current: null, prev: null });
   const [trend, setTrend] = useState<VolumeTrend | null>(null);
-  const trendOn = volumeTrend === true || (typeof volumeTrend === "number" && volumeTrend > 0);
+  const [trendOn, setTrendOn] = useState(false);
+  const seedOn = volumeTrend === true || (typeof volumeTrend === "number" && volumeTrend > 0);
 
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
-    let unsubTrend: (() => void) | undefined;
+    let unsubOn: (() => void) | undefined;
     const attach = () => {
       if (cancelled) return;
       const h = chartRef.current;
       if (h?.subscribeHeaderBar) {
         unsub = h.subscribeHeaderBar((current, prev) => setBar({ current, prev }));
-        if (trendOn) {
+        if (seedOn) {
           // A numeric prop (re)sets the chart-level lookback; the subscription
           // itself stays unpinned so settings-dialog edits apply live.
           if (typeof volumeTrend === "number") h.setVolumeTrendBars?.(volumeTrend);
-          unsubTrend = h.subscribeVolumeTrend?.((t) => setTrend(t));
+          // The prop seeds the chart-level flag on; the indicators menu (or
+          // any host control) can still toggle it off afterwards.
+          h.setVolumeTrendEnabled?.(true);
         }
+        setTrendOn(h.getVolumeTrendEnabled?.() ?? seedOn);
+        unsubOn = h.subscribeVolumeTrendEnabled?.(setTrendOn);
       } else {
         setTimeout(attach, 50);
       }
@@ -73,9 +80,21 @@ export function ChartHeader({ chartRef, symbol, interval, source, pricePrecision
     return () => {
       cancelled = true;
       unsub?.();
-      unsubTrend?.();
+      unsubOn?.();
     };
-  }, [chartRef, volumeTrend, trendOn]);
+  }, [chartRef, volumeTrend, seedOn]);
+
+  // Subscribe to the trend only while the row is on (toggled from the
+  // indicators menu or seeded by the prop) — no per-bar work when it's off.
+  // trendOn only turns true once the handle exists, so chartRef is ready here.
+  useEffect(() => {
+    if (!trendOn) {
+      setTrend(null);
+      return;
+    }
+    const unsubTrend = chartRef.current?.subscribeVolumeTrend?.((t) => setTrend(t));
+    return () => unsubTrend?.();
+  }, [chartRef, trendOn]);
 
   const k = bar.current;
   const up = (k?.close ?? 0) >= (k?.open ?? 0);

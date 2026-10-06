@@ -19,6 +19,11 @@ export interface IndicatorOption {
   pane?: "main" | "new";
 }
 
+/** Menu row for the volume-trend header row (#79). Not a KLineChart study —
+ *  toggling it flips the chart-level flag (setVolumeTrendEnabled) that a
+ *  mounted <ChartHeader> follows. */
+export const VOLUME_TREND_OPTION = "VOLTREND";
+
 export const DEFAULT_INDICATOR_OPTIONS: IndicatorOption[] = [
   // Price-pane overlays.
   { name: "MA", label: "Moving Average", pane: "main" },
@@ -31,6 +36,7 @@ export const DEFAULT_INDICATOR_OPTIONS: IndicatorOption[] = [
   { name: "VWAP", label: "Volume Weighted Avg Price", pane: "main" },
   // Sub-pane oscillators & volume studies.
   { name: "VOL", label: "Volume", pane: "new" },
+  { name: VOLUME_TREND_OPTION, label: "Volume Trend (header row)" },
   { name: "MACD", label: "MACD", pane: "new" },
   { name: "RSI", label: "Relative Strength Index", pane: "new" },
   { name: "KDJ", label: "KDJ Stochastic", pane: "new" },
@@ -68,15 +74,34 @@ export function IndicatorMenu({
   const [active, setActive] = useState<string[]>([]);
   const { open, toggle: toggleOpen, pos, triggerRef, panelRef } = useDropdown();
 
-  // Seed from whatever the chart already has once it's mounted.
+  // Seed from whatever the chart already has once it's mounted, and track the
+  // volume-trend flag so a toggle from anywhere (header prop, host button)
+  // keeps this menu's checkmark honest.
   useEffect(() => {
-    const t = setTimeout(() => setActive(chartRef.current?.listIndicators() ?? []), 0);
-    return () => clearTimeout(t);
+    let unsubOn: (() => void) | undefined;
+    const t = setTimeout(() => {
+      const h = chartRef.current;
+      const base = h?.listIndicators() ?? [];
+      setActive(h?.getVolumeTrendEnabled?.() ? [...base, VOLUME_TREND_OPTION] : base);
+      unsubOn = h?.subscribeVolumeTrendEnabled?.((on) =>
+        setActive((a) => (on ? (a.includes(VOLUME_TREND_OPTION) ? a : [...a, VOLUME_TREND_OPTION]) : a.filter((n) => n !== VOLUME_TREND_OPTION))),
+      );
+    }, 0);
+    return () => {
+      clearTimeout(t);
+      unsubOn?.();
+    };
   }, [chartRef]);
 
   const toggle = (opt: IndicatorOption) => {
     const handle = chartRef.current;
     if (!handle) return;
+    if (opt.name === VOLUME_TREND_OPTION) {
+      // Not a chart study — flip the chart-level header-row flag; `active`
+      // updates through the subscription above.
+      handle.setVolumeTrendEnabled?.(!active.includes(opt.name));
+      return;
+    }
     if (active.includes(opt.name)) {
       handle.removeIndicator(opt.name);
       setActive((a) => a.filter((n) => n !== opt.name));

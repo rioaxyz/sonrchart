@@ -2,7 +2,7 @@ export { SonrChart } from "./SonrChart";
 export type { SonrChartProps, SonrChartHandle } from "./SonrChart";
 export { resolveShortcut, isEditableTarget } from "./keyboard";
 export type { ShortcutAction } from "./keyboard";
-export { IndicatorMenu, DEFAULT_INDICATOR_OPTIONS } from "./IndicatorMenu";
+export { IndicatorMenu, DEFAULT_INDICATOR_OPTIONS, VOLUME_TREND_OPTION } from "./IndicatorMenu";
 export type { IndicatorOption } from "./IndicatorMenu";
 export { DrawingToolbar } from "./DrawingToolbar";
 export { ConfirmDialog } from "./ConfirmDialog";

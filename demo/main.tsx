@@ -95,9 +95,10 @@ function Demo() {
           compareSeries={compareOn ? [{ symbol: "SPY", color: "#e0a33c" }] : []}
           legend={false}
         />
-        {/* HTML header (#45) with the volume-trend row (#79). */}
+        {/* HTML header (#45). The volume-trend row (#79) is toggled from the
+            Indicators menu ("VOLTREND"); pass `volumeTrend` here to seed it on. */}
         <div className="sonr-tile-header">
-          <ChartHeader chartRef={chartRef} symbol="SYNTH" interval={interval} source="Synthetic" volumeTrend />
+          <ChartHeader chartRef={chartRef} symbol="SYNTH" interval={interval} source="Synthetic" />
         </div>
       </div>
       <style>{`
