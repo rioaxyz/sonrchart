@@ -53,6 +53,7 @@ export const DEFAULT_INDICATOR_OPTIONS: IndicatorOption[] = [
   { name: "VOL", label: "Volume", pane: "new" },
   { name: VOLUME_TREND_OPTION, label: "Volume Trend (header row)" },
   { name: "VR", label: "Volume Ratio", pane: "new" },
+  { name: "VSURGE", label: "Volume Surge", pane: "new" },
   { name: "VWAP", label: "Volume Weighted Avg Price", pane: "main" },
   { name: "WR", label: "Williams %R", pane: "new" },
 ];

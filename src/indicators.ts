@@ -1,5 +1,12 @@
 import { registerIndicator } from "klinecharts";
+import type { TooltipLegend } from "klinecharts";
 import type { HaltBadge, PatternMarker } from "./types";
+import {
+  computeVolumeSurge,
+  DEFAULT_VOLUME_SURGE_BARS,
+  DEFAULT_VOLUME_SURGE_MULT,
+  type VolumeSurgePoint,
+} from "./volumeSurge";
 
 // Sonr's own custom KLineChart indicators (issues #5 and #10). Registered once
 // at module load — registerIndicator is global to KLineChart, so the guard
@@ -16,6 +23,7 @@ export const WATERMARK_INDICATOR = "SONR_WATERMARK";
 export const SERIES_INDICATOR = "SONR_SERIES";
 export const HALT_INDICATOR = "SONR_HALT";
 export const VWAP_INDICATOR = "VWAP";
+export const VOLUME_SURGE_INDICATOR = "VSURGE";
 
 /**
  * Draw order for the layers that share the main candle pane. KLineChart draws
@@ -76,6 +84,13 @@ export function normalizeHalt(prop: boolean | HaltBadge | undefined): HaltBadgeD
 // A distinct, theme-agnostic line color for VWAP (violet) so it reads apart from
 // MAs, order lines (amber), and price lines (blue).
 const VWAP_COLOR = "#a970ff";
+
+// Volume Surge palette: amber for a surging bar (it's an attention state, and
+// amber stays legible on both themes), the toolbar's neutral gray otherwise,
+// and a muted dashed threshold line that recedes behind the bars.
+const VSURGE_SURGING_COLOR = "#ff9800";
+const VSURGE_CONTINUING_COLOR = "#9598a1";
+const VSURGE_THRESHOLD_COLOR = "#75798055";
 
 type VwapBar = { timestamp: number; high: number; low: number; close: number; volume?: number };
 
@@ -247,6 +262,60 @@ export function registerSonrIndicators(): void {
       },
     ],
     calc: (dataList) => computeVWAP(dataList),
+  });
+
+  // Volume Surge: per-bar volume strength vs the mean of the previous N bars
+  // (sub-pane). Bars plot the volume/mean ratio, colored by state; a dashed
+  // reference line marks the surge threshold. calcParams: [bars, mult] — a bar
+  // whose volume >= mult x the mean of the `bars` bars before it is "Surging",
+  // anything less is "Continuing" (see volumeSurge.ts for the semantics).
+  registerIndicator<VolumeSurgePoint, number>({
+    name: VOLUME_SURGE_INDICATOR,
+    shortName: "VSURGE",
+    precision: 2,
+    calcParams: [DEFAULT_VOLUME_SURGE_BARS, DEFAULT_VOLUME_SURGE_MULT],
+    figures: [
+      {
+        key: "threshold",
+        type: "line",
+        styles: () => ({ color: VSURGE_THRESHOLD_COLOR, style: "dashed" }),
+      },
+      {
+        key: "ratio",
+        type: "bar",
+        baseValue: 0,
+        styles: ({ data }) => ({
+          color:
+            data.current?.strength === "surging" ? VSURGE_SURGING_COLOR : VSURGE_CONTINUING_COLOR,
+        }),
+      },
+    ],
+    calc: (dataList, { calcParams }) =>
+      computeVolumeSurge(dataList, Number(calcParams[0]), Number(calcParams[1])),
+    createTooltipDataSource: ({ indicator, crosshair }) => {
+      const result = indicator.result as VolumeSurgePoint[];
+      const i = crosshair.dataIndex ?? result.length - 1;
+      const point = result[i];
+      const legends: TooltipLegend[] = [];
+      if (point?.ratio !== undefined) {
+        legends.push({ title: "Vol/Mean: ", value: `${point.ratio.toFixed(2)}x` });
+      }
+      legends.push({
+        title: "Volume Strength: ",
+        value:
+          point?.strength === "surging"
+            ? { text: "Surging", color: VSURGE_SURGING_COLOR }
+            : point?.strength === "continuing"
+              ? { text: "Continuing", color: VSURGE_CONTINUING_COLOR }
+              : { text: "--", color: VSURGE_CONTINUING_COLOR },
+      });
+      return {
+        name: "Volume Surge",
+        calcParamsText: `(${indicator.calcParams.join(", ")})`,
+        features: [],
+        legends,
+      };
+    },
   });
 
   // Symbol/interval watermark, drawn on the candle pane BEHIND the candles (same
