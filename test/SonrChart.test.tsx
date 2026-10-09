@@ -314,6 +314,34 @@ describe("SonrChart — pattern markers (#5)", () => {
   });
 });
 
+describe("SonrChart — legend offset (#88)", () => {
+  const lastOffset = (c: any) =>
+    c.setStyles.mock.calls
+      .map((x: any[]) => x[0]?.candle?.tooltip?.offsetTop)
+      .filter((v: any) => v !== undefined)
+      .at(-1);
+
+  it("applies the legendOffset prop and re-applies it after a re-init", () => {
+    const { rerender } = render(<SonrChart symbol="A" dataSource={source()} legendOffset={56} />);
+    expect(lastOffset(lastChart())).toBe(56);
+    rerender(<SonrChart symbol="B" dataSource={source()} legendOffset={56} />);
+    expect(lastOffset(lastChart())).toBe(56); // the fresh chart is re-styled
+  });
+
+  it("handle setLegendOffset drives it, null restores the default, a set prop wins", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { rerender } = render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.setLegendOffset(40));
+    expect(lastOffset(c)).toBe(40);
+    act(() => ref.current!.setLegendOffset(null));
+    expect(lastOffset(c)).toBe(6); // KLineChart default
+    act(() => ref.current!.setLegendOffset(40));
+    rerender(<SonrChart ref={ref} symbol="A" dataSource={source()} legendOffset={56} />);
+    expect(lastOffset(c)).toBe(56); // prop beats the handle-driven value
+  });
+});
+
 describe("SonrChart — indicator persistence across re-inits (#86)", () => {
   it("restores user-added studies after a symbol switch instead of reseeding from the prop", () => {
     const ref = createRef<SonrChartHandle>();

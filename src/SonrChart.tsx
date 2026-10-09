@@ -54,6 +54,10 @@ registerTextOverlay();
 const INTERNAL_INDICATORS = new Set<string>([SESSION_INDICATOR, PATTERN_INDICATOR, COMPARE_INDICATOR, WATERMARK_INDICATOR, SERIES_INDICATOR, HALT_INDICATOR]);
 const isUserIndicator = (name: string): boolean => !INTERNAL_INDICATORS.has(name);
 
+// KLineChart's default candle.tooltip.offsetTop — restored when no legend
+// offset is in effect (#88).
+const DEFAULT_LEGEND_OFFSET = 6;
+
 function magnetMode(m: Magnet | undefined): "normal" | "weak_magnet" | "strong_magnet" {
   if (m === true || m === "weak") return "weak_magnet";
   if (m === "strong") return "strong_magnet";
@@ -120,6 +124,12 @@ export interface SonrChartProps {
   /** Show the built-in canvas candle legend (O/H/L/C/…). Default true. Set false
    *  when rendering your own header via <ChartHeader> + `subscribeHeaderBar`. */
   legend?: boolean;
+  /** Pixels from the price pane's top where the on-canvas legend stack (candle
+   *  legend + main-pane indicator rows) starts, so it clears HTML overlaid on
+   *  the chart (#88). Sub-pane legends are unaffected. Omit for the default
+   *  (6) — a mounted <ChartHeader> then drives it automatically, keeping the
+   *  rows below its own height; when set, this prop wins over that. */
+  legendOffset?: number;
   onReady?: (chart: Chart) => void;
   /** Fired when resolveSymbol returns null for the requested ticker. (#8) */
   onSymbolError?: (symbol: string) => void;
@@ -299,6 +309,11 @@ export interface SonrChartHandle {
   getVolumeTrendEnabled(): boolean;
   setVolumeTrendEnabled(on: boolean): void;
   subscribeVolumeTrendEnabled(cb: (on: boolean) => void): () => void;
+  /** Start the price-pane legend stack (candle legend + main-pane indicator
+   *  rows) `px` from the pane top, or pass null to restore the default (#88).
+   *  <ChartHeader> drives this automatically so canvas legends start below
+   *  it; a set `legendOffset` prop wins over this. */
+  setLegendOffset(px: number | null): void;
 }
 
 let _seq = 0;
@@ -445,6 +460,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     timezone: timezoneProp,
     source,
     legend = true,
+    legendOffset,
     onReady,
     onSymbolError,
     className,
@@ -589,6 +605,18 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   sourceRef.current = source;
   const legendRef = useRef(legend);
   legendRef.current = legend;
+  // Legend offset (#88): candle.tooltip.offsetTop seeds where the price-pane
+  // legend stack starts — the indicator rows chain below it even when the
+  // candle legend itself is hidden — and sub-panes ignore it (they position
+  // from indicator.tooltip). The prop, when set, wins over the handle-driven
+  // value (which <ChartHeader> uses to clear its own height automatically).
+  const legendOffsetPropRef = useRef(legendOffset);
+  legendOffsetPropRef.current = legendOffset;
+  const legendOffsetHandleRef = useRef<number | null>(null);
+  const applyLegendOffset = () => {
+    const top = legendOffsetPropRef.current ?? legendOffsetHandleRef.current ?? DEFAULT_LEGEND_OFFSET;
+    chartRef.current?.setStyles({ candle: { tooltip: { offsetTop: top } } } as DeepPartial<Styles>);
+  };
   // Header (custom legend) subscribers: emitted the hovered bar on crosshair
   // move, else the latest bar (on load + each streamed bar). `crosshairActive`
   // gates the latest-bar emissions so a hover isn't overwritten by a live tick.
@@ -975,6 +1003,10 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         trendOnSubs.current.add(cb);
         return () => trendOnSubs.current.delete(cb);
       },
+      setLegendOffset: (px) => {
+        legendOffsetHandleRef.current = px;
+        applyLegendOffset();
+      },
     }),
     // paneHeights/priceScale captured by closure; recreated per render is fine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1344,6 +1376,13 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     // chartEpoch: re-apply on a fresh chart (e.g. after an interval switch).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [halted, chartEpoch]);
+
+  // Legend offset reconcile (#88). chartEpoch: a fresh chart (symbol/interval
+  // switch) resets styles to the library default, so re-apply.
+  useEffect(() => {
+    applyLegendOffset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [legendOffset, chartEpoch]);
 
   // Price-line + order-line overlays. Runs every render (the arrays are usually
   // fresh references), but a signature guard skips the costly rebuild unless the

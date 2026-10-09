@@ -20,8 +20,13 @@ function fakeHandle() {
     enabled = on;
     onSubs.forEach((cb) => cb(on));
   });
+  const setLegendOffset = vi.fn();
   return {
     handle: {
+      // Chart dom pinned 46px above the (zero-rect) header root, so the
+      // measured legend offset is 46 + the 4px gap (#88).
+      chart: () => ({ getDom: () => ({ getBoundingClientRect: () => ({ top: -46 }) }) }),
+      setLegendOffset,
       subscribeHeaderBar: (cb: HeaderCb) => {
         subs.add(cb);
         cb(null, null); // seed empty
@@ -46,6 +51,7 @@ function fakeHandle() {
     trendSubs,
     setVolumeTrendBars,
     setVolumeTrendEnabled,
+    setLegendOffset,
   };
 }
 
@@ -126,6 +132,26 @@ describe("ChartHeader (#45)", () => {
     const { handle, setVolumeTrendEnabled } = fakeHandle();
     render(<ChartHeader chartRef={ref(handle)} symbol="CRWD" interval="1" volumeTrend />);
     expect(setVolumeTrendEnabled).toHaveBeenCalledWith(true);
+  });
+
+  it("pushes the chart's legend offset below its own bottom edge, restoring on unmount (#88)", () => {
+    const { handle, setLegendOffset } = fakeHandle();
+    const { unmount } = render(<ChartHeader chartRef={ref(handle)} symbol="CRWD" interval="1" />);
+    // Header rect is jsdom's zero-rect; chart top sits at -46 → 46px of
+    // overlap, plus the 4px breathing gap.
+    expect(setLegendOffset).toHaveBeenLastCalledWith(50);
+    unmount();
+    expect(setLegendOffset).toHaveBeenLastCalledWith(null);
+  });
+
+  it("does not drive the legend offset on a handle without setLegendOffset", () => {
+    const { handle } = fakeHandle();
+    const bare = { ...(handle as unknown as Record<string, unknown>) };
+    delete bare.setLegendOffset;
+    expect(() => {
+      const r = render(<ChartHeader chartRef={ref(bare as unknown as SonrChartHandle)} symbol="CRWD" interval="1" />);
+      r.unmount();
+    }).not.toThrow();
   });
 
   it("honors label overrides for the trend row", () => {
