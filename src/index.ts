@@ -76,6 +76,14 @@ export type { Labels } from "./labels";
 export { volumeTrend, DEFAULT_VOLUME_TREND_BARS } from "./volumeTrend";
 export type { VolumeTrend } from "./volumeTrend";
 export {
+  computeVolumeSurge,
+  volumeSurgeColors,
+  DEFAULT_VOLUME_SURGE_BARS,
+  DEFAULT_VOLUME_SURGE_MULT,
+  DEFAULT_VOLUME_SURGE_COLORS,
+} from "./volumeSurge";
+export type { VolumeStrength, VolumeSurgePoint, VolumeSurgeColors } from "./volumeSurge";
+export {
   registerSonrIndicators,
   SESSION_INDICATOR,
   PATTERN_INDICATOR,
@@ -83,6 +91,7 @@ export {
   SERIES_INDICATOR,
   HALT_INDICATOR,
   VWAP_INDICATOR,
+  VOLUME_SURGE_INDICATOR,
   DEFAULT_SESSION_COLORS,
   DEFAULT_HALT_BADGE,
   normalizeHalt,

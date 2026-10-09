@@ -1,5 +1,14 @@
 import { registerIndicator } from "klinecharts";
+import type { TooltipLegend } from "klinecharts";
 import type { HaltBadge, PatternMarker } from "./types";
+import {
+  computeVolumeSurge,
+  DEFAULT_VOLUME_SURGE_BARS,
+  DEFAULT_VOLUME_SURGE_MULT,
+  volumeSurgeColors,
+  type VolumeSurgeColors,
+  type VolumeSurgePoint,
+} from "./volumeSurge";
 
 // Sonr's own custom KLineChart indicators (issues #5 and #10). Registered once
 // at module load — registerIndicator is global to KLineChart, so the guard
@@ -16,6 +25,7 @@ export const WATERMARK_INDICATOR = "SONR_WATERMARK";
 export const SERIES_INDICATOR = "SONR_SERIES";
 export const HALT_INDICATOR = "SONR_HALT";
 export const VWAP_INDICATOR = "VWAP";
+export const VOLUME_SURGE_INDICATOR = "VSURGE";
 
 /**
  * Draw order for the layers that share the main candle pane. KLineChart draws
@@ -247,6 +257,62 @@ export function registerSonrIndicators(): void {
       },
     ],
     calc: (dataList) => computeVWAP(dataList),
+  });
+
+  // Volume Surge: per-bar volume strength vs the mean of the previous N bars
+  // (sub-pane). Bars plot the volume/mean ratio, colored by state; a dashed
+  // reference line marks the surge threshold. calcParams: [bars, mult] — a bar
+  // whose volume >= mult x the mean of the `bars` bars before it is "Surging",
+  // anything less is "Continuing" (see volumeSurge.ts for the semantics).
+  registerIndicator<VolumeSurgePoint, number, Partial<VolumeSurgeColors>>({
+    name: VOLUME_SURGE_INDICATOR,
+    shortName: "VSURGE",
+    precision: 2,
+    calcParams: [DEFAULT_VOLUME_SURGE_BARS, DEFAULT_VOLUME_SURGE_MULT],
+    figures: [
+      {
+        key: "threshold",
+        type: "line",
+        styles: ({ indicator }) => ({
+          color: volumeSurgeColors(indicator.extendData).threshold,
+          style: "dashed",
+        }),
+      },
+      {
+        key: "ratio",
+        type: "bar",
+        baseValue: 0,
+        styles: ({ data, indicator }) => {
+          const colors = volumeSurgeColors(indicator.extendData);
+          return { color: data.current?.strength === "surging" ? colors.surging : colors.continuing };
+        },
+      },
+    ],
+    calc: (dataList, { calcParams }) =>
+      computeVolumeSurge(dataList, Number(calcParams[0]), Number(calcParams[1])),
+    createTooltipDataSource: ({ indicator, crosshair }) => {
+      const result = indicator.result;
+      const i = crosshair.dataIndex ?? result.length - 1;
+      const point = result[i];
+      const colors = volumeSurgeColors(indicator.extendData);
+      const legends: TooltipLegend[] = [];
+      if (point?.ratio !== undefined) {
+        legends.push({ title: "Vol/Mean: ", value: `${point.ratio.toFixed(2)}x` });
+      }
+      legends.push({
+        title: "Volume Strength: ",
+        value:
+          point?.strength === "surging"
+            ? { text: "Surging", color: colors.surging }
+            : { text: point?.strength === "continuing" ? "Continuing" : "--", color: colors.continuing },
+      });
+      return {
+        name: "Volume Surge",
+        calcParamsText: `(${indicator.calcParams.join(", ")})`,
+        features: [],
+        legends,
+      };
+    },
   });
 
   // Symbol/interval watermark, drawn on the candle pane BEHIND the candles (same
