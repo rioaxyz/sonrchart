@@ -7,7 +7,10 @@ import { syntheticSource } from "./syntheticSource";
 const INTERVALS: Interval[] = ["10S", "1", "5", "15", "60", "D"];
 const CANDLE_STYLES: CandleStyle[] = ["candle", "hollow", "ohlc", "area", "heikin_ashi"];
 
+const TICKERS = ["SYNTH", "ACME", "ZETA"];
+
 function Demo() {
+  const [symbol, setSymbol] = useState("SYNTH");
   const [interval, setInterval] = useState<Interval>("1");
   const [theme, setTheme] = useState<Theme>("dark");
   const [showPlan, setShowPlan] = useState(true);
@@ -57,6 +60,12 @@ function Demo() {
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: theme === "dark" ? "#0b0d10" : "#f5f7fa" }}>
       <header style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 14px", fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12, color: theme === "dark" ? "#e6ebe9" : "#1a1f29", borderBottom: `1px solid ${theme === "dark" ? "#1d232b" : "#d8dee8"}`, flexWrap: "wrap" }}>
         <strong style={{ letterSpacing: "0.04em" }}>sonrchart</strong>
+        {/* Ticker switcher — indicators persist across switches (#86). */}
+        <span style={{ display: "flex", gap: 4 }}>
+          {TICKERS.map((t) => (
+            <button key={t} onClick={() => setSymbol(t)} style={btn(symbol === t, theme)}>{t}</button>
+          ))}
+        </span>
         <span style={{ opacity: 0.6 }}>entry {entry.toFixed(2)}</span>
         <ChartToolbar chartRef={chartRef} intervals={INTERVALS} interval={interval} onIntervalChange={setInterval} snapshotName="sonrchart.png">
           {/* Custom header buttons via the children slot + ToolbarButton (#18) */}
@@ -79,7 +88,7 @@ function Demo() {
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
         <SonrChart
           ref={chartRef}
-          symbol="SYNTH"
+          symbol={symbol}
           interval={interval}
           theme={theme}
           dataSource={source}
@@ -98,7 +107,7 @@ function Demo() {
         {/* HTML header (#45). The volume-trend row (#79) is toggled from the
             Indicators menu ("VOLTREND"); pass `volumeTrend` here to seed it on. */}
         <div className="sonr-tile-header">
-          <ChartHeader chartRef={chartRef} symbol="SYNTH" interval={interval} source="Synthetic" />
+          <ChartHeader chartRef={chartRef} symbol={symbol} interval={interval} source="Synthetic" />
         </div>
       </div>
       <style>{`

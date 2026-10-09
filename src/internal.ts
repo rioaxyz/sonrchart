@@ -30,6 +30,29 @@ export function asSpec(i: string | IndicatorSpec): IndicatorSpec {
   return typeof i === "string" ? { name: i } : i;
 }
 
+/** Snapshot a chart's live indicators as IndicatorSpecs (#86): name, target
+ *  pane, and calc params — exactly the shape `createIndicator` re-creates
+ *  from. Non-user (internal library) indicators are dropped via `isUser`;
+ *  calc params are kept only when they're a plain numeric list (IndicatorSpec's
+ *  contract — KLineChart's own type allows arbitrary values). Used to restore
+ *  the user's studies after a chart re-init (symbol/interval/scale switches)
+ *  and to capture study templates (#6). */
+export function toIndicatorSpecs(
+  indicators: ReadonlyArray<{ name: string; paneId?: string; calcParams?: unknown[] }>,
+  isUser: (name: string) => boolean,
+): IndicatorSpec[] {
+  return indicators
+    .filter((i) => isUser(i.name))
+    .map((i) => {
+      const numeric = Array.isArray(i.calcParams) && i.calcParams.length > 0 && i.calcParams.every((p): p is number => typeof p === "number");
+      return {
+        name: i.name,
+        pane: i.paneId === CANDLE_PANE ? ("main" as const) : ("new" as const),
+        ...(numeric ? { calcParams: i.calcParams as number[] } : {}),
+      };
+    });
+}
+
 export function sessionColors(s: SessionTint): SessionColors {
   if (s && typeof s === "object") {
     return {
