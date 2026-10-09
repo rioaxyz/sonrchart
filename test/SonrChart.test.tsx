@@ -8,7 +8,7 @@ import { createRef } from "react";
 const h = vi.hoisted(() => {
   const charts: any[] = [];
   const make = () => {
-    const inds: { name: string; paneId: string }[] = [];
+    const inds: { name: string; paneId: string; calcParams?: number[] }[] = [];
     let ovSeq = 0;
     const chart: any = {
       _overlays: [] as any[],
@@ -37,7 +37,7 @@ const h = vi.hoisted(() => {
       createIndicator: vi.fn((v: any) => {
         const name = typeof v === "string" ? v : v.name;
         const paneId = v?.paneId ?? "pane_" + name;
-        inds.push({ name, paneId });
+        inds.push({ name, paneId, ...(v?.calcParams ? { calcParams: v.calcParams } : {}) });
         return paneId;
       }),
       getIndicators: vi.fn((f?: any) => (f?.name ? inds.filter((i) => i.name === f.name) : inds.slice())),
@@ -311,6 +311,64 @@ describe("SonrChart — pattern markers (#5)", () => {
     const c = lastChart();
     rerender(<SonrChart symbol="A" dataSource={source()} patterns={[]} />);
     expect(c.removeIndicator).toHaveBeenCalledWith({ name: PATTERN_INDICATOR });
+  });
+});
+
+describe("SonrChart — indicator persistence across re-inits (#86)", () => {
+  it("restores user-added studies after a symbol switch instead of reseeding from the prop", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { rerender } = render(<SonrChart ref={ref} symbol="AAPL" dataSource={source()} indicators={["VOL"]} />);
+    // The user edits the set: adds RSI + a tuned main-pane BOLL, drops VOL.
+    act(() => {
+      ref.current!.addIndicator("RSI");
+      ref.current!.addIndicator({ name: "BOLL", pane: "main", calcParams: [20] });
+      ref.current!.removeIndicator("VOL");
+    });
+    const before = h.charts.length;
+    rerender(<SonrChart ref={ref} symbol="TSLA" dataSource={source()} indicators={["VOL"]} />);
+    expect(h.charts.length).toBeGreaterThan(before); // symbol switch re-inits
+
+    expect(ref.current!.listIndicators().sort()).toEqual(["BOLL", "RSI"]);
+    // Pane + calc params survive the switch.
+    const boll = lastChart().createIndicator.mock.calls.find((c: any[]) => c[0]?.name === "BOLL");
+    expect(boll[0]).toMatchObject({ paneId: "candle_pane", calcParams: [20] });
+  });
+
+  it("keeps the untouched prop-seeded set across a switch, and persists again on the next one", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { rerender } = render(<SonrChart ref={ref} symbol="AAPL" dataSource={source()} indicators={["VOL"]} />);
+    rerender(<SonrChart ref={ref} symbol="TSLA" dataSource={source()} indicators={["VOL"]} />);
+    expect(ref.current!.listIndicators()).toEqual(["VOL"]);
+    // Edit on the second chart → a third chart still restores the edit.
+    act(() => ref.current!.addIndicator("MACD"));
+    rerender(<SonrChart ref={ref} symbol="MSFT" dataSource={source()} indicators={["VOL"]} />);
+    expect(ref.current!.listIndicators().sort()).toEqual(["MACD", "VOL"]);
+  });
+
+  it("persists an emptied set (user removed everything) rather than resurrecting the prop", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { rerender } = render(<SonrChart ref={ref} symbol="AAPL" dataSource={source()} indicators={["VOL"]} />);
+    act(() => ref.current!.removeIndicator("VOL"));
+    rerender(<SonrChart ref={ref} symbol="TSLA" dataSource={source()} indicators={["VOL"]} />);
+    expect(ref.current!.listIndicators()).toEqual([]);
+  });
+
+  it("never persists internal library indicators (session/patterns/watermark/halt)", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { rerender } = render(
+      <SonrChart ref={ref} symbol="AAPL" dataSource={source()} sessions watermark halted patterns={[{ time: 1000 }]} indicators={["VOL"]} />,
+    );
+    rerender(
+      <SonrChart ref={ref} symbol="TSLA" dataSource={source()} sessions watermark halted patterns={[{ time: 1000 }]} indicators={["VOL"]} />,
+    );
+    // The fresh chart gets internals only from its own seeding/reconcile
+    // effects — exactly one create call per internal indicator, none from the
+    // persisted user set.
+    const calls = lastChart().createIndicator.mock.calls.map((c: any[]) => c[0]?.name);
+    for (const internal of [SESSION_INDICATOR, PATTERN_INDICATOR, WATERMARK_INDICATOR, HALT_INDICATOR]) {
+      expect(calls.filter((n: string) => n === internal).length, internal).toBe(1);
+    }
+    expect(ref.current!.listIndicators()).toEqual(["VOL"]);
   });
 });
 

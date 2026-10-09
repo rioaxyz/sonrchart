@@ -153,7 +153,7 @@ function TradingChart({ source }: { source: DataSource }) {
 | `dataSource` | `DataSource` | `getBars(symbol, interval, count)` + optional `subscribe(...)`. The only integration seam. |
 | `theme` | `"dark" \| "light"` | Default `"dark"` (the Sonr console palette). |
 | `styles` | `DeepPartial<Styles>` | KLineChart style overrides merged over the theme. |
-| `indicators` | `(string \| IndicatorSpec)[]` | Indicators to show — a name (`"VOL"`) or a spec (`{ name, pane: "main" \| "new", calcParams }`). Default `["VOL"]`. |
+| `indicators` | `(string \| IndicatorSpec)[]` | Indicators to show on first load — a name (`"VOL"`) or a spec (`{ name, pane: "main" \| "new", calcParams }`). Default `["VOL"]`. Runtime changes (menu/handle) persist across symbol and interval switches. |
 | `paneHeights` | `Record<string, number>` | Sub-pane pixel heights, keyed by indicator name. |
 | `sessions` | `boolean \| { premarket?, afterhours? }` | Tint pre/after-hours session backgrounds (ET). |
 | `patterns` | `PatternMarker[]` | Setup markers (`{ time, kind, label }`) drawn on the price pane. |

@@ -6,7 +6,7 @@ import { HALT_INDICATOR, PATTERN_INDICATOR, SERIES_INDICATOR, SESSION_INDICATOR,
 import { HaTransformer, isHeikinAshi, toHeikinAshi } from "./candles";
 import { applyCandleStyle } from "./candleStyle";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
-import { CANDLE_PANE, asSpec, intervalMs, mergeStyles, sessionColors, toKLine, toPeriod } from "./internal";
+import { CANDLE_PANE, asSpec, intervalMs, mergeStyles, sessionColors, toIndicatorSpecs, toKLine, toPeriod } from "./internal";
 import { DEFAULT_TIMEZONE } from "./timezone";
 import { bareTicker, buildWatermark, intervalLabel, mergeWatermark, normalizeWatermark } from "./watermark";
 import { registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
@@ -466,6 +466,10 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   // are re-applied on the fresh chart — otherwise they'd vanish on the switch
   // while their toggle stays on (their reconciles don't otherwise re-run). (#10)
   const [chartEpoch, setChartEpoch] = useState(0);
+  // The user's live study set, snapshotted at each chart teardown so a re-init
+  // (symbol/interval/scale/HA switch) restores it instead of reseeding from
+  // the `indicators` prop (#86). null until the first teardown.
+  const persistedIndicatorsRef = useRef<IndicatorSpec[] | null>(null);
   // Data-window subscribers (indicator add/remove/visibility). Notified from the
   // handle's indicator mutations so the panel refreshes without polling. (#45)
   const indicatorSubs = useRef(new Set<() => void>());
@@ -801,10 +805,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
         // priceScale in the state is informational; the host re-applies it via
         // the `priceScale` prop (scale type is fixed at chart init).
       },
-      getIndicatorSet: (): IndicatorSpec[] =>
-        (chartRef.current?.getIndicators() ?? [])
-          .filter((i) => isUserIndicator(i.name))
-          .map((i) => ({ name: i.name, pane: i.paneId === CANDLE_PANE ? "main" : "new" })),
+      getIndicatorSet: (): IndicatorSpec[] => toIndicatorSpecs(chartRef.current?.getIndicators() ?? [], isUserIndicator),
       applyIndicatorSet: (specs) => {
         const chart = chartRef.current;
         if (!chart) return;
@@ -1205,7 +1206,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       }
       // Session tint + pattern markers are (re)applied by their chartEpoch-keyed
       // reconcile effects below, so they survive a chart re-init (interval switch).
-      for (const i of indicators) createIndicator(asSpec(i));
+      // Studies: after a re-init, restore the set the user had live (#86) —
+      // only the very first chart seeds from the `indicators` prop.
+      for (const s of persistedIndicatorsRef.current ?? indicators.map(asSpec)) createIndicator(s);
       applyPaneHeights();
       onReady?.(chart);
     })();
@@ -1213,6 +1216,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     return () => {
       disposed = true;
       unsub();
+      // Snapshot the user's studies (before dispose) so the next init — a
+      // symbol/interval/scale switch — restores them (#86).
+      persistedIndicatorsRef.current = toIndicatorSpecs(chart.getIndicators() ?? [], isUserIndicator);
       el.removeEventListener("mouseleave", onPointerLeave);
       dispose(idRef.current);
       chartRef.current = null;

@@ -1,6 +1,54 @@
 import { describe, expect, it } from "vitest";
-import { asSpec, intervalMs, mergeStyles, sessionColors, toKLine, toPeriod } from "../src/internal";
+import { asSpec, intervalMs, mergeStyles, sessionColors, toIndicatorSpecs, toKLine, toPeriod } from "../src/internal";
 import { DEFAULT_SESSION_COLORS } from "../src/indicators";
+
+describe("toIndicatorSpecs (#86 persistence snapshot)", () => {
+  const isUser = (n: string) => !n.startsWith("SONR_");
+
+  it("maps live indicators to specs: candle pane → main, own pane → new", () => {
+    const specs = toIndicatorSpecs(
+      [
+        { name: "BOLL", paneId: "candle_pane" },
+        { name: "RSI", paneId: "pane_2" },
+      ],
+      isUser,
+    );
+    expect(specs).toEqual([
+      { name: "BOLL", pane: "main" },
+      { name: "RSI", pane: "new" },
+    ]);
+  });
+
+  it("drops internal library indicators", () => {
+    const specs = toIndicatorSpecs(
+      [
+        { name: "SONR_SESSION", paneId: "candle_pane" },
+        { name: "VOL", paneId: "pane_1" },
+        { name: "SONR_HALT", paneId: "candle_pane" },
+      ],
+      isUser,
+    );
+    expect(specs.map((s) => s.name)).toEqual(["VOL"]);
+  });
+
+  it("keeps purely numeric calc params and omits anything else", () => {
+    const specs = toIndicatorSpecs(
+      [
+        { name: "MA", paneId: "candle_pane", calcParams: [5, 10, 20] },
+        { name: "MACD", paneId: "pane_1", calcParams: [12, "26", 9] }, // mixed → omitted
+        { name: "RSI", paneId: "pane_2", calcParams: [] }, // empty → omitted
+      ],
+      isUser,
+    );
+    expect(specs[0].calcParams).toEqual([5, 10, 20]);
+    expect("calcParams" in specs[1]).toBe(false);
+    expect("calcParams" in specs[2]).toBe(false);
+  });
+
+  it("returns an empty list for an empty chart", () => {
+    expect(toIndicatorSpecs([], isUser)).toEqual([]);
+  });
+});
 
 describe("toPeriod", () => {
   it("maps every supported interval", () => {
