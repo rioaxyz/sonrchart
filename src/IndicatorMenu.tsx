@@ -24,37 +24,37 @@ export interface IndicatorOption {
  *  mounted <ChartHeader> follows. */
 export const VOLUME_TREND_OPTION = "VOLTREND";
 
+// Alphabetical by symbol so a user can scan the dropdown like an index;
+// `pane` still decides overlay vs sub-pane per row.
 export const DEFAULT_INDICATOR_OPTIONS: IndicatorOption[] = [
-  // Price-pane overlays.
-  { name: "MA", label: "Moving Average", pane: "main" },
-  { name: "EMA", label: "Exp. Moving Average", pane: "main" },
-  { name: "SMA", label: "Smoothed Moving Average", pane: "main" },
+  { name: "AO", label: "Awesome Oscillator", pane: "new" },
   { name: "BBI", label: "Bull & Bear Index", pane: "main" },
-  { name: "BOLL", label: "Bollinger Bands", pane: "main" },
-  { name: "SAR", label: "Parabolic SAR", pane: "main" },
-  { name: "DMA", label: "Difference of MA", pane: "main" },
-  { name: "VWAP", label: "Volume Weighted Avg Price", pane: "main" },
-  // Sub-pane oscillators & volume studies.
-  { name: "VOL", label: "Volume", pane: "new" },
-  { name: VOLUME_TREND_OPTION, label: "Volume Trend (header row)" },
-  { name: "MACD", label: "MACD", pane: "new" },
-  { name: "RSI", label: "Relative Strength Index", pane: "new" },
-  { name: "KDJ", label: "KDJ Stochastic", pane: "new" },
   { name: "BIAS", label: "Bias", pane: "new" },
+  { name: "BOLL", label: "Bollinger Bands", pane: "main" },
   { name: "BRAR", label: "BRAR", pane: "new" },
   { name: "CCI", label: "Commodity Channel Index", pane: "new" },
-  { name: "DMI", label: "Directional Movement Index", pane: "new" },
   { name: "CR", label: "CR Energy", pane: "new" },
-  { name: "PSY", label: "Psychological Line", pane: "new" },
-  { name: "TRIX", label: "TRIX", pane: "new" },
-  { name: "OBV", label: "On-Balance Volume", pane: "new" },
-  { name: "VR", label: "Volume Ratio", pane: "new" },
-  { name: "WR", label: "Williams %R", pane: "new" },
-  { name: "MTM", label: "Momentum", pane: "new" },
+  { name: "DMA", label: "Difference of MA", pane: "main" },
+  { name: "DMI", label: "Directional Movement Index", pane: "new" },
+  { name: "EMA", label: "Exp. Moving Average", pane: "main" },
   { name: "EMV", label: "Ease of Movement", pane: "new" },
-  { name: "ROC", label: "Rate of Change", pane: "new" },
+  { name: "KDJ", label: "KDJ Stochastic", pane: "new" },
+  { name: "MA", label: "Moving Average", pane: "main" },
+  { name: "MACD", label: "MACD", pane: "new" },
+  { name: "MTM", label: "Momentum", pane: "new" },
+  { name: "OBV", label: "On-Balance Volume", pane: "new" },
+  { name: "PSY", label: "Psychological Line", pane: "new" },
   { name: "PVT", label: "Price Volume Trend", pane: "new" },
-  { name: "AO", label: "Awesome Oscillator", pane: "new" },
+  { name: "ROC", label: "Rate of Change", pane: "new" },
+  { name: "RSI", label: "Relative Strength Index", pane: "new" },
+  { name: "SAR", label: "Parabolic SAR", pane: "main" },
+  { name: "SMA", label: "Smoothed Moving Average", pane: "main" },
+  { name: "TRIX", label: "TRIX", pane: "new" },
+  { name: "VOL", label: "Volume", pane: "new" },
+  { name: VOLUME_TREND_OPTION, label: "Volume Trend (header row)" },
+  { name: "VR", label: "Volume Ratio", pane: "new" },
+  { name: "VWAP", label: "Volume Weighted Avg Price", pane: "main" },
+  { name: "WR", label: "Williams %R", pane: "new" },
 ];
 
 export function IndicatorMenu({

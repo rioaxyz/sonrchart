@@ -43,6 +43,11 @@ describe("DEFAULT_INDICATOR_OPTIONS (#36 wider library)", () => {
     }
   });
 
+  it("lists options in alphabetical order by symbol", () => {
+    const names = DEFAULT_INDICATOR_OPTIONS.map((o) => o.name);
+    expect(names).toEqual([...names].sort());
+  });
+
   it("assigns overlays to the main pane and oscillators to a new pane", () => {
     const byName = Object.fromEntries(DEFAULT_INDICATOR_OPTIONS.map((o) => [o.name, o.pane]));
     for (const overlay of ["MA", "EMA", "SMA", "BBI", "BOLL", "SAR", "DMA"]) {
