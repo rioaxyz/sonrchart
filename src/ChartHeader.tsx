@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { KLineData } from "klinecharts";
 import type { SonrChartHandle } from "./SonrChart";
 import type { Interval } from "./types";
@@ -37,6 +37,10 @@ export interface ChartHeaderProps {
 const fmt = (v: number | undefined, prec: number): string =>
   (v ?? 0).toLocaleString("en-US", { minimumFractionDigits: prec, maximumFractionDigits: prec });
 
+// Breathing room between the header's bottom edge and the first canvas
+// legend row it pushes down (#88).
+const LEGEND_GAP = 4;
+
 const fmtVolume = (v: number | undefined): string => {
   const n = v ?? 0;
   if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
@@ -51,6 +55,7 @@ export function ChartHeader({ chartRef, symbol, interval, source, pricePrecision
   const [bar, setBar] = useState<{ current: KLineData | null; prev: KLineData | null }>({ current: null, prev: null });
   const [trend, setTrend] = useState<VolumeTrend | null>(null);
   const [trendOn, setTrendOn] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   const seedOn = volumeTrend === true || (typeof volumeTrend === "number" && volumeTrend > 0);
 
   useEffect(() => {
@@ -84,6 +89,43 @@ export function ChartHeader({ chartRef, symbol, interval, source, pricePrecision
     };
   }, [chartRef, volumeTrend, seedOn]);
 
+  // Auto legend offset (#88): keep the chart's on-canvas price-pane legend
+  // rows (indicator legends) below this header, so they never draw under the
+  // HTML. Geometry-based — the offset is the header's bottom edge measured
+  // against the chart container — so a header that doesn't overlap the canvas
+  // contributes ~nothing, and a ResizeObserver tracks height changes (e.g.
+  // the volume-trend row toggling). A set `legendOffset` prop on <SonrChart>
+  // wins over this.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    let cancelled = false;
+    let ro: ResizeObserver | undefined;
+    const apply = () => {
+      if (cancelled) return;
+      const h = chartRef.current;
+      if (h && !h.setLegendOffset) return; // handle without support — nothing to drive
+      const dom = h?.chart?.()?.getDom?.();
+      if (!h || !dom) {
+        // Chart (or handle) not ready yet — retry like the attach loop above.
+        setTimeout(apply, 50);
+        return;
+      }
+      const bottom = el.getBoundingClientRect().bottom - dom.getBoundingClientRect().top;
+      h.setLegendOffset(Math.max(0, Math.round(bottom)) + LEGEND_GAP);
+    };
+    apply();
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(() => apply());
+      ro.observe(el);
+    }
+    return () => {
+      cancelled = true;
+      ro?.disconnect();
+      chartRef.current?.setLegendOffset?.(null);
+    };
+  }, [chartRef]);
+
   // Subscribe to the trend only while the row is on (toggled from the
   // indicators menu or seeded by the prop) — no per-bar work when it's off.
   // trendOn only turns true once the handle exists, so chartRef is ready here.
@@ -110,7 +152,7 @@ export function ChartHeader({ chartRef, symbol, interval, source, pricePrecision
   }
 
   return (
-    <div className={`sonr-hd${className ? ` ${className}` : ""}`} role="group" aria-label={L.symbolInfo}>
+    <div ref={rootRef} className={`sonr-hd${className ? ` ${className}` : ""}`} role="group" aria-label={L.symbolInfo}>
       <span className="sonr-hd-sym">
         {bareTicker(symbol).toUpperCase()} · {intervalLabel(interval)}
         {source ? ` · ${source}` : ""}

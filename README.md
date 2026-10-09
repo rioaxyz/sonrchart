@@ -165,6 +165,7 @@ function TradingChart({ source }: { source: DataSource }) {
 | `candleStyle` | `"candle" \| "hollow" \| "hollow_up" \| "ohlc" \| "area" \| "heikin_ashi"` | Candle rendering style (Heikin Ashi transforms the data). |
 | `compareSeries` | `{ symbol, color? }[]` | Overlay other symbols on the main pane, ratio-scaled to share a start price. |
 | `barCount` | `number` | Bars requested on load. Default 500. |
+| `legendOffset` | `number` | Pixels from the price pane's top where the on-canvas legends (candle + main-pane indicator rows) start. Usually unneeded: a mounted `<ChartHeader>` measures itself and keeps them below its own height automatically. |
 | `onReady` | `(chart) => void` | The raw KLineChart instance, for advanced use. |
 | `onSymbolError` | `(symbol) => void` | Fired when `dataSource.resolveSymbol` returns `null`. |
 
