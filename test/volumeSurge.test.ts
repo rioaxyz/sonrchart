@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import type { KLineData } from "klinecharts";
 import {
   computeVolumeSurge,
+  volumeSurgeColors,
   DEFAULT_VOLUME_SURGE_BARS,
   DEFAULT_VOLUME_SURGE_MULT,
+  DEFAULT_VOLUME_SURGE_COLORS,
 } from "../src/volumeSurge";
 
 const bars = (...volumes: (number | undefined)[]): KLineData[] =>
@@ -74,5 +76,24 @@ describe("computeVolumeSurge (#VSURGE)", () => {
   it("echoes the threshold per computed point for the reference line", () => {
     const out = computeVolumeSurge(bars(100, 100, 100, 120), 3, 1.5);
     expect(out[3].threshold).toBe(1.5);
+  });
+});
+
+describe("volumeSurgeColors (extendData palette)", () => {
+  it("returns the defaults when extendData is absent", () => {
+    expect(volumeSurgeColors(undefined)).toEqual(DEFAULT_VOLUME_SURGE_COLORS);
+    expect(volumeSurgeColors(null)).toEqual(DEFAULT_VOLUME_SURGE_COLORS);
+  });
+
+  it("overrides only the keys provided", () => {
+    const c = volumeSurgeColors({ surging: "#e91e63" });
+    expect(c.surging).toBe("#e91e63");
+    expect(c.continuing).toBe(DEFAULT_VOLUME_SURGE_COLORS.continuing);
+    expect(c.threshold).toBe(DEFAULT_VOLUME_SURGE_COLORS.threshold);
+  });
+
+  it("degrades malformed extendData to the defaults instead of throwing", () => {
+    expect(volumeSurgeColors("nope")).toEqual(DEFAULT_VOLUME_SURGE_COLORS);
+    expect(volumeSurgeColors({ surging: 42 })).toEqual(DEFAULT_VOLUME_SURGE_COLORS);
   });
 });

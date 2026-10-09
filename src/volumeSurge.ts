@@ -59,3 +59,33 @@ export function computeVolumeSurge(
     return point;
   });
 }
+
+/** Figure/tooltip palette. Override any subset at creation or runtime via the
+ *  indicator's `extendData` (the same convention the session tint uses):
+ *  `createIndicator({ name: "VSURGE", extendData: { surging: "#e91e63" } })`. */
+export interface VolumeSurgeColors {
+  /** bar + tooltip color for a surging bar (amber: an attention state that
+   *  stays legible on both themes) */
+  surging: string;
+  /** bar + tooltip color otherwise (the toolbar's neutral gray) */
+  continuing: string;
+  /** dashed reference line at the `mult` threshold (muted, recedes) */
+  threshold: string;
+}
+
+export const DEFAULT_VOLUME_SURGE_COLORS: VolumeSurgeColors = {
+  surging: "#ff9800",
+  continuing: "#9598a1",
+  threshold: "#75798055",
+};
+
+/** Merge a (possibly partial, possibly absent) extendData palette over the
+ *  defaults. Unknown shapes degrade to the defaults rather than throwing. */
+export function volumeSurgeColors(extendData: unknown): VolumeSurgeColors {
+  const d = (typeof extendData === "object" && extendData !== null ? extendData : {}) as Partial<VolumeSurgeColors>;
+  return {
+    surging: typeof d.surging === "string" ? d.surging : DEFAULT_VOLUME_SURGE_COLORS.surging,
+    continuing: typeof d.continuing === "string" ? d.continuing : DEFAULT_VOLUME_SURGE_COLORS.continuing,
+    threshold: typeof d.threshold === "string" ? d.threshold : DEFAULT_VOLUME_SURGE_COLORS.threshold,
+  };
+}
