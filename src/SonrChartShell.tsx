@@ -70,6 +70,9 @@ export interface SonrChartShellProps {
   snapshotName?: string;
   // Passthroughs to <SonrChart> (sensible defaults).
   indicators?: (string | IndicatorSpec)[];
+  /** Carry the user's indicator set across unmounts of this shell (#94) —
+   *  set a stable per-tile key if your app remounts it on symbol changes. */
+  persistenceKey?: string;
   sessions?: SessionTint;
   watermark?: boolean | Partial<WatermarkOptions>;
   patterns?: PatternMarker[];
@@ -104,6 +107,7 @@ export const SonrChartShell = forwardRef<SonrChartHandle, SonrChartShellProps>(f
     brandOpacity = 0.45,
     snapshotName,
     indicators = ["VOL"],
+    persistenceKey,
     sessions = true,
     watermark = true,
     patterns,
@@ -160,6 +164,7 @@ export const SonrChartShell = forwardRef<SonrChartHandle, SonrChartShellProps>(f
             dataSource={dataSource}
             theme={theme}
             indicators={indicators}
+            persistenceKey={persistenceKey}
             sessions={sessions}
             watermark={watermark}
             patterns={patterns}

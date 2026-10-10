@@ -4,8 +4,11 @@ All notable changes to `@rioaxyz/sonrchart`, per **published npm version**. Each
 
 ## [Unreleased] — 0.4.0 on `main`
 
+### Added
+- `persistenceKey` prop on `SonrChart` and `SonrChartShell` (#94): carries the user's indicator set across full unmounts of the component — for hosts that remount the chart on symbol changes (`key={symbol}`, or a loading state that swaps it out) — on top of the existing in-instance persistence across symbol/interval/scale switches. The registry is written through on every indicator change; `save`/`load`/`clearPersistedIndicators` are exported.
+
 ### Changed
-- Version realignment only: 0.4.0 gives the Volume Surge indicator — which shipped early inside the 0.3.1 tarball, see below — its honest version number (#91). No code changes beyond the bump.
+- Version realignment: 0.4.0 gives the Volume Surge indicator — which shipped early inside the 0.3.1 tarball, see below — its honest version number (#91).
 
 ## [0.3.1] — 2026-10-09
 

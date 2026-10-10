@@ -20,7 +20,14 @@ function Demo() {
   const [candleStyle, setCandleStyle] = useState<CandleStyle>("candle");
   const [compareOn, setCompareOn] = useState(false);
   const [halted, setHalted] = useState(false);
+  // Simulates a host that unmounts the chart on symbol changes (spinner swap);
+  // persistenceKey (#94) keeps the indicator set across the remount.
+  const [mounted, setMounted] = useState(true);
   const [entry, setEntry] = useState(100.0);
+  const remount = () => {
+    setMounted(false);
+    setTimeout(() => setMounted(true), 300);
+  };
   const chartRef = useRef<SonrChartHandle>(null);
   // Symbol-aware source: SYNTH seeds ~100, other tickers seed elsewhere, so a
   // compare overlay visibly diverges from the main series.
@@ -77,6 +84,7 @@ function Demo() {
         </select>
         <span style={{ display: "flex", gap: 4 }}>{scaleBtn("normal", "lin")}{scaleBtn("logarithm", "log")}{scaleBtn("percentage", "%")}</span>
         <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+          <button onClick={remount} style={btn(!mounted, theme)}>Remount</button>
           <button onClick={() => setHalted((h) => !h)} style={btn(halted, theme)}>Halt</button>
           <button onClick={() => setCompareOn((c) => !c)} style={btn(compareOn, theme)}>Compare</button>
           <button onClick={() => setMagnet((m) => !m)} style={btn(magnet, theme)}>Magnet</button>
@@ -86,7 +94,7 @@ function Demo() {
         </span>
       </header>
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
-        <SonrChart
+        {mounted && <SonrChart
           ref={chartRef}
           symbol={symbol}
           interval={interval}
@@ -103,7 +111,8 @@ function Demo() {
           candleStyle={candleStyle}
           compareSeries={compareOn ? [{ symbol: "SPY", color: "#e0a33c" }] : []}
           legend={false}
-        />
+          persistenceKey="demo"
+        />}
         {/* HTML header (#45). The volume-trend row (#79) is toggled from the
             Indicators menu ("VOLTREND"); pass `volumeTrend` here to seed it on. */}
         <div className="sonr-tile-header">
