@@ -232,9 +232,10 @@ in snapshots).
 
 ## Releases
 
-What each published npm version shipped is documented in
-[CHANGELOG.md](CHANGELOG.md); every publish is also tagged (`v0.x.y`) with a
-matching [GitHub Release](https://github.com/rioaxyz/sonrchart/releases).
+What each published npm version shipped is documented in the
+[changelog](https://github.com/rioaxyz/sonrchart/blob/main/CHANGELOG.md);
+every publish is also tagged (`v0.x.y`) with a matching
+[GitHub Release](https://github.com/rioaxyz/sonrchart/releases).
 
 ## Develop
 
