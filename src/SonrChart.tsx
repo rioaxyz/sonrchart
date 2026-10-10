@@ -7,6 +7,7 @@ import { HaTransformer, isHeikinAshi, toHeikinAshi } from "./candles";
 import { applyCandleStyle } from "./candleStyle";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
 import { CANDLE_PANE, asSpec, intervalMs, mergeStyles, sessionColors, toIndicatorSpecs, toKLine, toPeriod } from "./internal";
+import { loadPersistedIndicators, savePersistedIndicators } from "./indicatorPersistence";
 import { DEFAULT_TIMEZONE } from "./timezone";
 import { bareTicker, buildWatermark, intervalLabel, mergeWatermark, normalizeWatermark } from "./watermark";
 import { registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
@@ -76,6 +77,14 @@ export interface SonrChartProps {
   styles?: DeepPartial<Styles>;
   /** Indicators to show. Strings ("VOL") or specs. Default ["VOL"]. (#4) */
   indicators?: (string | IndicatorSpec)[];
+  /** Carry the user's indicator set across UNMOUNTS of this component (#94).
+   *  Runtime indicator changes already persist across symbol/interval/scale
+   *  switches while the chart stays mounted; set a key (stable per chart
+   *  tile, e.g. "main") if your app remounts the chart when the symbol
+   *  changes — via key={symbol} or a loading state that swaps it out — so
+   *  the set survives that too. The `indicators` prop then only seeds the
+   *  very first mount; `clearPersistedIndicators(key)` resets. */
+  persistenceKey?: string;
   /** Per-indicator sub-pane heights in px, keyed by indicator name. (#7) */
   paneHeights?: Record<string, number>;
   /** Session background tinting for pre/after-hours. (#10) */
@@ -445,6 +454,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     watermark: watermarkProp,
     patterns,
     halted,
+    persistenceKey,
     priceLines,
     orderLines,
     priceScale: priceScaleProp,
@@ -484,12 +494,28 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   const [chartEpoch, setChartEpoch] = useState(0);
   // The user's live study set, snapshotted at each chart teardown so a re-init
   // (symbol/interval/scale/HA switch) restores it instead of reseeding from
-  // the `indicators` prop (#86). null until the first teardown.
+  // the `indicators` prop (#86). null until the first teardown. With a
+  // persistenceKey, the snapshot is mirrored to the module-level registry so
+  // it also survives a full unmount/remount of this component (#94).
   const persistedIndicatorsRef = useRef<IndicatorSpec[] | null>(null);
+  const persistenceKeyRef = useRef(persistenceKey);
+  persistenceKeyRef.current = persistenceKey;
+  // Mirror the current user study set to the keyed registry (#94). Called on
+  // every set change and at teardown; a no-op without a key.
+  const saveIndicatorSet = (chart: Chart | null) => {
+    const key = persistenceKeyRef.current;
+    if (!key || !chart) return;
+    savePersistedIndicators(key, toIndicatorSpecs(chart.getIndicators() ?? [], isUserIndicator));
+  };
   // Data-window subscribers (indicator add/remove/visibility). Notified from the
   // handle's indicator mutations so the panel refreshes without polling. (#45)
   const indicatorSubs = useRef(new Set<() => void>());
-  const notifyIndicators = () => indicatorSubs.current.forEach((cb) => cb());
+  const notifyIndicators = () => {
+    indicatorSubs.current.forEach((cb) => cb());
+    // Keep the keyed registry current on every set change (#94), so even an
+    // abrupt remount restores the latest set.
+    saveIndicatorSet(chartRef.current);
+  };
   // Magnet mode. Prop-seeded, but a toolbar toggle can override it imperatively;
   // a *changed* prop still wins (so the host stays authoritative when it drives
   // magnet), while an unchanged prop won't clobber a toolbar-set value.
@@ -1238,9 +1264,11 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       }
       // Session tint + pattern markers are (re)applied by their chartEpoch-keyed
       // reconcile effects below, so they survive a chart re-init (interval switch).
-      // Studies: after a re-init, restore the set the user had live (#86) —
-      // only the very first chart seeds from the `indicators` prop.
-      for (const s of persistedIndicatorsRef.current ?? indicators.map(asSpec)) createIndicator(s);
+      // Studies: after a re-init, restore the set the user had live (#86);
+      // after a remount, restore the keyed registry's set (#94). Only a
+      // chart with no history on either seeds from the `indicators` prop.
+      const persisted = persistedIndicatorsRef.current ?? (persistenceKey ? loadPersistedIndicators(persistenceKey) : null);
+      for (const s of persisted ?? indicators.map(asSpec)) createIndicator(s);
       applyPaneHeights();
       onReady?.(chart);
     })();
@@ -1249,8 +1277,10 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       disposed = true;
       unsub();
       // Snapshot the user's studies (before dispose) so the next init — a
-      // symbol/interval/scale switch — restores them (#86).
+      // symbol/interval/scale switch — restores them (#86), mirrored to the
+      // keyed registry so a remount restores them too (#94).
       persistedIndicatorsRef.current = toIndicatorSpecs(chart.getIndicators() ?? [], isUserIndicator);
+      saveIndicatorSet(chart);
       el.removeEventListener("mouseleave", onPointerLeave);
       dispose(idRef.current);
       chartRef.current = null;

@@ -99,6 +99,7 @@ vi.mock("klinecharts", () => ({
 
 import { SonrChart, type SonrChartHandle } from "../src/SonrChart";
 import { SESSION_INDICATOR, PATTERN_INDICATOR, SERIES_INDICATOR, WATERMARK_INDICATOR, HALT_INDICATOR, DEFAULT_SESSION_COLORS, DEFAULT_HALT_BADGE } from "../src/indicators";
+import { clearPersistedIndicators, loadPersistedIndicators } from "../src/indicatorPersistence";
 import { registerTheme } from "../src/theme";
 import { utils } from "klinecharts";
 import type { DataSource } from "../src/types";
@@ -116,6 +117,7 @@ const lastChart = () => h.charts[h.charts.length - 1];
 beforeEach(() => {
   h.charts.length = 0;
   vi.clearAllMocks();
+  clearPersistedIndicators(); // the keyed registry is module-level state
 });
 
 describe("SonrChart — initialization", () => {
@@ -397,6 +399,65 @@ describe("SonrChart — indicator persistence across re-inits (#86)", () => {
       expect(calls.filter((n: string) => n === internal).length, internal).toBe(1);
     }
     expect(ref.current!.listIndicators()).toEqual(["VOL"]);
+  });
+});
+
+describe("SonrChart — keyed persistence across remounts (#94)", () => {
+  it("restores MACD + VSURGE after a full unmount/remount with the same key", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { unmount } = render(<SonrChart ref={ref} symbol="AAPL" dataSource={source()} indicators={["VOL"]} persistenceKey="tile-1" />);
+    act(() => {
+      ref.current!.addIndicator("MACD");
+      ref.current!.addIndicator("VSURGE");
+    });
+    unmount(); // e.g. host swaps in a spinner, or keys the chart by symbol
+
+    const ref2 = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref2} symbol="TSLA" dataSource={source()} indicators={["VOL"]} persistenceKey="tile-1" />);
+    expect(ref2.current!.listIndicators().sort()).toEqual(["MACD", "VOL", "VSURGE"]);
+  });
+
+  it("registry stays current on every change, so an abrupt remount sees the latest set", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="AAPL" dataSource={source()} indicators={["VOL"]} persistenceKey="tile-1" />);
+    act(() => ref.current!.addIndicator("MACD"));
+    // Written through on the add itself — before any teardown runs.
+    expect(loadPersistedIndicators("tile-1")?.map((s) => s.name).sort()).toEqual(["MACD", "VOL"]);
+    act(() => ref.current!.removeIndicator("VOL"));
+    expect(loadPersistedIndicators("tile-1")?.map((s) => s.name)).toEqual(["MACD"]);
+  });
+
+  it("keys are isolated, and no key means no cross-mount persistence", () => {
+    const a = createRef<SonrChartHandle>();
+    const { unmount } = render(<SonrChart ref={a} symbol="A" dataSource={source()} indicators={["VOL"]} persistenceKey="tile-a" />);
+    act(() => a.current!.addIndicator("RSI"));
+    unmount();
+
+    // A different key seeds from its own prop, untouched by tile-a's set.
+    const b = createRef<SonrChartHandle>();
+    const rb = render(<SonrChart ref={b} symbol="A" dataSource={source()} indicators={["VOL"]} persistenceKey="tile-b" />);
+    expect(b.current!.listIndicators()).toEqual(["VOL"]);
+    rb.unmount();
+
+    // No key at all: a remount reseeds from the prop (pre-#94 behavior).
+    const c = createRef<SonrChartHandle>();
+    const rc = render(<SonrChart ref={c} symbol="A" dataSource={source()} indicators={["VOL"]} />);
+    act(() => c.current!.addIndicator("MACD"));
+    rc.unmount();
+    const d = createRef<SonrChartHandle>();
+    render(<SonrChart ref={d} symbol="A" dataSource={source()} indicators={["VOL"]} />);
+    expect(d.current!.listIndicators()).toEqual(["VOL"]);
+  });
+
+  it("clearPersistedIndicators(key) makes the next mount seed from the prop again", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { unmount } = render(<SonrChart ref={ref} symbol="A" dataSource={source()} indicators={["VOL"]} persistenceKey="tile-1" />);
+    act(() => ref.current!.addIndicator("MACD"));
+    unmount();
+    clearPersistedIndicators("tile-1");
+    const ref2 = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref2} symbol="A" dataSource={source()} indicators={["VOL"]} persistenceKey="tile-1" />);
+    expect(ref2.current!.listIndicators()).toEqual(["VOL"]);
   });
 });
 
