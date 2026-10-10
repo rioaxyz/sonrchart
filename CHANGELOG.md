@@ -2,13 +2,18 @@
 
 All notable changes to `@rioaxyz/sonrchart`, per **published npm version**. Each section lists what that version's tarball actually shipped — reconstructed from the merge history against the npm publish timestamps — which can differ from what the version number implies (see 0.3.1). Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/) pre-1.0 conventions.
 
-## [Unreleased] — 0.4.0 on `main`
+## [Unreleased]
 
 ### Added
 - `persistenceKey` prop on `SonrChart` and `SonrChartShell` (#94): carries the user's indicator set across full unmounts of the component — for hosts that remount the chart on symbol changes (`key={symbol}`, or a loading state that swaps it out) — on top of the existing in-instance persistence across symbol/interval/scale switches. The registry is written through on every indicator change; `save`/`load`/`clearPersistedIndicators` are exported.
+- This changelog, the `v0.x.y` release tags, and the README Releases section (#92, #93).
+
+## [0.4.0] — 2026-10-10
+
+Published 2026-10-10 01:44 UTC.
 
 ### Changed
-- Version realignment: 0.4.0 gives the Volume Surge indicator — which shipped early inside the 0.3.1 tarball, see below — its honest version number (#91).
+- Version realignment only: 0.4.0 gives the Volume Surge indicator — which shipped early inside the 0.3.1 tarball, see below — its honest version number (#91). No code changes beyond the bump.
 
 ## [0.3.1] — 2026-10-09
 
@@ -45,7 +50,8 @@ Published 2026-10-01 00:35 UTC as the first public scoped release, `@rioaxyz/son
 
 Initial feature set, including: candlestick charting on KLineChart 10 with dark/light/custom themes; drawing tools (built-in plus brush, shapes, text, and the extended family) with undo/redo, templates, lock/hide, and an object tree; indicators with study templates and a config menu; session tinting, pattern markers, watermark, compare series, and the trade-review box overlay (#76) sharing the candle pane under an explicit z-order (#75); static price lines and draggable order lines; price-scale modes and axis labels; symbol search, resolution, and metadata; timezone and custom-resolution support; snapshots, save/load state, and keyboard shortcuts; `ChartHeader` / `ChartToolbar` / `SonrChartShell` chrome and the homegrown icon set.
 
-[Unreleased]: https://github.com/rioaxyz/sonrchart/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/rioaxyz/sonrchart/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/rioaxyz/sonrchart/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/rioaxyz/sonrchart/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/rioaxyz/sonrchart/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/rioaxyz/sonrchart/compare/v0.1.0...v0.2.0
