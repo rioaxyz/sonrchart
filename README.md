@@ -230,6 +230,12 @@ shorts); the halt badge pins a rounded pill to the top-right of the price
 pane while a symbol is trading-halted (drawn on the canvas, so it's included
 in snapshots).
 
+## Releases
+
+What each published npm version shipped is documented in
+[CHANGELOG.md](CHANGELOG.md); every publish is also tagged (`v0.x.y`) with a
+matching [GitHub Release](https://github.com/rioaxyz/sonrchart/releases).
+
 ## Develop
 
 ```bash
