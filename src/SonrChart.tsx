@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { dispose, init, utils, type Chart, type Coordinate, type DeepPartial, type KLineData, type Layout, type Nullable, type Options, type Point, type Styles } from "klinecharts";
 import { resolveThemeStyles, PALETTE } from "./theme";
@@ -8,6 +8,7 @@ import { applyCandleStyle } from "./candleStyle";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
 import { CANDLE_PANE, asSpec, intervalMs, mergeStyles, sessionColors, toIndicatorSpecs, toKLine, toPeriod } from "./internal";
 import { loadPersistedIndicators, savePersistedIndicators } from "./indicatorPersistence";
+import { DrawingStore, drawingStoreFor } from "./drawingPersistence";
 import { DEFAULT_TIMEZONE } from "./timezone";
 import { bareTicker, buildWatermark, intervalLabel, mergeWatermark, normalizeWatermark } from "./watermark";
 import { registerBrushOverlay, type BrushStyle, type BrushTool } from "./brush";
@@ -77,13 +78,14 @@ export interface SonrChartProps {
   styles?: DeepPartial<Styles>;
   /** Indicators to show. Strings ("VOL") or specs. Default ["VOL"]. (#4) */
   indicators?: (string | IndicatorSpec)[];
-  /** Carry the user's indicator set across UNMOUNTS of this component (#94).
-   *  Runtime indicator changes already persist across symbol/interval/scale
-   *  switches while the chart stays mounted; set a key (stable per chart
-   *  tile, e.g. "main") if your app remounts the chart when the symbol
-   *  changes — via key={symbol} or a loading state that swaps it out — so
-   *  the set survives that too. The `indicators` prop then only seeds the
-   *  very first mount; `clearPersistedIndicators(key)` resets. */
+  /** Carry the user's indicator set (#94) and per-symbol drawings (#97)
+   *  across UNMOUNTS of this component. Both already persist across
+   *  symbol/interval/scale switches while the chart stays mounted; set a key
+   *  (stable per chart tile, e.g. "main") if your app remounts the chart
+   *  when the symbol changes — via key={symbol} or a loading state that
+   *  swaps it out — so they survive that too. The `indicators` prop then
+   *  only seeds the very first mount; `clearPersistedIndicators(key)` /
+   *  `clearPersistedDrawings(key)` reset. */
   persistenceKey?: string;
   /** Per-indicator sub-pane heights in px, keyed by indicator name. (#7) */
   paneHeights?: Record<string, number>;
@@ -500,6 +502,12 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   const persistedIndicatorsRef = useRef<IndicatorSpec[] | null>(null);
   const persistenceKeyRef = useRef(persistenceKey);
   persistenceKeyRef.current = persistenceKey;
+  // Per-symbol drawing sets (#97): each chart instance owns a store; with a
+  // persistenceKey the store is module-level and survives remounts too. Read
+  // through a ref so the create effect's teardown always sees the current one.
+  const drawingStore = useMemo(() => (persistenceKey ? drawingStoreFor(persistenceKey) : new DrawingStore()), [persistenceKey]);
+  const drawingStoreRef = useRef(drawingStore);
+  drawingStoreRef.current = drawingStore;
   // Mirror the current user study set to the keyed registry (#94). Called on
   // every set change and at teardown; a no-op without a key.
   const saveIndicatorSet = (chart: Chart | null) => {
@@ -1235,6 +1243,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     });
 
     let disposed = false;
+    // Set once the async init has restored studies + drawings; the teardown
+    // snapshot is gated on it (see the cleanup below).
+    let seeded = false;
     (async () => {
       // Symbol resolution (#8): validate/enrich before loading.
       let info: SymbolInfo = { ticker: symbol };
@@ -1269,6 +1280,15 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       // chart with no history on either seeds from the `indicators` prop.
       const persisted = persistedIndicatorsRef.current ?? (persistenceKey ? loadPersistedIndicators(persistenceKey) : null);
       for (const s of persisted ?? indicators.map(asSpec)) createIndicator(s);
+      // Drawings: restore this symbol's saved set (#97) — carried across
+      // interval/scale switches, isolated per ticker — and make it the undo
+      // baseline so undo can't reach back into another symbol's history.
+      const savedDrawings = drawingStoreRef.current.load(symbol);
+      if (savedDrawings) {
+        drawings.restoreDrawings(savedDrawings);
+        drawings.resetHistoryToCurrent();
+      }
+      seeded = true;
       applyPaneHeights();
       onReady?.(chart);
     })();
@@ -1278,9 +1298,17 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       unsub();
       // Snapshot the user's studies (before dispose) so the next init — a
       // symbol/interval/scale switch — restores them (#86), mirrored to the
-      // keyed registry so a remount restores them too (#94).
-      persistedIndicatorsRef.current = toIndicatorSpecs(chart.getIndicators() ?? [], isUserIndicator);
-      saveIndicatorSet(chart);
+      // keyed registry so a remount restores them too (#94); and this
+      // symbol's drawings (#97) — `symbol` here is the OUTGOING one (the
+      // effect closure), so the set lands under the right ticker. Skipped
+      // when the async init never seeded this chart (a rapid second switch
+      // mid-resolveSymbol): snapshotting that empty husk would overwrite the
+      // real saved sets.
+      if (seeded) {
+        persistedIndicatorsRef.current = toIndicatorSpecs(chart.getIndicators() ?? [], isUserIndicator);
+        saveIndicatorSet(chart);
+        drawingStoreRef.current.save(symbol, drawings.snapshotDrawings());
+      }
       el.removeEventListener("mouseleave", onPointerLeave);
       dispose(idRef.current);
       chartRef.current = null;

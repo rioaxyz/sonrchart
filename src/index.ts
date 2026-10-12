@@ -74,6 +74,7 @@ export { getCSSCustomProperty, setCSSCustomProperty } from "./css";
 export { DEFAULT_LABELS, mergeLabels } from "./labels";
 export type { Labels } from "./labels";
 export { savePersistedIndicators, loadPersistedIndicators, clearPersistedIndicators } from "./indicatorPersistence";
+export { DrawingStore, drawingStoreFor, clearPersistedDrawings } from "./drawingPersistence";
 export { volumeTrend, DEFAULT_VOLUME_TREND_BARS } from "./volumeTrend";
 export type { VolumeTrend } from "./volumeTrend";
 export {
