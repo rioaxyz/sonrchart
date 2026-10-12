@@ -36,8 +36,10 @@ bars come from.
   `DrawingToolbar`, magnet-to-OHLC snapping, and **undo/redo**.
 - **Price scale modes.** Normal / percentage / logarithmic, invert, labels
   inside.
-- **Persistence & templates.** Export/import chart state (drawings + indicators)
-  and save/apply named indicator sets.
+- **Persistence & templates.** Drawings persist per ticker symbol — each symbol
+  keeps its own set, carried across every interval/scale switch — and runtime
+  indicator changes persist across symbol switches. Export/import chart state
+  (drawings + indicators) and save/apply named indicator sets.
 - **Snapshots.** Capture the chart to a PNG data URL (or trigger a download).
 - **Composable chrome.** `ChartToolbar` bundles intervals + indicators +
   drawing tools + snapshot; add your own buttons via its children slot.
@@ -154,7 +156,7 @@ function TradingChart({ source }: { source: DataSource }) {
 | `theme` | `"dark" \| "light"` | Default `"dark"` (the Sonr console palette). |
 | `styles` | `DeepPartial<Styles>` | KLineChart style overrides merged over the theme. |
 | `indicators` | `(string \| IndicatorSpec)[]` | Indicators to show on first load — a name (`"VOL"`) or a spec (`{ name, pane: "main" \| "new", calcParams }`). Default `["VOL"]`. Runtime changes (menu/handle) persist across symbol and interval switches. |
-| `persistenceKey` | `string` | Also carry the indicator set across unmounts of the component. Set a stable per-tile key (e.g. `"main"`) if your app remounts the chart on symbol changes — `key={symbol}`, or a loading state that swaps it out. Reset with `clearPersistedIndicators(key)`. |
+| `persistenceKey` | `string` | Also carry the indicator set and per-symbol drawings across unmounts of the component. Set a stable per-tile key (e.g. `"main"`) if your app remounts the chart on symbol changes — `key={symbol}`, or a loading state that swaps it out. Reset with `clearPersistedIndicators(key)` / `clearPersistedDrawings(key)`. |
 | `paneHeights` | `Record<string, number>` | Sub-pane pixel heights, keyed by indicator name. |
 | `sessions` | `boolean \| { premarket?, afterhours? }` | Tint pre/after-hours session backgrounds (ET). |
 | `patterns` | `PatternMarker[]` | Setup markers (`{ time, kind, label }`) drawn on the price pane. |

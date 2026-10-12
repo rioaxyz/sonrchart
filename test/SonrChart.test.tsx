@@ -100,6 +100,7 @@ vi.mock("klinecharts", () => ({
 import { SonrChart, type SonrChartHandle } from "../src/SonrChart";
 import { SESSION_INDICATOR, PATTERN_INDICATOR, SERIES_INDICATOR, WATERMARK_INDICATOR, HALT_INDICATOR, DEFAULT_SESSION_COLORS, DEFAULT_HALT_BADGE } from "../src/indicators";
 import { clearPersistedIndicators, loadPersistedIndicators } from "../src/indicatorPersistence";
+import { clearPersistedDrawings } from "../src/drawingPersistence";
 import { registerTheme } from "../src/theme";
 import { utils } from "klinecharts";
 import type { DataSource } from "../src/types";
@@ -117,7 +118,8 @@ const lastChart = () => h.charts[h.charts.length - 1];
 beforeEach(() => {
   h.charts.length = 0;
   vi.clearAllMocks();
-  clearPersistedIndicators(); // the keyed registry is module-level state
+  clearPersistedIndicators(); // the keyed registries are module-level state
+  clearPersistedDrawings();
 });
 
 describe("SonrChart — initialization", () => {
@@ -399,6 +401,73 @@ describe("SonrChart — indicator persistence across re-inits (#86)", () => {
       expect(calls.filter((n: string) => n === internal).length, internal).toBe(1);
     }
     expect(ref.current!.listIndicators()).toEqual(["VOL"]);
+  });
+});
+
+describe("SonrChart — per-symbol drawing persistence (#97)", () => {
+  const drawingState = (items: any[]) => ({ version: 1 as const, drawings: items, indicators: [] });
+  const seg = (ts: number) => ({ name: "segment", points: [{ timestamp: ts, value: 100 }] });
+
+  it("drawings survive an interval switch on the same symbol", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { rerender } = render(<SonrChart ref={ref} symbol="AAPL" interval="1" dataSource={source()} />);
+    act(() => ref.current!.importState(drawingState([seg(1000)])));
+    expect(ref.current!.listDrawings().map((d) => d.name)).toEqual(["segment"]);
+
+    rerender(<SonrChart ref={ref} symbol="AAPL" interval="5" dataSource={source()} />);
+    expect(ref.current!.listDrawings().map((d) => d.name)).toEqual(["segment"]);
+    // The restored set is the undo baseline — undo can't cross the re-init.
+    expect(ref.current!.canUndo()).toBe(false);
+  });
+
+  it("each ticker keeps its own set: AAPL's drawings vanish on TSLA and return on AAPL", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { rerender } = render(<SonrChart ref={ref} symbol="AAPL" interval="1" dataSource={source()} />);
+    act(() => ref.current!.importState(drawingState([seg(1000), { name: "rayLine", points: [{ timestamp: 2000, value: 50 }] }])));
+
+    rerender(<SonrChart ref={ref} symbol="TSLA" interval="1" dataSource={source()} />);
+    expect(ref.current!.listDrawings()).toEqual([]); // TSLA starts clean
+    act(() => ref.current!.importState(drawingState([{ name: "priceLine", points: [{ timestamp: 3000, value: 200 }] }])));
+
+    rerender(<SonrChart ref={ref} symbol="AAPL" interval="1" dataSource={source()} />);
+    expect(ref.current!.listDrawings().map((d) => d.name).sort()).toEqual(["rayLine", "segment"]);
+    // Points round-trip intact.
+    const created = lastChart().createOverlay.mock.calls.map((c: any[]) => c[0]).find((o: any) => o.name === "segment");
+    expect(created.points).toEqual([{ timestamp: 1000, value: 100 }]);
+
+    rerender(<SonrChart ref={ref} symbol="TSLA" interval="1" dataSource={source()} />);
+    expect(ref.current!.listDrawings().map((d) => d.name)).toEqual(["priceLine"]);
+  });
+
+  it("clearing every drawing stays cleared after a round-trip to another ticker", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { rerender } = render(<SonrChart ref={ref} symbol="AAPL" interval="1" dataSource={source()} />);
+    act(() => ref.current!.importState(drawingState([seg(1000)])));
+    act(() => ref.current!.clearDrawings());
+    rerender(<SonrChart ref={ref} symbol="TSLA" interval="1" dataSource={source()} />);
+    rerender(<SonrChart ref={ref} symbol="AAPL" interval="1" dataSource={source()} />);
+    expect(ref.current!.listDrawings()).toEqual([]);
+  });
+
+  it("with a persistenceKey, each symbol's drawings survive a full unmount/remount", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { unmount } = render(<SonrChart ref={ref} symbol="AAPL" interval="1" dataSource={source()} persistenceKey="tile-1" />);
+    act(() => ref.current!.importState(drawingState([seg(1000)])));
+    unmount();
+
+    const ref2 = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref2} symbol="AAPL" interval="1" dataSource={source()} persistenceKey="tile-1" />);
+    expect(ref2.current!.listDrawings().map((d) => d.name)).toEqual(["segment"]);
+  });
+
+  it("without a key, drawings do not cross an unmount (instance-scoped store)", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { unmount } = render(<SonrChart ref={ref} symbol="AAPL" interval="1" dataSource={source()} />);
+    act(() => ref.current!.importState(drawingState([seg(1000)])));
+    unmount();
+    const ref2 = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref2} symbol="AAPL" interval="1" dataSource={source()} />);
+    expect(ref2.current!.listDrawings()).toEqual([]);
   });
 });
 
