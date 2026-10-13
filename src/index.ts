@@ -79,12 +79,16 @@ export { volumeTrend, DEFAULT_VOLUME_TREND_BARS } from "./volumeTrend";
 export type { VolumeTrend } from "./volumeTrend";
 export {
   computeVolumeSurge,
+  closeLocationValue,
+  surgeSide,
   volumeSurgeColors,
+  volumeSurgeColorFor,
   DEFAULT_VOLUME_SURGE_BARS,
   DEFAULT_VOLUME_SURGE_MULT,
+  DEFAULT_SURGE_SIDE_DEADZONE,
   DEFAULT_VOLUME_SURGE_COLORS,
 } from "./volumeSurge";
-export type { VolumeStrength, VolumeSurgePoint, VolumeSurgeColors } from "./volumeSurge";
+export type { VolumeStrength, SurgeSide, VolumeSurgePoint, VolumeSurgeColors } from "./volumeSurge";
 export {
   registerSonrIndicators,
   SESSION_INDICATOR,

@@ -9,7 +9,8 @@ vi.mock("klinecharts", () => ({
   registerIndicator: vi.fn((t: any) => reg.templates.push(t)),
 }));
 
-import { registerSonrIndicators, SESSION_INDICATOR, PATTERN_INDICATOR, HALT_INDICATOR, DEFAULT_SESSION_COLORS, DEFAULT_HALT_BADGE, normalizeHalt } from "../src/indicators";
+import { registerSonrIndicators, SESSION_INDICATOR, PATTERN_INDICATOR, HALT_INDICATOR, VOLUME_SURGE_INDICATOR, DEFAULT_SESSION_COLORS, DEFAULT_HALT_BADGE, normalizeHalt } from "../src/indicators";
+import { DEFAULT_VOLUME_SURGE_COLORS } from "../src/volumeSurge";
 
 function template(name: string) {
   return reg.templates.find((t) => t.name === name);
@@ -183,6 +184,32 @@ describe("SONR_HALT draw (#78)", () => {
     t.draw({ ctx, indicator: {}, bounding: haltBounding });
     expect(ctx.fill).not.toHaveBeenCalled();
     expect(ctx.fillText).not.toHaveBeenCalled();
+  });
+});
+
+describe("VSURGE figure styles + tooltip (#99 pressure side)", () => {
+  const C = DEFAULT_VOLUME_SURGE_COLORS;
+  const ratioFigure = () => template(VOLUME_SURGE_INDICATOR).figures.find((f: any) => f.key === "ratio");
+  const barColor = (current: any) => ratioFigure().styles({ data: { current }, indicator: { extendData: undefined } }).color;
+
+  it("colors surge bars by side: buying green, selling red, neutral amber", () => {
+    expect(barColor({ strength: "surging", side: "buying" })).toBe(C.buying);
+    expect(barColor({ strength: "surging", side: "selling" })).toBe(C.selling);
+    expect(barColor({ strength: "surging", side: "neutral" })).toBe(C.surging);
+    expect(barColor({ strength: "continuing", side: "selling" })).toBe(C.continuing);
+    expect(barColor(undefined)).toBe(C.continuing);
+  });
+
+  it("tooltip labels a surge with its side, in the matching color", () => {
+    const t = template(VOLUME_SURGE_INDICATOR);
+    const tip = (point: any) =>
+      t.createTooltipDataSource({ indicator: { result: [point], extendData: undefined, calcParams: [20, 1.5] }, crosshair: { dataIndex: 0 } });
+    const surge = tip({ ratio: 2.1, threshold: 1.5, strength: "surging", side: "selling" }).legends.at(-1).value;
+    expect(surge).toEqual({ text: "Surging (selling)", color: C.selling });
+    const neutral = tip({ ratio: 1.6, threshold: 1.5, strength: "surging", side: "neutral" }).legends.at(-1).value;
+    expect(neutral).toEqual({ text: "Surging", color: C.surging });
+    const cont = tip({ ratio: 0.9, threshold: 1.5, strength: "continuing", side: "buying" }).legends.at(-1).value;
+    expect(cont).toEqual({ text: "Continuing", color: C.continuing });
   });
 });
 

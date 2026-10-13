@@ -2,12 +2,17 @@ import { describe, it, expect } from "vitest";
 import type { KLineData } from "klinecharts";
 import {
   computeVolumeSurge,
+  closeLocationValue,
+  surgeSide,
   volumeSurgeColors,
+  volumeSurgeColorFor,
   DEFAULT_VOLUME_SURGE_BARS,
   DEFAULT_VOLUME_SURGE_MULT,
+  DEFAULT_SURGE_SIDE_DEADZONE,
   DEFAULT_VOLUME_SURGE_COLORS,
 } from "../src/volumeSurge";
 
+// o=1 h=2 l=0.5 c=1.5 → CLV = ((1.5−0.5)−(2−1.5))/1.5 = +1/3 → "buying".
 const bars = (...volumes: (number | undefined)[]): KLineData[] =>
   volumes.map((volume, i) => ({ timestamp: i * 1000, open: 1, high: 2, low: 0.5, close: 1.5, volume }));
 
@@ -20,7 +25,7 @@ describe("computeVolumeSurge (#VSURGE)", () => {
   it("marks a bar surging at >= mult x the mean of the previous N bars", () => {
     // mean of previous 3 = 100; 150 is exactly 1.5x — boundary is inclusive.
     const out = computeVolumeSurge(bars(100, 100, 100, 150), 3, 1.5);
-    expect(out[3]).toEqual({ ratio: 1.5, threshold: 1.5, strength: "surging" });
+    expect(out[3]).toEqual({ ratio: 1.5, threshold: 1.5, strength: "surging", side: "buying" });
   });
 
   it("marks a bar continuing below the multiple", () => {
@@ -70,12 +75,66 @@ describe("computeVolumeSurge (#VSURGE)", () => {
   it("honors a custom bar count and multiple", () => {
     const out = computeVolumeSurge(bars(100, 300, 400), 2, 2);
     // window for bar 2 = bars 0-1, mean 200; 400 = 2.0x → surging at mult 2.
-    expect(out[2]).toEqual({ ratio: 2, threshold: 2, strength: "surging" });
+    expect(out[2]).toEqual({ ratio: 2, threshold: 2, strength: "surging", side: "buying" });
   });
 
   it("echoes the threshold per computed point for the reference line", () => {
     const out = computeVolumeSurge(bars(100, 100, 100, 120), 3, 1.5);
     expect(out[3].threshold).toBe(1.5);
+  });
+});
+
+describe("closeLocationValue + surgeSide (#99 pressure side)", () => {
+  const bar = (high: number, low: number, close: number) => ({ high, low, close });
+
+  it("CLV spans −1 (close at low) to +1 (close at high), 0 mid-range", () => {
+    expect(closeLocationValue(bar(2, 1, 2))).toBe(1);
+    expect(closeLocationValue(bar(2, 1, 1))).toBe(-1);
+    expect(closeLocationValue(bar(2, 1, 1.5))).toBe(0);
+  });
+
+  it("a rangeless bar (high === low) is CLV 0 — never divides by zero", () => {
+    expect(closeLocationValue(bar(5, 5, 5))).toBe(0);
+    expect(surgeSide(bar(5, 5, 5))).toBe("neutral");
+  });
+
+  it("classifies by the dead-zone: strictly beyond ±0.2 picks a side", () => {
+    expect(surgeSide(bar(2, 1, 1.9))).toBe("buying"); // CLV 0.8
+    expect(surgeSide(bar(2, 1, 1.1))).toBe("selling"); // CLV −0.8
+    expect(surgeSide(bar(2, 1, 1.5))).toBe("neutral"); // CLV 0
+    // Exactly at the boundary stays neutral (dojis aren't force-classified) —
+    // asserted with a binary-exact CLV of 0.5 against a 0.5 dead-zone, since
+    // 0.2 isn't representable exactly in floating point.
+    expect(surgeSide(bar(2, 1, 1.75), 0.5)).toBe("neutral"); // CLV 0.5, not > 0.5
+    expect(DEFAULT_SURGE_SIDE_DEADZONE).toBe(0.2);
+  });
+
+  it("honors a custom dead-zone", () => {
+    expect(surgeSide(bar(2, 1, 1.6), 0.1)).toBe("buying"); // CLV 0.2 > 0.1
+  });
+
+  it("computeVolumeSurge sets the side per classified bar from its own OHLC", () => {
+    const data: KLineData[] = [
+      { timestamp: 0, open: 1, high: 2, low: 1, close: 1.5, volume: 100 },
+      { timestamp: 1, open: 1, high: 2, low: 1, close: 1.5, volume: 100 },
+      // Surging bar that closed at its LOW → a selling surge.
+      { timestamp: 2, open: 2, high: 2, low: 1, close: 1, volume: 500 },
+    ];
+    const out = computeVolumeSurge(data, 2, 1.5);
+    expect(out[2].strength).toBe("surging");
+    expect(out[2].side).toBe("selling");
+  });
+});
+
+describe("volumeSurgeColorFor (#99)", () => {
+  const c = DEFAULT_VOLUME_SURGE_COLORS;
+  it("splits surges by side and leaves everything else continuing", () => {
+    expect(volumeSurgeColorFor({ strength: "surging", side: "buying" }, c)).toBe(c.buying);
+    expect(volumeSurgeColorFor({ strength: "surging", side: "selling" }, c)).toBe(c.selling);
+    expect(volumeSurgeColorFor({ strength: "surging", side: "neutral" }, c)).toBe(c.surging);
+    expect(volumeSurgeColorFor({ strength: "continuing", side: "buying" }, c)).toBe(c.continuing);
+    expect(volumeSurgeColorFor({}, c)).toBe(c.continuing);
+    expect(volumeSurgeColorFor(undefined, c)).toBe(c.continuing);
   });
 });
 
@@ -86,8 +145,10 @@ describe("volumeSurgeColors (extendData palette)", () => {
   });
 
   it("overrides only the keys provided", () => {
-    const c = volumeSurgeColors({ surging: "#e91e63" });
+    const c = volumeSurgeColors({ surging: "#e91e63", selling: "#b71c1c" });
     expect(c.surging).toBe("#e91e63");
+    expect(c.selling).toBe("#b71c1c");
+    expect(c.buying).toBe(DEFAULT_VOLUME_SURGE_COLORS.buying);
     expect(c.continuing).toBe(DEFAULT_VOLUME_SURGE_COLORS.continuing);
     expect(c.threshold).toBe(DEFAULT_VOLUME_SURGE_COLORS.threshold);
   });
