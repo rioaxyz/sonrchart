@@ -5,6 +5,7 @@ All notable changes to `@rioaxyz/sonrchart`, per **published npm version**. Each
 ## [Unreleased]
 
 ### Added
+- Volume Surge pressure side (#99): each classified bar carries `side: "buying" | "selling" | "neutral"`, inferred from Close Location Value (where the bar closed within its range — the A/D Money Flow Multiplier, with a ±0.2 dead-zone so dojis stay neutral). Surge bars color by side (green / red / amber) and the tooltip reads "Surging (buying)" / "(selling)". Pressure, not positioning — OHLCV can't distinguish longs from shorts. `closeLocationValue`, `surgeSide`, `volumeSurgeColorFor`, and the extended palette are exported.
 - Per-symbol drawing persistence (#97): a chart's drawings now survive interval, price-scale, and Heikin-Ashi switches, and each ticker symbol keeps its own isolated drawing set — switch from AAPL to TSLA and back, and AAPL's drawings return. With a `persistenceKey` the sets also survive unmounts; `DrawingStore`, `drawingStoreFor`, and `clearPersistedDrawings` are exported.
 - `persistenceKey` prop on `SonrChart` and `SonrChartShell` (#94): carries the user's indicator set across full unmounts of the component — for hosts that remount the chart on symbol changes (`key={symbol}`, or a loading state that swaps it out) — on top of the existing in-instance persistence across symbol/interval/scale switches. The registry is written through on every indicator change; `save`/`load`/`clearPersistedIndicators` are exported.
 - This changelog, the `v0.x.y` release tags, and the README Releases section (#92, #93).

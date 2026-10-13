@@ -5,6 +5,7 @@ import {
   computeVolumeSurge,
   DEFAULT_VOLUME_SURGE_BARS,
   DEFAULT_VOLUME_SURGE_MULT,
+  volumeSurgeColorFor,
   volumeSurgeColors,
   type VolumeSurgeColors,
   type VolumeSurgePoint,
@@ -282,10 +283,9 @@ export function registerSonrIndicators(): void {
         key: "ratio",
         type: "bar",
         baseValue: 0,
-        styles: ({ data, indicator }) => {
-          const colors = volumeSurgeColors(indicator.extendData);
-          return { color: data.current?.strength === "surging" ? colors.surging : colors.continuing };
-        },
+        // Surges split by CLV-inferred pressure side (#99): buying green,
+        // selling red, neutral amber; non-surges stay the muted gray.
+        styles: ({ data, indicator }) => ({ color: volumeSurgeColorFor(data.current as VolumeSurgePoint | undefined, volumeSurgeColors(indicator.extendData)) }),
       },
     ],
     calc: (dataList, { calcParams }) =>
@@ -299,11 +299,14 @@ export function registerSonrIndicators(): void {
       if (point?.ratio !== undefined) {
         legends.push({ title: "Vol/Mean: ", value: `${point.ratio.toFixed(2)}x` });
       }
+      // Side suffix only on surges — that's when "who absorbed it" matters;
+      // it's pressure inferred from the close's range location, not long/short.
+      const side = point?.side === "buying" ? " (buying)" : point?.side === "selling" ? " (selling)" : "";
       legends.push({
         title: "Volume Strength: ",
         value:
           point?.strength === "surging"
-            ? { text: "Surging", color: colors.surging }
+            ? { text: `Surging${side}`, color: volumeSurgeColorFor(point, colors) }
             : { text: point?.strength === "continuing" ? "Continuing" : "--", color: colors.continuing },
       });
       return {
