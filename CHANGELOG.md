@@ -4,6 +4,9 @@ All notable changes to `@rioaxyz/sonrchart`, per **published npm version**. Each
 
 ## [Unreleased]
 
+### Changed
+- The volume-trend default lookback is now 2 bars (was 3) — `DEFAULT_VOLUME_TREND_BARS`; still editable live in the settings dialog or via `setVolumeTrendBars` (#101).
+
 ### Added
 - Volume Surge pressure side (#99): each classified bar carries `side: "buying" | "selling" | "neutral"`, inferred from Close Location Value (where the bar closed within its range — the A/D Money Flow Multiplier, with a ±0.2 dead-zone so dojis stay neutral). Surge bars color by side (green / red / amber) and the tooltip reads "Surging (buying)" / "(selling)". Pressure, not positioning — OHLCV can't distinguish longs from shorts. `closeLocationValue`, `surgeSide`, `volumeSurgeColorFor`, and the extended palette are exported.
 - Per-symbol drawing persistence (#97): a chart's drawings now survive interval, price-scale, and Heikin-Ashi switches, and each ticker symbol keeps its own isolated drawing set — switch from AAPL to TSLA and back, and AAPL's drawings return. With a `persistenceKey` the sets also survive unmounts; `DrawingStore`, `drawingStoreFor`, and `clearPersistedDrawings` are exported.

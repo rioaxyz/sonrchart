@@ -57,7 +57,7 @@ export interface SonrChartShellProps {
   /** Instrument venue label for the Symbol-info dialog (e.g. "Alpaca"). */
   exchange?: string;
   /** Volume-trend row in the header (#79): `true` (default) shows it with the
-   *  chart-level lookback (3 bars unless changed in the settings dialog), a
+   *  chart-level lookback (2 bars unless changed in the settings dialog), a
    *  number sets that lookback, `false` hides the row. */
   volumeTrend?: boolean | number;
   onIntervalChange?: (interval: Interval) => void;
