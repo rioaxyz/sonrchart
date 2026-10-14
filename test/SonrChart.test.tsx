@@ -1251,7 +1251,7 @@ describe("SonrChart — header crosshair bar (#45)", () => {
     fireEvent.mouseLeave(c._el as Element);
     expect(seen.at(-1)).toBe("increasing");
 
-    // Default lookback (3 bars) has too little data on this mock → null.
+    // Default lookback (2 bars) has too little data on this 2-bar mock → null.
     const def: (string | null)[] = [];
     ref.current!.subscribeVolumeTrend((t) => def.push(t));
     expect(def.at(-1)).toBeNull();
@@ -1260,9 +1260,10 @@ describe("SonrChart — header crosshair bar (#45)", () => {
   it("drives the chart-level volume-trend lookback (#79): get/set/subscribe", () => {
     const ref = createRef<SonrChartHandle>();
     render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
-    expect(ref.current!.getVolumeTrendBars()).toBe(3);
+    expect(ref.current!.getVolumeTrendBars()).toBe(2);
 
-    // Unpinned subscription tracks the setting: 3 bars → null on the 2-bar mock.
+    // Unpinned subscription tracks the setting: a 2-bar lookback needs 3 bars
+    // of data → null on the 2-bar mock.
     const seen: (string | null)[] = [];
     ref.current!.subscribeVolumeTrend((t) => seen.push(t));
     expect(seen.at(-1)).toBeNull();
@@ -1280,6 +1281,6 @@ describe("SonrChart — header crosshair bar (#45)", () => {
     ref.current!.subscribeVolumeTrend((t) => pinned.push(t), 1);
     ref.current!.setVolumeTrendBars(3);
     expect(pinned).toEqual(["increasing"]); // seed only — no re-emit
-    expect(seen.at(-1)).toBeNull(); // unpinned followed the setting back to 3
+    expect(seen.at(-1)).toBeNull(); // unpinned followed the setting up to 3
   });
 });

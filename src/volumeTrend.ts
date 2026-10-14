@@ -9,7 +9,7 @@ import type { KLineData } from "klinecharts";
 
 export type VolumeTrend = "increasing" | "decreasing" | "mixed";
 
-export const DEFAULT_VOLUME_TREND_BARS = 3;
+export const DEFAULT_VOLUME_TREND_BARS = 2;
 
 export function volumeTrend(list: KLineData[], endIndex: number, bars: number = DEFAULT_VOLUME_TREND_BARS): VolumeTrend | null {
   const n = Math.max(1, Math.floor(bars));

@@ -24,7 +24,7 @@ export interface ChartHeaderProps {
   /** Precision for O/H/L/C/change (defaults to 2). */
   pricePrecision?: number;
   /** Volume-trend row (#79): `true` turns it on with the chart-level lookback
-   *  (default 3 bars, editable in the settings dialog); a number also sets
+   *  (default 2 bars, editable in the settings dialog); a number also sets
    *  that lookback. The on/off state lives on the chart handle, so it's also
    *  toggleable from the indicators menu ("VOLTREND") — this prop seeds it on.
    *  Shown on a second line below the symbol/OHLC row; tracks the same bar as
