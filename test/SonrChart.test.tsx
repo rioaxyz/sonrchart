@@ -662,20 +662,53 @@ describe("SonrChart — drawing tools & magnet (#3, #13)", () => {
     expect(lastChart()._overlays.at(-1).extendData).toEqual({ color: "#ff0000", size: 6 });
   });
 
-  it("brush stays armed (sticky) after each stroke; a point tool deactivates (#34)", () => {
+  it("every tool stays armed (sticky) after a placement by default (#102)", () => {
     const ref = createRef<SonrChartHandle>();
     render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
     const c = lastChart();
-    act(() => ref.current!.startDrawing("brush"));
+    act(() => ref.current!.startDrawing("rayLine"));
     const before = c._overlays.length;
-    act(() => c._overlays.at(-1).onDrawEnd({})); // finish a stroke
-    expect(ref.current!.activeDrawing()).toBe("brush"); // still armed
+    act(() => c._overlays.at(-1).onDrawEnd({})); // place the first ray
+    expect(ref.current!.activeDrawing()).toBe("rayLine"); // still armed
     expect(c._overlays.length).toBeGreaterThan(before); // re-armed a fresh overlay
+    act(() => c._overlays.at(-1).onDrawEnd({})); // a second ray, no re-select
+    expect(ref.current!.activeDrawing()).toBe("rayLine");
+    // ...until explicitly toggled off.
+    act(() => ref.current!.cancelDrawing());
+    expect(ref.current!.activeDrawing()).toBeNull();
+  });
 
-    // A point tool deactivates after placing one drawing.
+  it("stickyDrawings={false} restores one-shot tools; brush stays sticky regardless", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} stickyDrawings={false} />);
+    const c = lastChart();
     act(() => ref.current!.startDrawing("segment"));
     act(() => c._overlays.at(-1).onDrawEnd({}));
-    expect(ref.current!.activeDrawing()).toBeNull();
+    expect(ref.current!.activeDrawing()).toBeNull(); // one-shot
+
+    act(() => ref.current!.startDrawing("brush"));
+    act(() => c._overlays.at(-1).onDrawEnd({}));
+    expect(ref.current!.activeDrawing()).toBe("brush"); // brush always sticky
+  });
+
+  it("switching tools mid-arm removes the stale armed overlay (#102)", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment"));
+    const armedId = c._overlays.at(-1).id;
+    act(() => ref.current!.startDrawing("rayLine"));
+    expect(c._overlays.some((o: any) => o.id === armedId)).toBe(false); // stale armed overlay dropped
+    expect(c._overlays.at(-1).name).toBe("rayLine");
+  });
+
+  it("the armed-but-unplaced overlay never enters snapshots (export/undo/persistence)", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    act(() => ref.current!.startDrawing("segment"));
+    act(() => c._overlays.at(-1).onDrawEnd({})); // placed; sticky re-arms a fresh one
+    expect(ref.current!.exportState().drawings.length).toBe(1); // placed only, not the armed husk
   });
 });
 
@@ -750,7 +783,7 @@ describe("SonrChart — drawing management tooling (#35)", () => {
 
   it("cloneLastDrawing duplicates the most-recent user overlay", () => {
     const ref = createRef<SonrChartHandle>();
-    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} stickyDrawings={false} />);
     const c = lastChart();
     act(() => ref.current!.startDrawing("segment"));
     c._overlays.find((o: any) => o.name === "segment").points = [{ value: 3 }, { value: 4 }];
@@ -829,11 +862,13 @@ describe("SonrChart — snapshot (#20)", () => {
 describe("SonrChart — persistence (#15)", () => {
   it("exports drawings + indicators + price scale and re-imports them", () => {
     const ref = createRef<SonrChartHandle>();
-    render(<SonrChart ref={ref} symbol="A" dataSource={source()} indicators={["VOL"]} priceScale={{ type: "percentage" }} />);
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} indicators={["VOL"]} priceScale={{ type: "percentage" }} stickyDrawings={false} />);
     act(() => ref.current!.startDrawing("segment"));
     const c = lastChart();
-    // Give the drawing some points, as a finished overlay would have.
+    // Give the drawing some points and finish it — an armed-but-unplaced
+    // overlay is deliberately excluded from snapshots (#102).
     c._overlays.find((o: any) => o.name === "segment").points = [{ value: 1 }, { value: 2 }];
+    act(() => c._overlays.at(-1).onDrawEnd({}));
 
     const state = ref.current!.exportState();
     expect(state.version).toBe(1);
@@ -945,7 +980,7 @@ describe("SonrChart — study templates (#6)", () => {
 describe("SonrChart — undo/redo (#16)", () => {
   it("tracks drawing history and restores on undo/redo", () => {
     const ref = createRef<SonrChartHandle>();
-    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} stickyDrawings={false} />);
     const c = lastChart();
     expect(ref.current!.canUndo()).toBe(false);
 
@@ -999,7 +1034,7 @@ describe("SonrChart — keyboard shortcuts (#14)", () => {
 
   it("Cmd/Ctrl+Z undoes and Shift+Z redoes drawings", () => {
     const ref = createRef<SonrChartHandle>();
-    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} stickyDrawings={false} />);
     const c = lastChart();
     const draw = () => { act(() => ref.current!.startDrawing("segment")); c._overlays.at(-1).onDrawEnd({}); };
     draw();
@@ -1025,7 +1060,7 @@ describe("SonrChart — keyboard shortcuts (#14)", () => {
 
   it("Delete clears drawings when no tool is armed", () => {
     const ref = createRef<SonrChartHandle>();
-    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} stickyDrawings={false} />);
     const c = lastChart();
     act(() => ref.current!.startDrawing("segment"));
     c._overlays.at(-1).onDrawEnd({}); // finished → not armed
@@ -1058,7 +1093,7 @@ describe("SonrChart — keyboard shortcuts (#14)", () => {
   it("ignores shortcuts typed into an input (does not hijack typing)", () => {
     const onShortcut = vi.fn();
     const ref = createRef<SonrChartHandle>();
-    render(<SonrChart ref={ref} symbol="A" dataSource={source()} onShortcut={onShortcut} />);
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} onShortcut={onShortcut} stickyDrawings={false} />);
     const c = lastChart();
     act(() => ref.current!.startDrawing("segment"));
     c._overlays.at(-1).onDrawEnd({});
@@ -1074,7 +1109,7 @@ describe("SonrChart — keyboard shortcuts (#14)", () => {
   it("does nothing when keyboard is disabled", () => {
     const onShortcut = vi.fn();
     const ref = createRef<SonrChartHandle>();
-    render(<SonrChart ref={ref} symbol="A" dataSource={source()} keyboard={false} onShortcut={onShortcut} />);
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} keyboard={false} onShortcut={onShortcut} stickyDrawings={false} />);
     const c = lastChart();
     act(() => ref.current!.startDrawing("segment"));
     c._overlays.at(-1).onDrawEnd({});
@@ -1088,7 +1123,7 @@ describe("SonrChart — keyboard shortcuts (#14)", () => {
 describe("SonrChart — undo/redo tail truncation (#16)", () => {
   it("drops the redo tail when a new drawing is made after an undo", () => {
     const ref = createRef<SonrChartHandle>();
-    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} stickyDrawings={false} />);
     const c = lastChart();
     const draw = () => { act(() => ref.current!.startDrawing("segment")); c._overlays.at(-1).onDrawEnd({}); };
     draw();

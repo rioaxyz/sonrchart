@@ -102,6 +102,10 @@ export function useDrawings(
   getMode: () => OverlayMode,
   baseTheme: Theme,
   onTextPlaced?: (id: string, point: Partial<Point>) => void,
+  // Sticky tools (#102): when true (the default), every tool re-arms after a
+  // placement — draw ray after ray until it's toggled off — instead of
+  // one-shot deactivating. Brush/highlighter are sticky regardless.
+  getSticky: () => boolean = () => true,
 ): DrawingsApi {
   // Undo/redo history (#16). stack[ptr] is the current drawing set; `restoring`
   // suppresses history capture while overlays are recreated.
@@ -208,7 +212,11 @@ export function useDrawings(
     };
 
     const snapshotDrawings = (): Snap =>
-      (chartRef.current?.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? []).map((o) => ({
+      (chartRef.current?.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? [])
+        // Never snapshot the armed-but-unplaced overlay (#102) — restoring it
+        // (undo, export, per-symbol persistence) would plant a ghost drawing.
+        .filter((o) => o.id !== progressIdRef.current)
+        .map((o) => ({
         name: o.name,
         points: o.points,
         styles: o.styles,
@@ -230,6 +238,15 @@ export function useDrawings(
     };
 
     const beginDrawing = (tool: string) => {
+      // Switching tools (or re-arming) with an armed-but-unplaced overlay
+      // outstanding: drop it first so it can't linger invisibly (#102). The
+      // just-placed overlay is safe — onDrawEnd nulls progressId before this.
+      if (progressIdRef.current) {
+        restoringRef.current = true; // not a history step
+        chartRef.current?.removeOverlay({ id: progressIdRef.current });
+        restoringRef.current = false;
+        progressIdRef.current = null;
+      }
       // Brush/highlighter are one continuous-draw overlay (`sonrBrush`) styled by
       // extendData; magnet snapping is meaningless for freehand, so force normal.
       const brush = isBrushTool(tool);
@@ -247,10 +264,11 @@ export function useDrawings(
           pushHistory();
           // A freshly placed drawing inherits the current lock/hide state.
           applyDrawingFlags();
-          // Brush/highlighter are "sticky": stay armed and immediately re-arm for
-          // the next stroke, so you can draw repeatedly without re-clicking the
-          // toolbar. The tool stays active until toggled off (cancelDrawing).
-          if (brush) beginDrawing(tool);
+          // Sticky tools (#102): stay armed and immediately re-arm for the next
+          // drawing, so you can draw repeatedly without re-clicking the toolbar.
+          // The tool stays active until toggled off (cancelDrawing / Escape).
+          // Brush/highlighter are sticky regardless of the setting.
+          if (brush || getSticky()) beginDrawing(tool);
           else setActiveTool(null);
           // Text: hand the placed anchor to the host so it can show an inline
           // input and store the typed string in the overlay's extendData.

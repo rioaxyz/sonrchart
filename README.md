@@ -33,7 +33,9 @@ bars come from.
 - **Compare / multi-symbol overlay.** Overlay other symbols, ratio-scaled to
   share a starting price.
 - **Drawing tools.** Curated trend/ray/Fibonacci/channel/note tools with a
-  `DrawingToolbar`, magnet-to-OHLC snapping, and **undo/redo**.
+  `DrawingToolbar`, magnet-to-OHLC snapping, and **undo/redo**. Tools are
+  sticky: each stays armed after a placement for repeated drawing until
+  toggled off (set `stickyDrawings={false}` for one-shot tools).
 - **Price scale modes.** Normal / percentage / logarithmic, invert, labels
   inside.
 - **Persistence & templates.** Drawings persist per ticker symbol — each symbol
@@ -165,6 +167,7 @@ function TradingChart({ source }: { source: DataSource }) {
 | `orderLines` | `OrderLine[]` | Draggable order/position lines; `onMove(price, phase)` fires as the user drags. |
 | `priceScale` | `{ type?, invert?, inside? }` | Scale mode — `"normal" \| "percentage" \| "logarithm"`, plus invert / labels-inside. |
 | `magnet` | `boolean \| "weak" \| "strong"` | Snap drawing points to nearby OHLC. |
+| `stickyDrawings` | `boolean` | Keep a drawing tool armed after each placement until toggled off (Escape / toolbar). Default `true`; `false` restores one-shot tools. |
 | `candleStyle` | `"candle" \| "hollow" \| "hollow_up" \| "ohlc" \| "area" \| "heikin_ashi"` | Candle rendering style (Heikin Ashi transforms the data). |
 | `compareSeries` | `{ symbol, color? }[]` | Overlay other symbols on the main pane, ratio-scaled to share a start price. |
 | `barCount` | `number` | Bars requested on load. Default 500. |
