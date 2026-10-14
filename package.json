@@ -9,7 +9,7 @@
   "author": "Rioa, LLC",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rioaxyz/sonrchart.git"
+    "url": "git+https://github.com/rioaxyz/sonrchart.git"
   },
   "keywords": [
     "charts",
