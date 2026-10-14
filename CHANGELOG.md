@@ -4,6 +4,9 @@ All notable changes to `@rioaxyz/sonrchart`, per **published npm version**. Each
 
 ## [Unreleased]
 
+### Added
+- Per-tool drawing styles (#103): the settings dialog's Drawing section gains a "Line & shape tools" pen — stroke color, solid/dashed line style, and width — editable for all tools at once or per tool, applied to new drawings (shapes take a faint fill tint of the stroke). Driven by `get`/`set`/`subscribeDrawingStyle` on the chart handle; `DrawingStyle`, `toOverlayStyle`, and `DEFAULT_DRAWING_STYLE` are exported. Brush, highlighter, and text keep their existing dedicated controls.
+
 ### Changed
 - Drawing tools are now sticky (#102): every tool stays armed after a placement — draw ray after ray without re-selecting — until toggled off in the toolbar or via Escape. Opt out with `stickyDrawings={false}` on `SonrChart` for the old one-shot behavior (brush/highlighter remain sticky regardless). Armed-but-unplaced overlays are now excluded from snapshots (undo/export/per-symbol persistence), and switching tools mid-arm drops the stale armed overlay.
 - The volume-trend default lookback is now 2 bars (was 3) — `DEFAULT_VOLUME_TREND_BARS`; still editable live in the settings dialog or via `setVolumeTrendBars` (#101).

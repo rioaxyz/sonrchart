@@ -22,6 +22,9 @@ function fakeChart(calcParamsByName: Record<string, number[]> = {}) {
 
 function handleWith(chart: any, indicators: string[] = []): SonrChartHandle {
   const brush: any = { brush: { color: "#e6ebe9", size: 2 }, highlighter: { color: "rgba(245,214,66,0.35)", size: 14 } };
+  let penDefault: any = null;
+  const penByTool: Record<string, any> = {};
+  const penSubs = new Set<() => void>();
   let locked = false;
   let visible = true;
   let trendBars = 3;
@@ -30,6 +33,21 @@ function handleWith(chart: any, indicators: string[] = []): SonrChartHandle {
   return {
     chart: () => chart,
     listIndicators: () => indicators,
+    // #103 per-tool pen — a faithful little store so the UI round-trips.
+    getDrawingStyle: (tool?: string) => {
+      const s = tool === undefined ? penDefault : (penByTool[tool] ?? penDefault);
+      return s ? { ...s } : null;
+    },
+    setDrawingStyle: vi.fn((style: any, tool?: string) => {
+      if (tool === undefined) penDefault = style ? { ...style } : null;
+      else if (style) penByTool[tool] = { ...style };
+      else delete penByTool[tool];
+      penSubs.forEach((cb) => cb());
+    }),
+    subscribeDrawingStyle: (cb: () => void) => {
+      penSubs.add(cb);
+      return () => penSubs.delete(cb);
+    },
     getBrushStyle: (t: string) => brush[t],
     setBrushStyle: vi.fn((t: string, s: any) => {
       brush[t] = s;
@@ -169,10 +187,32 @@ describe("SettingsModal (#settings)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Drawing" }));
     expect(screen.getByText("Brush")).toBeInTheDocument();
     expect(screen.getByText("Highlighter")).toBeInTheDocument();
-    // The brush width input (spinbutton) seeded to 2 → bump it.
+    // Spinbuttons in section order: pen width (#103), brush, highlighter, text.
     const widths = screen.getAllByRole("spinbutton") as HTMLInputElement[];
-    fireEvent.input(widths[0], { target: { value: "8" } });
+    fireEvent.input(widths[1], { target: { value: "8" } });
     expect(h.setBrushStyle).toHaveBeenCalledWith("brush", expect.objectContaining({ size: 8 }));
+  });
+
+  it("edits the line/shape pen (#103): line style, per-tool width, and reset", async () => {
+    const h = handleWith(fakeChart());
+    render(<SettingsModal chartRef={ref(h)} open onClose={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Drawing" }));
+    expect(screen.getByText("Line & shape tools")).toBeInTheDocument();
+
+    // Comboboxes in pen-block order: Tool, then Line style.
+    const selects = screen.getAllByRole("combobox");
+    await userEvent.selectOptions(selects[1], "dashed");
+    expect(h.setDrawingStyle).toHaveBeenCalledWith(expect.objectContaining({ lineStyle: "dashed" }), undefined);
+
+    // Pick a specific tool → edits land as that tool's override.
+    await userEvent.selectOptions(selects[0], "rayLine");
+    const widths = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    fireEvent.input(widths[0], { target: { value: "4" } });
+    expect(h.setDrawingStyle).toHaveBeenCalledWith(expect.objectContaining({ size: 4 }), "rayLine");
+
+    // A customized pen shows Reset, which clears back to the default.
+    await userEvent.click(screen.getByRole("button", { name: "Reset to default" }));
+    expect(h.setDrawingStyle).toHaveBeenCalledWith(null, "rayLine");
   });
 
   it("edits pre-market / after-hours session color + opacity via setSessions", async () => {

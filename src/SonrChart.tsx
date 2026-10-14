@@ -18,6 +18,7 @@ import { registerShapeOverlays } from "./shapes";
 import { registerExtendedDrawings } from "./drawingsExtended";
 import { registerTradeReview } from "./tradeReview";
 import { registerTextOverlay, type TextStyle } from "./textOverlay";
+import type { DrawingStyle } from "./drawingStyle";
 import { formatWithUnit, type QuoteFormat } from "./symbolFormat";
 import { volumeTrend, DEFAULT_VOLUME_TREND_BARS, type VolumeTrend } from "./volumeTrend";
 import type {
@@ -234,6 +235,15 @@ export interface SonrChartHandle {
   getTextStyle(): TextStyle;
   setTextStyle(style: TextStyle): void;
   subscribeTextStyle(cb: () => void): () => void;
+  /** The pen (color / solid-dashed / width) new drawings of `tool` use (#103)
+   *  — its override, else the all-tools default, else null (theme default).
+   *  Omit `tool` for the all-tools default itself. */
+  getDrawingStyle(tool?: DrawingTool): DrawingStyle | null;
+  /** Set the pen for new drawings of `tool` (omit for all tools); null clears
+   *  back to the theme default. Existing drawings keep their style. */
+  setDrawingStyle(style: DrawingStyle | null, tool?: DrawingTool): void;
+  /** Subscribe to drawing-style changes (for a settings UI). Returns unsub. */
+  subscribeDrawingStyle(cb: () => void): () => void;
   // Drawing management tooling (#35) ---------------------------------------
   /** Lock every user drawing (non-interactive) or unlock them. New drawings
    *  inherit the current lock state. */
@@ -933,6 +943,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       getTextStyle: () => drawings.getTextStyle(),
       setTextStyle: (style) => drawings.setTextStyle(style),
       subscribeTextStyle: (cb) => drawings.subscribeTextStyle(cb),
+      getDrawingStyle: (tool) => drawings.getDrawingStyle(tool),
+      setDrawingStyle: (style, tool) => drawings.setDrawingStyle(style, tool),
+      subscribeDrawingStyle: (cb) => drawings.subscribeDrawingStyle(cb),
       // Drawing management tooling (#35) -----------------------------------
       setDrawingsLocked: (locked) => drawings.setDrawingsLocked(locked),
       getDrawingsLocked: () => drawings.getDrawingsLocked(),
