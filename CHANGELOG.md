@@ -4,6 +4,12 @@ All notable changes to `@rioaxyz/sonrchart`, per **published npm version**. Each
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.7.0] — 2026-10-14
+
+Published 2026-10-14 17:53 UTC.
+
 ### Added
 - Per-tool drawing styles (#103): the settings dialog's Drawing section gains a "Line & shape tools" pen — stroke color, solid/dashed line style, and width — editable for all tools at once or per tool, applied to new drawings (shapes take a faint fill tint of the stroke). Driven by `get`/`set`/`subscribeDrawingStyle` on the chart handle; `DrawingStyle`, `toOverlayStyle`, and `DEFAULT_DRAWING_STYLE` are exported. Brush, highlighter, and text keep their existing dedicated controls.
 
@@ -11,11 +17,21 @@ All notable changes to `@rioaxyz/sonrchart`, per **published npm version**. Each
 - Drawing tools are now sticky (#102): every tool stays armed after a placement — draw ray after ray without re-selecting — until toggled off in the toolbar or via Escape. Opt out with `stickyDrawings={false}` on `SonrChart` for the old one-shot behavior (brush/highlighter remain sticky regardless). Armed-but-unplaced overlays are now excluded from snapshots (undo/export/per-symbol persistence), and switching tools mid-arm drops the stale armed overlay.
 - The volume-trend default lookback is now 2 bars (was 3) — `DEFAULT_VOLUME_TREND_BARS`; still editable live in the settings dialog or via `setVolumeTrendBars` (#101).
 
+## [0.6.0] — 2026-10-13
+
+Published 2026-10-13 01:37 UTC. (An interim 0.5.1 bump (#98) was never published; its content ships here.)
+
 ### Added
 - Volume Surge pressure side (#99): each classified bar carries `side: "buying" | "selling" | "neutral"`, inferred from Close Location Value (where the bar closed within its range — the A/D Money Flow Multiplier, with a ±0.2 dead-zone so dojis stay neutral). Surge bars color by side (green / red / amber) and the tooltip reads "Surging (buying)" / "(selling)". Pressure, not positioning — OHLCV can't distinguish longs from shorts. `closeLocationValue`, `surgeSide`, `volumeSurgeColorFor`, and the extended palette are exported.
 - Per-symbol drawing persistence (#97): a chart's drawings now survive interval, price-scale, and Heikin-Ashi switches, and each ticker symbol keeps its own isolated drawing set — switch from AAPL to TSLA and back, and AAPL's drawings return. With a `persistenceKey` the sets also survive unmounts; `DrawingStore`, `drawingStoreFor`, and `clearPersistedDrawings` are exported.
+
+## [0.5.0] — 2026-10-10
+
+Published 2026-10-10 02:29 UTC.
+
+### Added
 - `persistenceKey` prop on `SonrChart` and `SonrChartShell` (#94): carries the user's indicator set across full unmounts of the component — for hosts that remount the chart on symbol changes (`key={symbol}`, or a loading state that swaps it out) — on top of the existing in-instance persistence across symbol/interval/scale switches. The registry is written through on every indicator change; `save`/`load`/`clearPersistedIndicators` are exported.
-- This changelog, the `v0.x.y` release tags, and the README Releases section (#92, #93).
+- This changelog, the `v0.x.y` release tags, and the README Releases section (#92, #93, #95).
 
 ## [0.4.0] — 2026-10-10
 
@@ -59,7 +75,10 @@ Published 2026-10-01 00:35 UTC as the first public scoped release, `@rioaxyz/son
 
 Initial feature set, including: candlestick charting on KLineChart 10 with dark/light/custom themes; drawing tools (built-in plus brush, shapes, text, and the extended family) with undo/redo, templates, lock/hide, and an object tree; indicators with study templates and a config menu; session tinting, pattern markers, watermark, compare series, and the trade-review box overlay (#76) sharing the candle pane under an explicit z-order (#75); static price lines and draggable order lines; price-scale modes and axis labels; symbol search, resolution, and metadata; timezone and custom-resolution support; snapshots, save/load state, and keyboard shortcuts; `ChartHeader` / `ChartToolbar` / `SonrChartShell` chrome and the homegrown icon set.
 
-[Unreleased]: https://github.com/rioaxyz/sonrchart/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/rioaxyz/sonrchart/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/rioaxyz/sonrchart/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/rioaxyz/sonrchart/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/rioaxyz/sonrchart/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/rioaxyz/sonrchart/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/rioaxyz/sonrchart/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/rioaxyz/sonrchart/compare/v0.2.0...v0.3.0
