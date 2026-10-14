@@ -109,6 +109,11 @@ export interface SonrChartProps {
   priceLabels?: Partial<PriceLabels>;
   /** Magnet mode for drawing tools — snap points to nearby OHLC. (#13) */
   magnet?: Magnet;
+  /** Keep a drawing tool armed after each placement (#102), so several rays /
+   *  lines / shapes go down in a row; the tool stays active until clicked off
+   *  in the toolbar or Escape. Default true. `false` restores one-shot tools
+   *  (brush/highlighter stay sticky regardless). */
+  stickyDrawings?: boolean;
   /** Candle rendering style — solid/hollow/ohlc/area/heikin_ashi. (#1) */
   candleStyle?: CandleStyle;
   /** Comparison symbols overlaid on the main pane, ratio-scaled. (#9) */
@@ -462,6 +467,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     priceScale: priceScaleProp,
     priceLabels: priceLabelsProp,
     magnet,
+    stickyDrawings = true,
     candleStyle: candleStyleProp,
     compareSeries,
     barCount = 500,
@@ -704,7 +710,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   // User-drawing subsystem (#3/#16/#35): armed tool, undo/redo history, lock/hide
   // flags, named templates, and brush styles. Owns its own refs; reads the live
   // magnet mode via the getter and touches only the shared chart ref.
-  const drawings = useDrawings(chartRef, () => magnetMode(magnetRef.current), baseTheme, onTextPlaced);
+  const stickyDrawingsRef = useRef(stickyDrawings);
+  stickyDrawingsRef.current = stickyDrawings;
+  const drawings = useDrawings(chartRef, () => magnetMode(magnetRef.current), baseTheme, onTextPlaced, () => stickyDrawingsRef.current);
 
   // Commit the typed label into the overlay's extendData (empty → discard the
   // anchor), or cancel (discard). Both close the inline input.
