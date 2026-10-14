@@ -3,7 +3,9 @@ import { createPortal } from "react-dom";
 import type { SonrChartHandle } from "./SonrChart";
 import type { BrushStyle, BrushTool } from "./brush";
 import type { TextStyle } from "./textOverlay";
-import type { SessionTint, WatermarkOptions } from "./types";
+import { DEFAULT_DRAWING_STYLE, type DrawingLineStyle, type DrawingStyle } from "./drawingStyle";
+import { DEFAULT_DRAWING_TOOLS, EXTENDED_DRAWING_TOOLS } from "./drawings";
+import type { DrawingTool, SessionTint, WatermarkOptions } from "./types";
 import { DEFAULT_SESSION_COLORS } from "./indicators";
 import { ensureDefaultStyles } from "./defaultStyles";
 import { mergeLabels, type Labels } from "./labels";
@@ -18,6 +20,12 @@ import { DEFAULT_VOLUME_TREND_BARS } from "./volumeTrend";
 type Section = "candles" | "indicators" | "grid" | "sessions" | "drawing" | "drawings";
 
 const SECTION_KEYS: Section[] = ["candles", "indicators", "grid", "sessions", "drawing", "drawings"];
+
+// Tools the pen settings (#103) cover: every line/shape tool. Brush,
+// highlighter, and text have their own dedicated style sections.
+const PEN_TOOLS = [...DEFAULT_DRAWING_TOOLS, ...EXTENDED_DRAWING_TOOLS].filter(
+  (t) => t.tool !== "brush" && t.tool !== "highlighter" && t.tool !== "text",
+);
 
 const BRUSH_TOOLS: { tool: BrushTool; label: string }[] = [
   { tool: "brush", label: "Brush" },
@@ -87,6 +95,10 @@ export function SettingsModal({
     highlighter: { color: "rgba(245,214,66,0.35)", size: 14 },
   });
   const [textStyle, setTextStyleState] = useState<TextStyle>({ color: "#2962ff", size: 12 });
+  // Pen settings for line/shape tools (#103): "" edits the all-tools default.
+  const [styleTool, setStyleTool] = useState<"" | DrawingTool>("");
+  const [drawingStyle, setDrawingStyleState] = useState<DrawingStyle>({ ...DEFAULT_DRAWING_STYLE });
+  const [drawingStyleSet, setDrawingStyleSet] = useState(false);
   // Session tint (extended-hours) — on/off + per-session color (rgba w/ opacity).
   const [sessionsOn, setSessionsOn] = useState(false);
   const [sessionCols, setSessionCols] = useState<{ premarket: string; afterhours: string }>({ ...DEFAULT_SESSION_COLORS });
@@ -95,6 +107,21 @@ export function SettingsModal({
   const [drawingsHidden, setDrawingsHidden] = useState(false);
   const [templates, setTemplates] = useState<string[]>([]);
   const [templateName, setTemplateName] = useState("");
+
+  // Pen settings (#103): re-read whenever the dialog opens, the edited tool
+  // changes, or the style changes elsewhere. Must sit BEFORE the open gate's
+  // early return below (Rules of Hooks).
+  useEffect(() => {
+    if (!open) return;
+    const read = () => {
+      const s = chartRef.current?.getDrawingStyle?.(styleTool || undefined) ?? null;
+      setDrawingStyleSet(s !== null);
+      setDrawingStyleState(s ?? { ...DEFAULT_DRAWING_STYLE });
+    };
+    read();
+    const unsub = chartRef.current?.subscribeDrawingStyle?.(read);
+    return () => unsub?.();
+  }, [open, styleTool, chartRef]);
 
   // Seed from the chart's current styles each time the dialog opens.
   useEffect(() => {
@@ -222,6 +249,10 @@ export function SettingsModal({
       return { ...m, [name]: next };
     });
   };
+  const applyDrawingStyle = (s: DrawingStyle) => {
+    chartRef.current?.setDrawingStyle?.(s, styleTool || undefined);
+  };
+
   const applyBrush = (tool: BrushTool, style: BrushStyle) => {
     chartRef.current?.setBrushStyle?.(tool, style);
     setBrushStyles((m) => ({ ...m, [tool]: style }));
@@ -447,6 +478,53 @@ export function SettingsModal({
             {section === "drawing" && (
               <>
                 <p className="sonr-set-note">Stroke settings for the freehand brush &amp; highlighter and the text label — applied to what you draw next.</p>
+                {/* Pen for line/shape tools (#103): color, line style, width —
+                    per tool or the all-tools default. Applies to NEW drawings. */}
+                <div className="sonr-set-ind">
+                  <div className="sonr-set-subhead">Line &amp; shape tools</div>
+                  <Row label="Tool">
+                    <select value={styleTool} onChange={(e) => setStyleTool(e.target.value as "" | DrawingTool)}>
+                      <option value="">All tools (default)</option>
+                      {PEN_TOOLS.map((t) => (
+                        <option key={t.tool} value={t.tool}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Row>
+                  <Row label="Color">
+                    <input type="color" value={drawingStyle.color} onChange={(e) => applyDrawingStyle({ ...drawingStyle, color: e.target.value })} />
+                  </Row>
+                  <Row label="Line style">
+                    <select
+                      value={drawingStyle.lineStyle}
+                      onChange={(e) => applyDrawingStyle({ ...drawingStyle, lineStyle: e.target.value as DrawingLineStyle })}
+                    >
+                      <option value="solid">Solid</option>
+                      <option value="dashed">Dashed</option>
+                    </select>
+                  </Row>
+                  <Row label="Width (px)">
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={drawingStyle.size}
+                      onChange={(e) => applyDrawingStyle({ ...drawingStyle, size: Math.max(1, Math.min(10, Number(e.target.value) || 1)) })}
+                    />
+                  </Row>
+                  {drawingStyleSet && (
+                    <Row label="Customized">
+                      <button
+                        type="button"
+                        aria-label="Reset to default"
+                        onClick={() => chartRef.current?.setDrawingStyle?.(null, styleTool || undefined)}
+                      >
+                        Reset to default
+                      </button>
+                    </Row>
+                  )}
+                </div>
                 {BRUSH_TOOLS.map(({ tool, label }) => {
                   const st = brushStyles[tool];
                   const { hex: h, alpha } = parseColor(st.color);

@@ -712,6 +712,68 @@ describe("SonrChart — drawing tools & magnet (#3, #13)", () => {
   });
 });
 
+describe("SonrChart — per-tool drawing styles (#103)", () => {
+  const PEN = { color: "#ff0000", lineStyle: "dashed" as const, size: 3 };
+
+  it("new drawings carry no styles until a pen is set (theme default)", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    expect(ref.current!.getDrawingStyle()).toBeNull();
+    act(() => ref.current!.startDrawing("segment"));
+    expect(lastChart()._overlays.at(-1).styles).toBeUndefined();
+  });
+
+  it("the all-tools pen styles every subsequent line/shape drawing", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    act(() => ref.current!.setDrawingStyle(PEN));
+    act(() => ref.current!.startDrawing("rayLine"));
+    expect(lastChart()._overlays.at(-1).styles.line).toEqual({ color: "#ff0000", size: 3, style: "dashed" });
+    act(() => ref.current!.startDrawing("rectangle"));
+    expect(lastChart()._overlays.at(-1).styles.rect).toMatchObject({ borderColor: "#ff0000", borderSize: 3, borderStyle: "dashed" });
+  });
+
+  it("a per-tool pen beats the default; other tools keep the default", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    act(() => {
+      ref.current!.setDrawingStyle(PEN);
+      ref.current!.setDrawingStyle({ color: "#00ff00", lineStyle: "solid", size: 1 }, "segment");
+    });
+    expect(ref.current!.getDrawingStyle("segment")!.color).toBe("#00ff00");
+    expect(ref.current!.getDrawingStyle("rayLine")!.color).toBe("#ff0000"); // falls back to default
+    act(() => ref.current!.startDrawing("segment"));
+    expect(lastChart()._overlays.at(-1).styles.line.color).toBe("#00ff00");
+    // Clearing the override falls back to the default again.
+    act(() => ref.current!.setDrawingStyle(null, "segment"));
+    expect(ref.current!.getDrawingStyle("segment")!.color).toBe("#ff0000");
+    act(() => ref.current!.setDrawingStyle(null));
+    expect(ref.current!.getDrawingStyle()).toBeNull();
+  });
+
+  it("brush and text keep their own stores — the pen never touches them", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    act(() => ref.current!.setDrawingStyle(PEN));
+    act(() => ref.current!.startDrawing("brush"));
+    expect(lastChart()._overlays.at(-1).styles).toBeUndefined();
+    act(() => ref.current!.startDrawing("text"));
+    expect(lastChart()._overlays.at(-1).styles).toBeUndefined();
+  });
+
+  it("notifies style subscribers and honors unsubscribe", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
+    const cb = vi.fn();
+    const unsub = ref.current!.subscribeDrawingStyle(cb);
+    act(() => ref.current!.setDrawingStyle(PEN));
+    expect(cb).toHaveBeenCalledTimes(1);
+    unsub();
+    act(() => ref.current!.setDrawingStyle(null));
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("SonrChart — drawing management tooling (#35)", () => {
   it("lock/hide all call overrideOverlay on the drawing group and mirror the state", () => {
     const ref = createRef<SonrChartHandle>();

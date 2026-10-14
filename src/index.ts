@@ -75,6 +75,8 @@ export { DEFAULT_LABELS, mergeLabels } from "./labels";
 export type { Labels } from "./labels";
 export { savePersistedIndicators, loadPersistedIndicators, clearPersistedIndicators } from "./indicatorPersistence";
 export { DrawingStore, drawingStoreFor, clearPersistedDrawings } from "./drawingPersistence";
+export { toOverlayStyle, withAlpha, DEFAULT_DRAWING_STYLE } from "./drawingStyle";
+export type { DrawingStyle, DrawingLineStyle } from "./drawingStyle";
 export { volumeTrend, DEFAULT_VOLUME_TREND_BARS } from "./volumeTrend";
 export type { VolumeTrend } from "./volumeTrend";
 export {

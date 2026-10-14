@@ -11,6 +11,7 @@ import { USER_DRAWING_GROUP, drawingLabel } from "./drawings";
 import { TEXT_OVERLAY, DEFAULT_TEXT_STYLE, type TextStyle } from "./textOverlay";
 import { DrawingTemplateStore, type DrawingSnapshot, type DrawingSnapshotItem } from "./drawingTemplates";
 import { BRUSH_OVERLAY, brushStyle, isBrushTool, type BrushStyle, type BrushTool } from "./brush";
+import { toOverlayStyle, type DrawingStyle } from "./drawingStyle";
 import type { DrawingRow, DrawingTool, Theme } from "./types";
 
 export interface DrawingsApi {
@@ -58,6 +59,17 @@ export interface DrawingsApi {
   getBrushStyle(tool: BrushTool): BrushStyle;
   setBrushStyle(tool: BrushTool, style: BrushStyle): void;
   subscribeBrush(cb: () => void): () => void;
+  // Per-tool drawing styles (#103) ---------------------------------------------
+  /** The pen (color / line style / width) new drawings of `tool` will use —
+   *  its own override, else the all-tools default, else null (theme default).
+   *  Omit `tool` for the all-tools default itself. */
+  getDrawingStyle(tool?: DrawingTool): DrawingStyle | null;
+  /** Set the pen for new drawings of `tool` (omit for the all-tools default);
+   *  pass null to clear back to the theme default. Existing drawings keep the
+   *  style they were drawn with. */
+  setDrawingStyle(style: DrawingStyle | null, tool?: DrawingTool): void;
+  /** Subscribe to drawing-style changes (for a settings UI). Returns unsub. */
+  subscribeDrawingStyle(cb: () => void): () => void;
   /** Default color/size applied to new text labels. */
   getTextStyle(): TextStyle;
   setTextStyle(style: TextStyle): void;
@@ -125,6 +137,12 @@ export function useDrawings(
   const hiddenRef = useRef(false);
   const visibleSubs = useRef(new Set<(visible: boolean) => void>());
   const templatesRef = useRef(new DrawingTemplateStore());
+
+  // Per-tool drawing styles (#103): an all-tools default plus per-tool
+  // overrides. null/absent = untouched → new drawings keep the theme default.
+  const drawingStyleRef = useRef<DrawingStyle | null>(null);
+  const toolStylesRef = useRef(new Map<DrawingTool, DrawingStyle>());
+  const drawingStyleSubs = useRef(new Set<() => void>());
 
   // Copy/paste clipboard + the currently-selected drawing (#35). Selection is
   // tracked from each user overlay's onSelected/onDeselected so Cmd/Ctrl+C knows
@@ -251,12 +269,16 @@ export function useDrawings(
       // extendData; magnet snapping is meaningless for freehand, so force normal.
       const brush = isBrushTool(tool);
       const isText = tool === TEXT_OVERLAY;
+      // The pen for this tool (#103): its override, else the all-tools
+      // default; untouched → no styles, the theme default applies.
+      const pen = brush || isText ? null : (toolStylesRef.current.get(tool as DrawingTool) ?? drawingStyleRef.current);
       const id = chartRef.current?.createOverlay({
         name: brush ? BRUSH_OVERLAY : tool,
         groupId: USER_DRAWING_GROUP,
         mode: brush ? "normal" : getMode(),
         ...(brush ? { extendData: { ...brushStylesRef.current[tool as BrushTool] } } : {}),
         ...(isText ? { extendData: { text: "", ...textStyleRef.current } } : {}),
+        ...(pen ? { styles: toOverlayStyle(pen) } : {}),
         ...selectHandlers,
         onDrawEnd: (e) => {
           // Drawing placed: the overlay is now a finished drawing, not in progress.
@@ -403,6 +425,20 @@ export function useDrawings(
         const drawings = chartRef.current?.getOverlays({ groupId: USER_DRAWING_GROUP }) ?? [];
         const last = drawings[drawings.length - 1];
         if (last) createFromSnapshot({ name: last.name, points: (last.points ?? []).map((p) => ({ ...p })), styles: last.styles, mode: last.mode, extendData: last.extendData });
+      },
+      getDrawingStyle: (tool) => {
+        const s = tool === undefined ? drawingStyleRef.current : (toolStylesRef.current.get(tool) ?? drawingStyleRef.current);
+        return s ? { ...s } : null;
+      },
+      setDrawingStyle: (style, tool) => {
+        if (tool === undefined) drawingStyleRef.current = style ? { ...style } : null;
+        else if (style) toolStylesRef.current.set(tool, { ...style });
+        else toolStylesRef.current.delete(tool);
+        drawingStyleSubs.current.forEach((cb) => cb());
+      },
+      subscribeDrawingStyle: (cb) => {
+        drawingStyleSubs.current.add(cb);
+        return () => drawingStyleSubs.current.delete(cb);
       },
       getBrushStyle: (tool) => ({ ...brushStylesRef.current[tool] }),
       setBrushStyle: (tool, style) => {

@@ -35,7 +35,9 @@ bars come from.
 - **Drawing tools.** Curated trend/ray/Fibonacci/channel/note tools with a
   `DrawingToolbar`, magnet-to-OHLC snapping, and **undo/redo**. Tools are
   sticky: each stays armed after a placement for repeated drawing until
-  toggled off (set `stickyDrawings={false}` for one-shot tools).
+  toggled off (set `stickyDrawings={false}` for one-shot tools). Every tool's
+  pen — color, solid/dashed, width — is configurable in the settings dialog,
+  per tool or for all tools at once (`setDrawingStyle` on the handle).
 - **Price scale modes.** Normal / percentage / logarithmic, invert, labels
   inside.
 - **Persistence & templates.** Drawings persist per ticker symbol — each symbol
