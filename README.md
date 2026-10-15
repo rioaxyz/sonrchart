@@ -156,7 +156,7 @@ function TradingChart({ source }: { source: DataSource }) {
 |---|---|---|
 | `symbol` | `string` | Ticker to chart. |
 | `interval` | `Interval` | `"10S" \| "30S" \| "1" \| "5" \| "15" \| "30" \| "60" \| "D"` (or any string your DataSource understands). Default `"1"`. |
-| `dataSource` | `DataSource` | `getBars(symbol, interval, count)` + optional `subscribe(...)`. The only integration seam. |
+| `dataSource` | `DataSource` | `getBars(symbol, interval, count)` + optional `subscribe(...)` and `getBarsBefore(...)` (scroll-back pagination: pan to the left edge to page in older history). The only integration seam. |
 | `theme` | `"dark" \| "light"` | Default `"dark"` (the Sonr console palette). |
 | `styles` | `DeepPartial<Styles>` | KLineChart style overrides merged over the theme. |
 | `indicators` | `(string \| IndicatorSpec)[]` | Indicators to show on first load — a name (`"VOL"`) or a spec (`{ name, pane: "main" \| "new", calcParams }`). Default `["VOL"]`. Runtime changes (menu/handle) persist across symbol and interval switches. |

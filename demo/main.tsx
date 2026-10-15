@@ -40,6 +40,8 @@ function Demo() {
     };
     return {
       getBars: (sym: string, iv: Interval, n: number) => get(sym).getBars(sym, iv, n),
+      // Scroll-back pagination (#109): pan to the left edge to page in older bars.
+      getBarsBefore: (sym: string, iv: Interval, n: number, before: number) => get(sym).getBarsBefore!(sym, iv, n, before),
       subscribe: (sym: string, iv: Interval, cb: (b: any) => void) => get(sym).subscribe!(sym, iv, cb),
     };
   }, []);

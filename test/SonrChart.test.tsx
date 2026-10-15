@@ -103,7 +103,7 @@ import { clearPersistedIndicators, loadPersistedIndicators } from "../src/indica
 import { clearPersistedDrawings } from "../src/drawingPersistence";
 import { registerTheme } from "../src/theme";
 import { utils } from "klinecharts";
-import type { DataSource } from "../src/types";
+import type { Bar, DataSource } from "../src/types";
 
 const bars = [
   { time: 1000, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 },
@@ -145,7 +145,8 @@ describe("SonrChart — initialization", () => {
         { timestamp: 1000, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 },
         { timestamp: 2000, open: 1.5, high: 2.2, low: 1.4, close: 2.0, volume: 20 },
       ],
-      false,
+      // No getBarsBefore on this source → scroll-back paging stays off (#109).
+      { forward: false, backward: false },
     );
   });
 
@@ -315,6 +316,127 @@ describe("SonrChart — pattern markers (#5)", () => {
     const c = lastChart();
     rerender(<SonrChart symbol="A" dataSource={source()} patterns={[]} />);
     expect(c.removeIndicator).toHaveBeenCalledWith({ name: PATTERN_INDICATOR });
+  });
+});
+
+describe("SonrChart — scroll-back pagination (#109)", () => {
+  const older = (...times: number[]) => times.map((time) => ({ time, open: 1, high: 2, low: 0.5, close: 1.5, volume: 5 }));
+  const loaderOf = (c: any) => c.setDataLoader.mock.calls[0][0];
+  const forward = (c: any, timestamp: number | null = 1000) => {
+    const callback = vi.fn();
+    const done = loaderOf(c).getBars({ type: "forward", timestamp, callback });
+    return { callback, done };
+  };
+
+  it("without getBarsBefore, init reports no forward paging and a forward request latches off", async () => {
+    render(<SonrChart symbol="A" dataSource={source()} />);
+    const c = lastChart();
+    const init = vi.fn();
+    await loaderOf(c).getBars({ type: "init", timestamp: null, callback: init });
+    expect(init.mock.calls[0][1]).toEqual({ forward: false, backward: false });
+    const { callback, done } = forward(c);
+    await done;
+    expect(callback).toHaveBeenCalledWith([], { forward: false, backward: false });
+  });
+
+  it("with the capability: init arms paging; a forward request fetches strictly-older bars and prepends via the callback", async () => {
+    const ds: DataSource = { getBars: vi.fn(async () => bars), getBarsBefore: vi.fn(async () => older(400, 500)) };
+    render(<SonrChart symbol="AAPL" interval="5" dataSource={ds} barCount={250} />);
+    const c = lastChart();
+    const init = vi.fn();
+    await loaderOf(c).getBars({ type: "init", timestamp: null, callback: init });
+    expect(init.mock.calls[0][1]).toEqual({ forward: true, backward: false });
+
+    const { callback, done } = forward(c, 1000);
+    await done;
+    // chunk = effective barCount; before = the oldest bar KLineChart reports.
+    expect(ds.getBarsBefore).toHaveBeenCalledWith("AAPL", "5", 250, 1000);
+    const [data, more] = callback.mock.calls[0];
+    expect(data.map((k: any) => k.timestamp)).toEqual([400, 500]);
+    expect(more).toEqual({ forward: true, backward: false });
+  });
+
+  it("sanitizes a pathological page: seam violations and disorder degrade, never corrupt", async () => {
+    const ds: DataSource = { getBars: vi.fn(async () => bars), getBarsBefore: vi.fn(async () => older(400, 400, 300, 1000, 600)) };
+    render(<SonrChart symbol="A" dataSource={ds} />);
+    const { callback, done } = forward(lastChart(), 1000);
+    await done;
+    expect(callback.mock.calls[0][0].map((k: any) => k.timestamp)).toEqual([400, 600]);
+  });
+
+  it("an empty page latches exhaustion for this chart; a symbol switch resets it", async () => {
+    const ds: DataSource = { getBars: vi.fn(async () => bars), getBarsBefore: vi.fn(async () => []) };
+    const { rerender } = render(<SonrChart symbol="A" dataSource={ds} />);
+    const c = lastChart();
+    const first = forward(c);
+    await first.done;
+    expect(first.callback).toHaveBeenCalledWith([], { forward: false, backward: false });
+    // Latched: no second fetch, told "no more" again.
+    const second = forward(c);
+    await second.done;
+    expect(ds.getBarsBefore).toHaveBeenCalledTimes(1);
+    expect(second.callback).toHaveBeenCalledWith([], { forward: false, backward: false });
+
+    rerender(<SonrChart symbol="B" dataSource={ds} />);
+    const fresh = forward(lastChart());
+    await fresh.done;
+    expect(ds.getBarsBefore).toHaveBeenCalledTimes(2); // forgotten on switch
+  });
+
+  it("single-flight: a second request mid-page re-arms without fetching", async () => {
+    let resolvePage!: (b: Bar[]) => void;
+    const ds: DataSource = {
+      getBars: vi.fn(async () => bars),
+      getBarsBefore: vi.fn(() => new Promise<Bar[]>((r) => (resolvePage = r))),
+    };
+    render(<SonrChart symbol="A" dataSource={ds} />);
+    const c = lastChart();
+    const first = forward(c);
+    const second = forward(c);
+    await second.done;
+    expect(ds.getBarsBefore).toHaveBeenCalledTimes(1);
+    expect(second.callback).toHaveBeenCalledWith([], { forward: true, backward: false });
+    resolvePage(older(400));
+    await first.done;
+    expect(first.callback.mock.calls[0][0].map((k: any) => k.timestamp)).toEqual([400]);
+  });
+
+  it("a page resolving after a symbol switch is discarded, not applied", async () => {
+    let resolvePage!: (b: Bar[]) => void;
+    const ds: DataSource = {
+      getBars: vi.fn(async () => bars),
+      getBarsBefore: vi.fn(() => new Promise<Bar[]>((r) => (resolvePage = r))),
+    };
+    const { rerender } = render(<SonrChart symbol="A" dataSource={ds} />);
+    const stale = forward(lastChart());
+    rerender(<SonrChart symbol="B" dataSource={ds} />); // disposes the old chart mid-flight
+    resolvePage(older(400));
+    await stale.done;
+    expect(stale.callback).not.toHaveBeenCalled(); // discarded silently
+  });
+
+  it("a failed page re-arms with a cooldown: immediate re-pan skips the fetch, a later one retries", async () => {
+    vi.useFakeTimers();
+    try {
+      const ds: DataSource = { getBars: vi.fn(async () => bars), getBarsBefore: vi.fn(async () => Promise.reject(new Error("boom"))) };
+      render(<SonrChart symbol="A" dataSource={ds} />);
+      const c = lastChart();
+      const failed = forward(c);
+      await failed.done;
+      expect(failed.callback).toHaveBeenCalledWith([], { forward: true, backward: false }); // still armed
+
+      const during = forward(c); // inside the cooldown — no fetch, stays armed
+      await during.done;
+      expect(ds.getBarsBefore).toHaveBeenCalledTimes(1);
+      expect(during.callback).toHaveBeenCalledWith([], { forward: true, backward: false });
+
+      vi.advanceTimersByTime(2100); // past PAGE_RETRY_COOLDOWN_MS
+      const retry = forward(c);
+      await retry.done;
+      expect(ds.getBarsBefore).toHaveBeenCalledTimes(2); // retried
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
