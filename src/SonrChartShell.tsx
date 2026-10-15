@@ -69,6 +69,8 @@ export interface SonrChartShellProps {
   /** Snapshot filename. Defaults to `${symbol}-${interval}.png`. */
   snapshotName?: string;
   // Passthroughs to <SonrChart> (sensible defaults).
+  /** Bars requested on load (SonrChart default 500). */
+  barCount?: number;
   indicators?: (string | IndicatorSpec)[];
   /** Carry the user's indicator set across unmounts of this shell (#94) —
    *  set a stable per-tile key if your app remounts it on symbol changes. */
@@ -106,6 +108,7 @@ export const SonrChartShell = forwardRef<SonrChartHandle, SonrChartShellProps>(f
     brandCorner = "bottom-left",
     brandOpacity = 0.45,
     snapshotName,
+    barCount,
     indicators = ["VOL"],
     persistenceKey,
     sessions = true,
@@ -163,6 +166,7 @@ export const SonrChartShell = forwardRef<SonrChartHandle, SonrChartShellProps>(f
             interval={interval}
             dataSource={dataSource}
             theme={theme}
+            barCount={barCount}
             indicators={indicators}
             persistenceKey={persistenceKey}
             sessions={sessions}
