@@ -4,7 +4,14 @@ All notable changes to `@rioaxyz/sonrchart`, per **published npm version**. Each
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.8.0] — 2026-10-15
+
+Published 2026-10-15 02:07 UTC. (An interim 0.7.1 bump (#108) was never published; its content ships here.)
+
 ### Added
+- `barCount` passthrough on `SonrChartShell` (#107).
 - Scroll-back history pagination (#109, per `docs/scrollback-pagination-spec.md`): an optional `getBarsBefore(symbol, interval, count, before)` on `DataSource` — presence is the capability signal. Panning to the left edge pages older bars in with the viewport anchor preserved, repeatedly until the source returns an empty page (exhaustion latches per symbol/interval and resets on switch). Pages are seam-guarded (strictly-older, strictly-ascending; a pathological page degrades to shorter history, never corruption), single-flight with stale responses discarded on symbol switches, and failed pages re-arm behind a 2s cooldown. Datasources without the method behave exactly as before. `sanitizeOlderBars` and `PAGE_RETRY_COOLDOWN_MS` exported.
 
 ## [0.7.0] — 2026-10-14
@@ -76,7 +83,8 @@ Published 2026-10-01 00:35 UTC as the first public scoped release, `@rioaxyz/son
 
 Initial feature set, including: candlestick charting on KLineChart 10 with dark/light/custom themes; drawing tools (built-in plus brush, shapes, text, and the extended family) with undo/redo, templates, lock/hide, and an object tree; indicators with study templates and a config menu; session tinting, pattern markers, watermark, compare series, and the trade-review box overlay (#76) sharing the candle pane under an explicit z-order (#75); static price lines and draggable order lines; price-scale modes and axis labels; symbol search, resolution, and metadata; timezone and custom-resolution support; snapshots, save/load state, and keyboard shortcuts; `ChartHeader` / `ChartToolbar` / `SonrChartShell` chrome and the homegrown icon set.
 
-[Unreleased]: https://github.com/rioaxyz/sonrchart/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/rioaxyz/sonrchart/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/rioaxyz/sonrchart/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/rioaxyz/sonrchart/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/rioaxyz/sonrchart/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/rioaxyz/sonrchart/compare/v0.4.0...v0.5.0
