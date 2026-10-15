@@ -8,6 +8,7 @@ import { applyCandleStyle } from "./candleStyle";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
 import { CANDLE_PANE, asSpec, intervalMs, mergeStyles, sessionColors, toIndicatorSpecs, toKLine, toPeriod } from "./internal";
 import { loadPersistedIndicators, savePersistedIndicators } from "./indicatorPersistence";
+import { PAGE_RETRY_COOLDOWN_MS, sanitizeOlderBars } from "./scrollback";
 import { DrawingStore, drawingStoreFor } from "./drawingPersistence";
 import { DEFAULT_TIMEZONE } from "./timezone";
 import { bareTicker, buildWatermark, intervalLabel, mergeWatermark, normalizeWatermark } from "./watermark";
@@ -1232,8 +1233,57 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     drawings.initHistory();
 
     let unsub = () => {};
+    // Scroll-back pagination (#109): getBarsBefore's presence is the
+    // capability signal. All paging state is per chart instance, so a
+    // symbol/interval switch resets the exhaustion latch for free and the
+    // `disposed` flag discards any page that resolves after the switch.
+    const canPageBack = typeof dataSource.getBarsBefore === "function";
+    let pageInFlight = false;
+    let pageExhausted = false;
+    let pageErrorAt = 0;
     chart.setDataLoader({
-      getBars: async ({ type, callback }) => {
+      getBars: async ({ type, timestamp, callback }) => {
+        if (type === "forward") {
+          // KLineChart fires "forward" near the data's LEFT edge and prepends
+          // the result, preserving the viewport anchor — our scroll-back page.
+          if (!canPageBack || pageExhausted) {
+            callback([], { forward: false, backward: false });
+            return;
+          }
+          // Re-arm without fetching: mid-flight (KLineChart shouldn't refire,
+          // but never double-fetch) or inside the post-error cooldown.
+          const before = timestamp ?? chart.getDataList()[0]?.timestamp;
+          if (pageInFlight || Date.now() - pageErrorAt < PAGE_RETRY_COOLDOWN_MS || typeof before !== "number") {
+            callback([], { forward: true, backward: false });
+            return;
+          }
+          pageInFlight = true;
+          try {
+            const page = await dataSource.getBarsBefore!(symbol, interval, barCount, before);
+            if (disposed) return; // stale — the chart was re-inited mid-flight
+            const clean = sanitizeOlderBars(page, before);
+            if (clean.length === 0) {
+              // Exhausted (or fully deduped): latch and tell KLineChart to
+              // stop asking for this chart's lifetime.
+              pageExhausted = true;
+              callback([], { forward: false, backward: false });
+            } else {
+              // HA view: transform the chunk standalone — the live
+              // transformer (haRef) keeps tracking the right edge.
+              const shaped = isHeikinAshi(candleStyleRef.current) ? toHeikinAshi(clean) : clean;
+              callback(shaped.map(toKLine), { forward: true, backward: false });
+            }
+          } catch {
+            if (disposed) return;
+            // Failed page: stay armed so the next pan retries (after the
+            // cooldown). No user-facing error state for a backfill.
+            pageErrorAt = Date.now();
+            callback([], { forward: true, backward: false });
+          } finally {
+            pageInFlight = false;
+          }
+          return;
+        }
         if (type === "backward") {
           callback([], false);
           return;
@@ -1243,7 +1293,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
           const ha = isHeikinAshi(candleStyleRef.current);
           if (ha) haRef.current.seed(bars);
           const shaped = ha ? toHeikinAshi(bars) : bars;
-          callback(shaped.map(toKLine), false);
+          callback(shaped.map(toKLine), { forward: canPageBack, backward: false });
           emitLatestHeader();
           // Compare overlays need the loaded main bars to align to.
           void refreshCompare();

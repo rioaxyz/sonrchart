@@ -66,6 +66,14 @@ export interface DataSource {
    */
   subscribe?(symbol: string, interval: Interval, onBar: (bar: Bar) => void): () => void;
   /**
+   * Optional scroll-back pagination (#109): presence is the capability
+   * signal. Return up to `count` bars strictly OLDER than `before` (epoch
+   * ms, exclusive), oldest→newest — the same shape as `getBars`. Return an
+   * empty array when history is exhausted. Omit the method entirely for the
+   * one-shot behavior (history ends at the initial `getBars` window).
+   */
+  getBarsBefore?(symbol: string, interval: Interval, count: number, before: number): Promise<Bar[]>;
+  /**
    * Optional symbol resolution (issue #8). Validate/enrich a ticker before it
    * loads. Return `null` for an unknown symbol (the chart fires `onSymbolError`
    * and skips loading), or a SymbolInfo to set precision/name.

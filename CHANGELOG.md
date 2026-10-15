@@ -4,7 +4,8 @@ All notable changes to `@rioaxyz/sonrchart`, per **published npm version**. Each
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- Scroll-back history pagination (#109, per `docs/scrollback-pagination-spec.md`): an optional `getBarsBefore(symbol, interval, count, before)` on `DataSource` — presence is the capability signal. Panning to the left edge pages older bars in with the viewport anchor preserved, repeatedly until the source returns an empty page (exhaustion latches per symbol/interval and resets on switch). Pages are seam-guarded (strictly-older, strictly-ascending; a pathological page degrades to shorter history, never corruption), single-flight with stale responses discarded on symbol switches, and failed pages re-arm behind a 2s cooldown. Datasources without the method behave exactly as before. `sanitizeOlderBars` and `PAGE_RETRY_COOLDOWN_MS` exported.
 
 ## [0.7.0] — 2026-10-14
 

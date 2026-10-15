@@ -33,12 +33,26 @@ export function syntheticSource(seedPrice = 100): DataSource {
 
   let last: Bar | null = null;
 
+  // Scroll-back pagination (#109): serve older chunks down to a hard floor
+  // (~5000 bars behind "now" per interval) so the demo shows both endless-
+  // feeling paging and true exhaustion.
+  const HISTORY_BARS = 5000;
+
   return {
     async getBars(_symbol, interval, count) {
       const stepMs = intervalMs(interval);
       const bars = gen(count, stepMs, Date.now());
       last = bars[bars.length - 1] ?? null;
       return bars;
+    },
+    async getBarsBefore(_symbol, interval, count, before) {
+      const stepMs = intervalMs(interval);
+      const floor = Date.now() - HISTORY_BARS * stepMs;
+      if (before <= floor) return []; // exhausted
+      const n = Math.min(count, Math.floor((before - floor) / stepMs));
+      if (n <= 0) return [];
+      // gen() ends at endTime - stepMs, so every bar lands strictly before.
+      return gen(n, stepMs, before);
     },
     subscribe(_symbol, interval, onBar) {
       const stepMs = intervalMs(interval);
