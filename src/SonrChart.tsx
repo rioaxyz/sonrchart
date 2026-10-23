@@ -78,7 +78,8 @@ export interface SonrChartProps {
   /** Inline named custom themes, looked up before the global registry. (#46) */
   customThemes?: Record<string, DeepPartial<Styles>>;
   styles?: DeepPartial<Styles>;
-  /** Indicators to show. Strings ("VOL") or specs. Default ["VOL"]. (#4) */
+  /** Indicators to show on first load. Strings ("VOL") or specs. Default
+   *  none — the chart opens with no studies. (#4) */
   indicators?: (string | IndicatorSpec)[];
   /** Carry the user's indicator set (#94) and per-symbol drawings (#97)
    *  across UNMOUNTS of this component. Both already persist across
@@ -466,7 +467,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     theme: themeProp,
     customThemes,
     styles,
-    indicators = ["VOL"],
+    indicators = [],
     paneHeights,
     sessions: sessionsProp,
     watermark: watermarkProp,
@@ -1361,6 +1362,9 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
       }
       seeded = true;
       applyPaneHeights();
+      // The seed lands after an async resolveSymbol, so the indicators menu /
+      // data window (mounted earlier) re-read the list now.
+      notifyIndicators();
       onReady?.(chart);
     })();
 

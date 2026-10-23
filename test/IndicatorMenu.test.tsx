@@ -10,12 +10,17 @@ import type { SonrChartHandle } from "../src/SonrChart";
 function fakeHandle() {
   const set = new Set<string>();
   const onSubs = new Set<(on: boolean) => void>();
+  const indSubs = new Set<() => void>();
   let trendEnabled = false;
   const handle: SonrChartHandle = {
     chart: () => null,
     addIndicator: vi.fn((i) => set.add(typeof i === "string" ? i : i.name)),
     removeIndicator: vi.fn((n) => set.delete(n)),
     listIndicators: vi.fn(() => [...set]),
+    subscribeIndicators: vi.fn((cb: () => void) => {
+      indSubs.add(cb);
+      return () => indSubs.delete(cb);
+    }),
     getVolumeTrendEnabled: vi.fn(() => trendEnabled),
     setVolumeTrendEnabled: vi.fn((on: boolean) => {
       if (on === trendEnabled) return;
@@ -27,7 +32,7 @@ function fakeHandle() {
       return () => onSubs.delete(cb);
     }),
   };
-  return { handle, set, enableTrend: () => { trendEnabled = true; } };
+  return { handle, set, enableTrend: () => { trendEnabled = true; }, notifyIndicators: () => indSubs.forEach((cb) => cb()) };
 }
 
 describe("DEFAULT_INDICATOR_OPTIONS (#36 wider library)", () => {
@@ -80,6 +85,24 @@ describe("IndicatorMenu (#4 config UI)", () => {
     expect(vol).toHaveAttribute("title", "Volume");
     expect(vol).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("menuitemcheckbox", { name: /MACD/ })).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("re-syncs when the chart's set changes after mount (async prop seed) — regression", async () => {
+    const { handle, set, notifyIndicators } = fakeHandle();
+    const ref = createRef<SonrChartHandle>();
+    (ref as any).current = handle;
+    render(<IndicatorMenu chartRef={ref} options={[{ name: "VOL", label: "Volume" }]} />);
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    const trigger = screen.getByRole("button", { name: /Indicators/ });
+    expect(trigger).not.toHaveTextContent("(1)");
+    // The chart seeds VOL only after its async symbol resolve, then notifies.
+    act(() => {
+      set.add("VOL");
+      notifyIndicators();
+    });
+    expect(trigger).toHaveTextContent("(1)");
+    await userEvent.click(trigger);
+    expect(screen.getByRole("menuitemcheckbox", { name: /VOL/ })).toHaveAttribute("aria-checked", "true");
   });
 
   it("toggles an indicator on and off through the handle", async () => {
