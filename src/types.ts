@@ -85,6 +85,15 @@ export interface DataSource {
    * (the SymbolSearch component degrades gracefully).
    */
   searchSymbols?(query: string): Promise<SymbolSearchResult[]>;
+  /**
+   * Optional trading-halt status: presence is the capability signal. Call
+   * `onChange` with the symbol's current state as soon as it's known — and
+   * again whenever it changes: `true` (or a HaltBadge to customize the pill)
+   * while halted, `false` once trading resumes. Return an unsubscribe
+   * function. Drives the halt badge (#78) with no host wiring; an explicit
+   * `halted` prop takes precedence.
+   */
+  subscribeHalt?(symbol: string, onChange: (halted: boolean | HaltBadge) => void): () => void;
 }
 
 /** Price-scale configuration (issue #12). */

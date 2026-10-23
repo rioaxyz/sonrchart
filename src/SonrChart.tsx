@@ -104,7 +104,8 @@ export interface SonrChartProps {
   /** Pattern-context markers on the price pane. (#5) */
   patterns?: PatternMarker[];
   /** Trading-halt badge (#78): `true` pins a blue "Halt" pill to the top of
-   *  the price pane against the y-axis; pass a HaltBadge to customize. */
+   *  the price pane against the y-axis; pass a HaltBadge to customize. Omit
+   *  to follow the data source's `subscribeHalt`, when it has one. */
   halted?: boolean | HaltBadge;
   /** Static reference lines (entry / stop / target). */
   priceLines?: PriceLine[];
@@ -1516,12 +1517,36 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patterns, chartEpoch]);
 
+  // Halt status from the data source (subscribeHalt), per symbol. Reset on a
+  // symbol switch so one ticker's halt never shows on the next; a callback
+  // that lands after unsubscribe is dropped.
+  // Read through a ref (like the bar feed) so an inline `dataSource` object
+  // doesn't resubscribe — and flash the badge off — on every host render.
+  const [sourceHalted, setSourceHalted] = useState<boolean | HaltBadge>(false);
+  const dataSourceRef = useRef(dataSource);
+  dataSourceRef.current = dataSource;
+  useEffect(() => {
+    setSourceHalted(false);
+    const ds = dataSourceRef.current;
+    if (!ds.subscribeHalt) return;
+    let live = true;
+    const unsub = ds.subscribeHalt(symbol, (h) => {
+      if (live) setSourceHalted(h);
+    });
+    return () => {
+      live = false;
+      unsub();
+    };
+  }, [symbol]);
+  // An explicit `halted` prop wins over the data source.
+  const effectiveHalted = halted !== undefined ? halted : sourceHalted;
+
   // Halt badge reconcile (#78).
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
     const present = chart.getIndicators({ name: HALT_INDICATOR }).length > 0;
-    const badge = normalizeHalt(halted);
+    const badge = normalizeHalt(effectiveHalted);
     if (badge && !present) {
       chart.createIndicator({ name: HALT_INDICATOR, paneId: CANDLE_PANE, zLevel: Z_ORDER.halt, extendData: badge }, true);
     } else if (badge && present) {
@@ -1531,7 +1556,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
     }
     // chartEpoch: re-apply on a fresh chart (e.g. after an interval switch).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [halted, chartEpoch]);
+  }, [effectiveHalted, chartEpoch]);
 
   // Legend offset reconcile (#88). chartEpoch: a fresh chart (symbol/interval
   // switch) resets styles to the library default, so re-apply.

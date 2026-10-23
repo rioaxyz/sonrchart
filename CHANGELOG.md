@@ -4,6 +4,9 @@ All notable changes to `@rioaxyz/sonrchart`, per **published npm version**. Each
 
 ## [Unreleased]
 
+### Added
+- Halt status from the data source: `DataSource` gains an optional `subscribeHalt(symbol, onChange)`, and having the method is what turns the feature on. When present, the halt badge (#78) follows it with no host wiring. Call `onChange(true)` or pass a `HaltBadge` while the symbol is halted, and `onChange(false)` when trading resumes. The subscription renews per symbol, and one ticker's halt never carries over to the next. An explicit `halted` prop still takes precedence. `SonrChartShell` also gains a `halted` passthrough, since previously its charts could not show the badge at all.
+
 ### Changed
 - **Volume is no longer on by default.** `indicators` now defaults to `[]` on both `SonrChart` and `SonrChartShell` (was `["VOL"]`), so the chart opens with no studies. To keep the old behavior, pass `indicators={["VOL"]}`.
 - **Candle type, sessions, and price-scale labels persist across remounts.** `persistenceKey` now also carries these display settings, so a host that remounts the chart on a symbol change (`key={symbol}`, as `SonrChartShell` tiles commonly do) keeps the user's choices on every new ticker and interval. They already persisted while the chart stayed mounted. Like `indicators`, the `candleStyle` / `sessions` / `priceLabels` props now seed only the first mount for a key, though a later change to one still applies. `savePersistedDisplay`, `loadPersistedDisplay`, and `clearPersistedDisplay` are exported.

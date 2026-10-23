@@ -21,6 +21,7 @@ import type {
   IndicatorSpec,
   Interval,
   OrderLine,
+  HaltBadge,
   PatternMarker,
   PriceLine,
   SessionTint,
@@ -80,6 +81,9 @@ export interface SonrChartShellProps {
   sessions?: SessionTint;
   watermark?: boolean | Partial<WatermarkOptions>;
   patterns?: PatternMarker[];
+  /** Trading-halt badge (#78). Omit to follow the data source's
+   *  `subscribeHalt`, when it has one. */
+  halted?: boolean | HaltBadge;
   priceLines?: PriceLine[];
   orderLines?: OrderLine[];
   timezone?: string;
@@ -116,6 +120,7 @@ export const SonrChartShell = forwardRef<SonrChartHandle, SonrChartShellProps>(f
     sessions = true,
     watermark = true,
     patterns,
+    halted,
     priceLines,
     orderLines,
     timezone,
@@ -174,6 +179,7 @@ export const SonrChartShell = forwardRef<SonrChartHandle, SonrChartShellProps>(f
             sessions={sessions}
             watermark={watermark}
             patterns={patterns}
+            halted={halted}
             priceLines={priceLines}
             orderLines={orderLines}
             timezone={timezone}
