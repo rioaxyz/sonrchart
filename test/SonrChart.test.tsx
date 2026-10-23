@@ -803,6 +803,65 @@ describe("SonrChart — halt badge (#78)", () => {
     expect(create?.[0]).toMatchObject({ name: HALT_INDICATOR });
   });
 
+  describe("from the data source (subscribeHalt)", () => {
+    // A source whose halt status the test pushes per symbol.
+    const haltSource = () => {
+      const subs = new Map<string, (h: boolean | object) => void>();
+      const unsubs: string[] = [];
+      const ds: DataSource = {
+        ...source(),
+        subscribeHalt: vi.fn((symbol: string, cb: (h: any) => void) => {
+          subs.set(symbol, cb);
+          return () => unsubs.push(symbol);
+        }),
+      };
+      const push = (symbol: string, h: boolean | object) => act(() => subs.get(symbol)!(h));
+      return { ds, push, unsubs, subs };
+    };
+    const haltShown = () => lastChart().getIndicators({ name: HALT_INDICATOR }).length > 0;
+
+    it("shows the badge while the source reports a halt and removes it on resume", () => {
+      const { ds, push } = haltSource();
+      render(<SonrChart symbol="CLRO" dataSource={ds} />);
+      expect(ds.subscribeHalt).toHaveBeenCalledWith("CLRO", expect.any(Function));
+      expect(haltShown()).toBe(false);
+      push("CLRO", true);
+      expect(haltShown()).toBe(true);
+      push("CLRO", { label: "LULD pause" });
+      const override = lastChart().overrideIndicator.mock.calls.filter((c: any[]) => c[0]?.name === HALT_INDICATOR).at(-1);
+      expect(override![0].extendData.label).toBe("LULD pause");
+      push("CLRO", false);
+      expect(haltShown()).toBe(false);
+    });
+
+    it("resubscribes per symbol, and one ticker's halt never carries to the next", () => {
+      const { ds, push, unsubs, subs } = haltSource();
+      const { rerender } = render(<SonrChart symbol="CLRO" dataSource={ds} />);
+      push("CLRO", true);
+      rerender(<SonrChart symbol="AAPL" dataSource={ds} />);
+      expect(unsubs).toEqual(["CLRO"]);
+      expect(ds.subscribeHalt).toHaveBeenLastCalledWith("AAPL", expect.any(Function));
+      expect(haltShown()).toBe(false);
+      // A late callback from the old symbol's subscription is ignored.
+      act(() => subs.get("CLRO")!(true));
+      expect(haltShown()).toBe(false);
+    });
+
+    it("an explicit halted prop wins over the source", () => {
+      const { ds, push } = haltSource();
+      render(<SonrChart symbol="CLRO" dataSource={ds} halted={false} />);
+      push("CLRO", true);
+      expect(haltShown()).toBe(false);
+    });
+
+    it("does not resubscribe when the host passes a new dataSource object for the same symbol", () => {
+      const { ds } = haltSource();
+      const { rerender } = render(<SonrChart symbol="CLRO" dataSource={ds} />);
+      rerender(<SonrChart symbol="CLRO" dataSource={{ ...ds }} />);
+      expect(ds.subscribeHalt).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("list excludes the internal halt indicator", () => {
     const ref = createRef<SonrChartHandle>();
     render(<SonrChart ref={ref} symbol="A" dataSource={source()} halted indicators={["VOL"]} />);

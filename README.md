@@ -156,7 +156,7 @@ function TradingChart({ source }: { source: DataSource }) {
 |---|---|---|
 | `symbol` | `string` | Ticker to chart. |
 | `interval` | `Interval` | `"10S" \| "30S" \| "1" \| "5" \| "15" \| "30" \| "60" \| "D"` (or any string your DataSource understands). Default `"1"`. |
-| `dataSource` | `DataSource` | `getBars(symbol, interval, count)` + optional `subscribe(...)` and `getBarsBefore(...)` (scroll-back pagination: pan to the left edge to page in older history). The only integration seam. |
+| `dataSource` | `DataSource` | `getBars(symbol, interval, count)` + optional `subscribe(...)`, `getBarsBefore(...)` (scroll-back pagination: pan to the left edge to page in older history), and `subscribeHalt(symbol, onChange)` (drives the halt badge). The only integration seam. |
 | `theme` | `"dark" \| "light"` | Default `"dark"` (the Sonr console palette). |
 | `styles` | `DeepPartial<Styles>` | KLineChart style overrides merged over the theme. |
 | `indicators` | `(string \| IndicatorSpec)[]` | Indicators to show on first load — a name (`"VOL"`) or a spec (`{ name, pane: "main" \| "new", calcParams }`). Default `[]` (no studies). Runtime changes (menu/handle) persist across symbol and interval switches. |
@@ -164,7 +164,7 @@ function TradingChart({ source }: { source: DataSource }) {
 | `paneHeights` | `Record<string, number>` | Sub-pane pixel heights, keyed by indicator name. |
 | `sessions` | `boolean \| { premarket?, afterhours? }` | Tint pre/after-hours session backgrounds (ET). |
 | `patterns` | `PatternMarker[]` | Setup markers (`{ time, kind, label }`) drawn on the price pane. |
-| `halted` | `boolean \| HaltBadge` | Trading-halt badge: a pill pinned to the top of the price pane against the y-axis. `true` shows the default blue "Halt"; pass `{ label?, color?, textColor? }` to customize. |
+| `halted` | `boolean \| HaltBadge` | Trading-halt badge: a pill pinned to the top of the price pane against the y-axis. `true` shows the default blue "Halt"; pass `{ label?, color?, textColor? }` to customize. Omit it to follow the data source's `subscribeHalt`, when it has one. |
 | `priceLines` | `PriceLine[]` | Static horizontal reference lines (entry / stop / target). |
 | `orderLines` | `OrderLine[]` | Draggable order/position lines; `onMove(price, phase)` fires as the user drags. |
 | `priceScale` | `{ type?, invert?, inside? }` | Scale mode — `"normal" \| "percentage" \| "logarithm"`, plus invert / labels-inside. |
