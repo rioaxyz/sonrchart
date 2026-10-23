@@ -4,6 +4,12 @@ All notable changes to `@rioaxyz/sonrchart`, per **published npm version**. Each
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.9.0] — 2026-10-23
+
+Published 2026-10-23 14:16 UTC.
+
 ### Added
 - Halt status from the data source: `DataSource` gains an optional `subscribeHalt(symbol, onChange)`, and having the method is what turns the feature on. When present, the halt badge (#78) follows it with no host wiring. Call `onChange(true)` or pass a `HaltBadge` while the symbol is halted, and `onChange(false)` when trading resumes. The subscription renews per symbol, and one ticker's halt never carries over to the next. An explicit `halted` prop still takes precedence. `SonrChartShell` also gains a `halted` passthrough, since previously its charts could not show the badge at all.
 
