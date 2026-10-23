@@ -75,6 +75,7 @@ export { DEFAULT_LABELS, mergeLabels } from "./labels";
 export type { Labels } from "./labels";
 export { savePersistedIndicators, loadPersistedIndicators, clearPersistedIndicators } from "./indicatorPersistence";
 export { DrawingStore, drawingStoreFor, clearPersistedDrawings } from "./drawingPersistence";
+export { savePersistedDisplay, loadPersistedDisplay, clearPersistedDisplay, type PersistedDisplay } from "./displayPersistence";
 export { toOverlayStyle, withAlpha, DEFAULT_DRAWING_STYLE } from "./drawingStyle";
 export { sanitizeOlderBars, PAGE_RETRY_COOLDOWN_MS } from "./scrollback";
 export type { DrawingStyle, DrawingLineStyle } from "./drawingStyle";

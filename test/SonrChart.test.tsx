@@ -101,6 +101,7 @@ import { SonrChart, type SonrChartHandle } from "../src/SonrChart";
 import { SESSION_INDICATOR, PATTERN_INDICATOR, SERIES_INDICATOR, WATERMARK_INDICATOR, HALT_INDICATOR, DEFAULT_SESSION_COLORS, DEFAULT_HALT_BADGE } from "../src/indicators";
 import { clearPersistedIndicators, loadPersistedIndicators } from "../src/indicatorPersistence";
 import { clearPersistedDrawings } from "../src/drawingPersistence";
+import { clearPersistedDisplay, loadPersistedDisplay } from "../src/displayPersistence";
 import { registerTheme } from "../src/theme";
 import { utils } from "klinecharts";
 import type { Bar, DataSource } from "../src/types";
@@ -120,6 +121,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   clearPersistedIndicators(); // the keyed registries are module-level state
   clearPersistedDrawings();
+  clearPersistedDisplay();
 });
 
 describe("SonrChart — initialization", () => {
@@ -663,6 +665,92 @@ describe("SonrChart — keyed persistence across remounts (#94)", () => {
     const ref2 = createRef<SonrChartHandle>();
     render(<SonrChart ref={ref2} symbol="A" dataSource={source()} indicators={["VOL"]} persistenceKey="tile-1" />);
     expect(ref2.current!.listIndicators()).toEqual(["VOL"]);
+  });
+});
+
+describe("SonrChart — display settings persist across symbol/interval changes", () => {
+  // What a host like SonrChartShell passes: sessions on, labels default, candle default.
+  const props = (symbol: string, interval: "1" | "5", extra: Record<string, unknown> = {}) => ({
+    symbol,
+    interval,
+    dataSource: source(),
+    sessions: true as const,
+    ...extra,
+  });
+  const lastPriceMark = () => lastChart().setStyles.mock.calls.map((a: any[]) => a[0]).filter((s: any) => s?.candle?.priceMark).at(-1).candle.priceMark;
+  const hasSessionLayer = () => lastChart().createIndicator.mock.calls.some((c: any[]) => c[0]?.name === SESSION_INDICATOR);
+
+  it("candle type, sessions, and labels survive symbol + interval switches while mounted", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { rerender } = render(<SonrChart ref={ref} {...props("AAPL", "1")} />);
+    act(() => {
+      ref.current!.setCandleStyle("hollow");
+      ref.current!.setSessions(false);
+      ref.current!.setPriceLabels({ high: false, countdown: true });
+    });
+    rerender(<SonrChart ref={ref} {...props("TSLA", "1")} />);
+    rerender(<SonrChart ref={ref} {...props("TSLA", "5")} />);
+    expect(ref.current!.getCandleStyle()).toBe("hollow");
+    expect(ref.current!.getSessions()).toBe(false);
+    expect(ref.current!.getPriceLabels()).toMatchObject({ high: false, countdown: true });
+    // …and are applied to the fresh chart the interval switch created.
+    expect(hasSessionLayer()).toBe(false);
+    expect(lastPriceMark().high).toMatchObject({ show: false });
+  });
+
+  it("with a persistenceKey, they survive a remount on symbol change (host key={symbol}) — over the seeding props", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { unmount } = render(<SonrChart ref={ref} {...props("AAPL", "1")} persistenceKey="tile-1" />);
+    act(() => {
+      ref.current!.setCandleStyle("heikin_ashi");
+      ref.current!.setSessions(false);
+      ref.current!.setPriceLabels({ lastLine: false });
+    });
+    unmount();
+
+    const ref2 = createRef<SonrChartHandle>();
+    const { unmount: unmount2 } = render(<SonrChart ref={ref2} {...props("TSLA", "5")} persistenceKey="tile-1" />);
+    expect(ref2.current!.getCandleStyle()).toBe("heikin_ashi");
+    expect(ref2.current!.getSessions()).toBe(false); // the `sessions` prop only seeded the first mount
+    expect(ref2.current!.getPriceLabels().lastLine).toBe(false);
+    expect(hasSessionLayer()).toBe(false);
+    expect(lastPriceMark().last.line).toMatchObject({ show: false });
+
+    // Turning sessions back on is recorded too.
+    act(() => ref2.current!.setSessions(true));
+    unmount2();
+    expect(loadPersistedDisplay("tile-1")?.sessions).toBe(true);
+  });
+
+  it("a remount without a key (or after clearPersistedDisplay) seeds from the props again", () => {
+    const ref = createRef<SonrChartHandle>();
+    const r1 = render(<SonrChart ref={ref} {...props("AAPL", "1")} />);
+    act(() => ref.current!.setCandleStyle("hollow"));
+    r1.unmount();
+    const ref2 = createRef<SonrChartHandle>();
+    const r2 = render(<SonrChart ref={ref2} {...props("TSLA", "1")} persistenceKey="tile-1" />);
+    expect(ref2.current!.getCandleStyle()).toBe("candle");
+    act(() => ref2.current!.setCandleStyle("ohlc"));
+    r2.unmount();
+    clearPersistedDisplay("tile-1");
+    const ref3 = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref3} {...props("TSLA", "1")} persistenceKey="tile-1" />);
+    expect(ref3.current!.getCandleStyle()).toBe("candle");
+  });
+
+  it("an inline object prop (new identity each render) doesn't clobber the user's setting on a symbol switch", () => {
+    const ref = createRef<SonrChartHandle>();
+    const { rerender } = render(<SonrChart ref={ref} {...props("AAPL", "1", { sessions: { premarket: "#123456" }, priceLabels: { low: true } })} />);
+    act(() => {
+      ref.current!.setSessions(false);
+      ref.current!.setPriceLabels({ low: false });
+    });
+    rerender(<SonrChart ref={ref} {...props("TSLA", "1", { sessions: { premarket: "#123456" }, priceLabels: { low: true } })} />);
+    expect(ref.current!.getSessions()).toBe(false);
+    expect(ref.current!.getPriceLabels().low).toBe(false);
+    // A real CHANGE to the prop still applies.
+    rerender(<SonrChart ref={ref} {...props("TSLA", "1", { sessions: { premarket: "#abcdef" }, priceLabels: { low: true } })} />);
+    expect(ref.current!.getSessions()).toEqual({ premarket: "#abcdef" });
   });
 });
 
