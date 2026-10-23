@@ -6,8 +6,10 @@ All notable changes to `@rioaxyz/sonrchart`, per **published npm version**. Each
 
 ### Changed
 - **Volume is no longer on by default.** `indicators` now defaults to `[]` on both `SonrChart` and `SonrChartShell` (was `["VOL"]`), so the chart opens with no studies. To keep the old behavior, pass `indicators={["VOL"]}`.
+- **Candle type, sessions, and price-scale labels persist across remounts.** `persistenceKey` now also carries these display settings, so a host that remounts the chart on a symbol change (`key={symbol}`, as `SonrChartShell` tiles commonly do) keeps the user's choices on every new ticker and interval. They already persisted while the chart stayed mounted. Like `indicators`, the `candleStyle` / `sessions` / `priceLabels` props now seed only the first mount for a key, though a later change to one still applies. `savePersistedDisplay`, `loadPersistedDisplay`, and `clearPersistedDisplay` are exported.
 
 ### Fixed
+- An inline object prop (`sessions={{ … }}`, `priceLabels={{ … }}`, `watermark={{ … }}`) no longer resets the user's setting on every host re-render, such as a symbol switch. Props are now compared by value rather than identity, and only a real change is adopted.
 - The indicators menu now reflects studies the chart seeds from the `indicators` prop. That seed lands after the async `resolveSymbol`, which runs after the menu's one-shot mount read, so the menu showed VOL as unchecked while it was on the chart. The chart now fires `subscribeIndicators` once the seed lands, and `IndicatorMenu` re-reads on every indicator change. The data window picks up the same notification.
 
 ## [0.8.0] — 2026-10-15

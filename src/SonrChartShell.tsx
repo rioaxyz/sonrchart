@@ -72,8 +72,10 @@ export interface SonrChartShellProps {
   /** Bars requested on load (SonrChart default 500). */
   barCount?: number;
   indicators?: (string | IndicatorSpec)[];
-  /** Carry the user's indicator set across unmounts of this shell (#94) —
-   *  set a stable per-tile key if your app remounts it on symbol changes. */
+  /** Carry the user's indicator set (#94), drawings (#97), and display
+   *  settings — candle type, sessions, price labels — across unmounts of this
+   *  shell; set a stable per-tile key if your app remounts it on symbol
+   *  changes. */
   persistenceKey?: string;
   sessions?: SessionTint;
   watermark?: boolean | Partial<WatermarkOptions>;

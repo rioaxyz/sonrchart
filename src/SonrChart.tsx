@@ -8,6 +8,7 @@ import { applyCandleStyle } from "./candleStyle";
 import { COMPARE_INDICATOR, alignCompare, registerCompareIndicator, type CompareLine } from "./compare";
 import { CANDLE_PANE, asSpec, intervalMs, mergeStyles, sessionColors, toIndicatorSpecs, toKLine, toPeriod } from "./internal";
 import { loadPersistedIndicators, savePersistedIndicators } from "./indicatorPersistence";
+import { loadPersistedDisplay, savePersistedDisplay } from "./displayPersistence";
 import { PAGE_RETRY_COOLDOWN_MS, sanitizeOlderBars } from "./scrollback";
 import { DrawingStore, drawingStoreFor } from "./drawingPersistence";
 import { DEFAULT_TIMEZONE } from "./timezone";
@@ -81,14 +82,17 @@ export interface SonrChartProps {
   /** Indicators to show on first load. Strings ("VOL") or specs. Default
    *  none — the chart opens with no studies. (#4) */
   indicators?: (string | IndicatorSpec)[];
-  /** Carry the user's indicator set (#94) and per-symbol drawings (#97)
-   *  across UNMOUNTS of this component. Both already persist across
+  /** Carry the user's indicator set (#94), per-symbol drawings (#97), and
+   *  display settings — candle type, session tint, price-scale labels —
+   *  across UNMOUNTS of this component. All already persist across
    *  symbol/interval/scale switches while the chart stays mounted; set a key
    *  (stable per chart tile, e.g. "main") if your app remounts the chart
    *  when the symbol changes — via key={symbol} or a loading state that
-   *  swaps it out — so they survive that too. The `indicators` prop then
-   *  only seeds the very first mount; `clearPersistedIndicators(key)` /
-   *  `clearPersistedDrawings(key)` reset. */
+   *  swaps it out — so they survive that too. The `indicators`,
+   *  `candleStyle`, `sessions`, and `priceLabels` props then only seed the
+   *  very first mount (a later CHANGE to one still applies);
+   *  `clearPersistedIndicators(key)` / `clearPersistedDrawings(key)` /
+   *  `clearPersistedDisplay(key)` reset. */
   persistenceKey?: string;
   /** Per-indicator sub-pane heights in px, keyed by indicator name. (#7) */
   paneHeights?: Record<string, number>;
@@ -355,10 +359,19 @@ type Tip = { text: string; color: string };
 // makes the candle-type / price-scale / sessions / watermark controls work out
 // of the box — a bare consumer gets them for free; a host can still control them
 // by passing the prop. `subscribe` notifies observers (the toolbar) on change.
-function useControllable<T>(prop: T | undefined, fallback: T) {
-  const [value, setValue] = useState<T>(prop === undefined ? fallback : prop);
+// Props compared by value, so an inline object/array (`sessions={{ … }}`) —
+// a new identity on every host render — isn't mistaken for a change and
+// re-adopted over the user's own setting on each re-render (symbol switch…).
+function samePropValue(a: unknown, b: unknown): boolean {
+  return a === b || JSON.stringify(a) === JSON.stringify(b);
+}
+
+// `persisted` (from the persistenceKey registry) outranks the prop as the
+// initial value: the prop seeds only the first mount, like `indicators`.
+function useControllable<T>(prop: T | undefined, fallback: T, persisted?: T) {
+  const [value, setValue] = useState<T>(persisted !== undefined ? persisted : prop === undefined ? fallback : prop);
   const propRef = useRef(prop);
-  if (prop !== propRef.current) {
+  if (!samePropValue(prop, propRef.current)) {
     propRef.current = prop;
     if (prop !== undefined) setValue(prop); // host changed the prop → adopt it
   }
@@ -566,10 +579,13 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   // Live-updated prop mirrors read from inside the (stable) data loader.
   // Out-of-the-box, handle-driven display settings (host may still control via
   // the matching prop). Defaults preserve the previous "prop not passed" behavior.
+  // Display settings saved under persistenceKey by a previous mount — read
+  // once, so a remount (key={symbol}) restores the user's choices.
+  const [persistedDisplay] = useState(() => (persistenceKey ? loadPersistedDisplay(persistenceKey) : null));
   const th = useControllable<Theme | string>(themeProp, "dark");
-  const candle = useControllable<CandleStyle>(candleStyleProp, "candle");
+  const candle = useControllable<CandleStyle>(candleStyleProp, "candle", persistedDisplay?.candleStyle);
   const scale = useControllable<PriceScale>(priceScaleProp, { type: "normal" });
-  const sess = useControllable<SessionTint>(sessionsProp, false);
+  const sess = useControllable<SessionTint>(sessionsProp, false, persistedDisplay?.sessions);
   const theme = th.value;
   const candleStyle = candle.value;
   const priceScale = scale.value;
@@ -583,7 +599,7 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   // its own controllable-ish state rather than the scalar useControllable helper.
   const [watermark, setWatermarkState] = useState<WatermarkOptions>(() => normalizeWatermark(watermarkProp, baseTheme));
   const wmPropRef = useRef(watermarkProp);
-  if (watermarkProp !== wmPropRef.current) {
+  if (!samePropValue(watermarkProp, wmPropRef.current)) {
     wmPropRef.current = watermarkProp;
     if (watermarkProp !== undefined) setWatermarkState(normalizeWatermark(watermarkProp, baseTheme));
   }
@@ -594,9 +610,11 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   }, [watermark]);
   // Price-scale labels (#41): merge-able toggle config with prop-seed + a
   // handle-driven setter for the price-scale menu.
-  const [priceLabels, setPriceLabelsState] = useState<Required<PriceLabels>>(() => ({ ...DEFAULT_PRICE_LABELS, ...priceLabelsProp }));
+  const [priceLabels, setPriceLabelsState] = useState<Required<PriceLabels>>(
+    () => persistedDisplay?.priceLabels ?? { ...DEFAULT_PRICE_LABELS, ...priceLabelsProp },
+  );
   const plPropRef = useRef(priceLabelsProp);
-  if (priceLabelsProp !== plPropRef.current) {
+  if (!samePropValue(priceLabelsProp, plPropRef.current)) {
     plPropRef.current = priceLabelsProp;
     if (priceLabelsProp) setPriceLabelsState((cur) => ({ ...cur, ...priceLabelsProp }));
   }
@@ -607,6 +625,11 @@ export const SonrChart = forwardRef<SonrChartHandle, SonrChartProps>(function So
   }, [priceLabels]);
   const priceLabelsRef = useRef(priceLabels);
   priceLabelsRef.current = priceLabels;
+  // Mirror the display settings to the keyed registry on every change, so a
+  // remount restores them (no-op without a persistenceKey).
+  useEffect(() => {
+    if (persistenceKey) savePersistedDisplay(persistenceKey, { candleStyle, sessions, priceLabels });
+  }, [persistenceKey, candleStyle, sessions, priceLabels]);
   // Current interval, read live by the countdown formatter.
   const intervalRef = useRef(interval);
   intervalRef.current = interval;
