@@ -160,10 +160,24 @@ describe("SonrChart — initialization", () => {
 });
 
 describe("SonrChart — indicators (#4)", () => {
-  it("creates the default VOL indicator", () => {
-    render(<SonrChart symbol="A" dataSource={source()} />);
+  it("opens with no studies by default — VOL is opt-in", () => {
+    const ref = createRef<SonrChartHandle>();
+    render(<SonrChart ref={ref} symbol="A" dataSource={source()} />);
     const names = lastChart().createIndicator.mock.calls.map((c: any[]) => c[0]?.name ?? c[0]);
-    expect(names).toContain("VOL");
+    expect(names).not.toContain("VOL");
+    expect(ref.current!.listIndicators()).toEqual([]);
+  });
+
+  it("notifies indicator subscribers once the prop seed lands, so the menu reflects it", async () => {
+    const ref = createRef<SonrChartHandle>();
+    const resolveSymbol = vi.fn(async (s: string) => ({ ticker: s }));
+    render(<SonrChart ref={ref} symbol="A" dataSource={{ ...source(), resolveSymbol }} indicators={["VOL"]} />);
+    // Subscribed before the async resolveSymbol → seed.
+    const cb = vi.fn();
+    ref.current!.subscribeIndicators(cb);
+    await act(async () => {});
+    expect(cb).toHaveBeenCalled();
+    expect(ref.current!.listIndicators()).toEqual(["VOL"]);
   });
 
   it("honors indicator specs with pane placement", () => {

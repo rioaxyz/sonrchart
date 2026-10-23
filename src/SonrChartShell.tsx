@@ -109,7 +109,7 @@ export const SonrChartShell = forwardRef<SonrChartHandle, SonrChartShellProps>(f
     brandOpacity = 0.45,
     snapshotName,
     barCount,
-    indicators = ["VOL"],
+    indicators = [],
     persistenceKey,
     sessions = true,
     watermark = true,

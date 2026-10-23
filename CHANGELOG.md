@@ -4,7 +4,11 @@ All notable changes to `@rioaxyz/sonrchart`, per **published npm version**. Each
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+- **Volume is no longer on by default.** `indicators` now defaults to `[]` on both `SonrChart` and `SonrChartShell` (was `["VOL"]`), so the chart opens with no studies. To keep the old behavior, pass `indicators={["VOL"]}`.
+
+### Fixed
+- The indicators menu now reflects studies the chart seeds from the `indicators` prop. That seed lands after the async `resolveSymbol`, which runs after the menu's one-shot mount read, so the menu showed VOL as unchecked while it was on the chart. The chart now fires `subscribeIndicators` once the seed lands, and `IndicatorMenu` re-reads on every indicator change. The data window picks up the same notification.
 
 ## [0.8.0] — 2026-10-15
 

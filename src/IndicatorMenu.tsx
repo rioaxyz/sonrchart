@@ -75,15 +75,23 @@ export function IndicatorMenu({
   const [active, setActive] = useState<string[]>([]);
   const { open, toggle: toggleOpen, pos, triggerRef, panelRef } = useDropdown();
 
-  // Seed from whatever the chart already has once it's mounted, and track the
-  // volume-trend flag so a toggle from anywhere (header prop, host button)
-  // keeps this menu's checkmark honest.
+  // Seed from whatever the chart already has once it's mounted, and re-read on
+  // every indicator change — the chart seeds its `indicators` prop after an
+  // async symbol resolve, and the set is restored on symbol/interval
+  // switches, so a one-shot read would miss studies that are on the chart.
+  // Also track the volume-trend flag so a toggle from anywhere (header prop,
+  // host button) keeps this menu's checkmark honest.
   useEffect(() => {
     let unsubOn: (() => void) | undefined;
+    let unsubInd: (() => void) | undefined;
     const t = setTimeout(() => {
       const h = chartRef.current;
-      const base = h?.listIndicators() ?? [];
-      setActive(h?.getVolumeTrendEnabled?.() ? [...base, VOLUME_TREND_OPTION] : base);
+      const read = () => {
+        const base = h?.listIndicators() ?? [];
+        setActive(h?.getVolumeTrendEnabled?.() ? [...base, VOLUME_TREND_OPTION] : base);
+      };
+      read();
+      unsubInd = h?.subscribeIndicators?.(read);
       unsubOn = h?.subscribeVolumeTrendEnabled?.((on) =>
         setActive((a) => (on ? (a.includes(VOLUME_TREND_OPTION) ? a : [...a, VOLUME_TREND_OPTION]) : a.filter((n) => n !== VOLUME_TREND_OPTION))),
       );
@@ -91,6 +99,7 @@ export function IndicatorMenu({
     return () => {
       clearTimeout(t);
       unsubOn?.();
+      unsubInd?.();
     };
   }, [chartRef]);
 
@@ -108,7 +117,8 @@ export function IndicatorMenu({
       setActive((a) => a.filter((n) => n !== opt.name));
     } else {
       handle.addIndicator({ name: opt.name, pane: opt.pane });
-      setActive((a) => [...a, opt.name]);
+      // Idempotent — the handle's change notification may already have re-read it.
+      setActive((a) => (a.includes(opt.name) ? a : [...a, opt.name]));
     }
   };
 

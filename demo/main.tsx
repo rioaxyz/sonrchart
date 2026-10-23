@@ -102,7 +102,6 @@ function Demo() {
           interval={interval}
           theme={theme}
           dataSource={source}
-          indicators={["VOL"]}
           sessions={sessions}
           patterns={patterns}
           halted={halted}
