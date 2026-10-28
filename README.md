@@ -1,4 +1,9 @@
-# sonrchart
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/sonrchart-logo.svg">
+    <img src="brand/sonrchart-logo-on-light.svg" alt="sonrchart" width="380">
+  </picture>
+</h1>
 
 **Own the glass, not the ocean.** A themed, data-source-agnostic React charting
 component for financial candlestick charts, built on
